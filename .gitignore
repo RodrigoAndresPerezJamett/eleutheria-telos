@@ -1,0 +1,22 @@
+# Rust
+target/
+Cargo.lock  # solo ignorar si es librería, para app binaria mantenerlo
+
+# Base de datos y modelos
+eleutheria.db
+eleutheria.db-shm
+eleutheria.db-wal
+models/
+
+# Variables de entorno
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
