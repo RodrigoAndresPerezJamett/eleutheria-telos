@@ -33,3 +33,9 @@ The UI is in English. All user-facing strings must be externalized into translat
 
 ## 10. Conservative with Dependencies
 Every new crate or library must be justified. Prefer standard library solutions, then well-maintained single-purpose crates, then large frameworks as a last resort. When a crate is added, document why in `Cargo.toml` as a comment.
+
+## 11. Compatibility First, Always
+Before adding any dependency, verify compatibility with the pinned environment (see ARCHITECTURE.md → Environment). Never assume the latest version of a crate works — check it explicitly against the Rust edition, Tauri version, and other crates already in `Cargo.toml`. A conflict discovered mid-implementation is far more costly than 5 minutes of research upfront. Always check crates.io for open issues, the crate's changelog for breaking changes, and whether the crate is actively maintained.
+
+## 12. Document Before You Forget
+Every architectural decision goes into DECISIONS.md immediately. Every completed session ends with CHANGELOG.md updated. Ideas, future desirables, and "wouldn't it be nice if..." thoughts go into IDEAS.md. Never in code comments, never in TODO lines, never in someone's head. The repo is the single source of truth.

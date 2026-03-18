@@ -1,0 +1,74 @@
+name: Build Check
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false  # continue other OS builds even if one fails
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+          - os: windows-latest
+            label: Windows
+          - os: macos-latest
+            label: macOS
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (pinned)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri system dependencies (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsqlite3-dev
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.10" --locked
+
+      - name: Build app (no bundle — compile check only)
+        working-directory: src-tauri
+        run: cargo build --release
+
+      - name: Upload build artifact (Linux only, for inspection)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eleutheria-telos-linux-dev
+          path: src-tauri/target/release/eleutheria-telos
+          retention-days: 7

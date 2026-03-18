@@ -16,7 +16,11 @@
 - [ ] System tray icon and global hotkey (configurable) to show/hide window
 - [ ] Plugin loader reads `/plugins/*/manifest.json` and logs detected plugins
 - [ ] i18n loader reads `ui/locales/en.json` and resolves strings in templates
-- [ ] CI/CD pipeline builds binaries for all 3 desktop platforms (GitHub Actions)
+- [ ] CI/CD pipeline configured (GitHub Actions):
+  - `ci.yml` — fmt + clippy + tests on every push
+  - `build.yml` — cross-platform compile check on push to dev/main
+  - `release.yml` — full build + draft release on `v*` tags
+- [ ] `TAURI_SIGNING_PRIVATE_KEY` secret added to GitHub repository settings
 
 ---
 
