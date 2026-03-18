@@ -6,7 +6,7 @@ authors = ["you"]
 license = ""
 repository = ""
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.92.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -18,8 +18,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.5.6" }
 
 [dependencies]
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
-tauri = { version = "2.10.3" }
-tauri-plugin-log = "2"
+arboard = "3"                                                      # Used for: clipboard monitoring | pinned: 2026-03-18
+axum = { version = "0.7", features = ["json"] }                   # Used for: internal HTTP server | pinned: 2026-03-18
+log = "0.4"                                                        # Used for: logging | pinned: 2026-03-18
+serde = { version = "1.0", features = ["derive"] }                # Used for: JSON serialization | pinned: 2026-03-18
+serde_json = "1.0"                                                 # Used for: JSON handling | pinned: 2026-03-18
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls", "macros"] } # Used for: SQLite + FTS5 | pinned: 2026-03-18
+tauri = { version = "2.10.3", features = ["tray-icon"] }           # Used for: desktop shell + system tray | pinned: 2026-03-18
+tauri-plugin-log = "2"                                             # Used for: logging plugin | pinned: 2026-03-18
+tracing = "0.1"                                                    # Used for: observability | pinned: 2026-03-18
+uuid = { version = "1.0", features = ["v4"] }                     # Used for: unique IDs | pinned: 2026-03-18
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] } # Used for: async runtime | pinned: 2026-03-18

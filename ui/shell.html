@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950 text-gray-100">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eleutheria Telos</title>
+
+  <!-- Tailwind CSS (CDN — will be replaced with compiled build in Phase 5) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+
+  <!-- Alpine.js -->
+  <script src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+
+  <script>
+    // Injected by Tauri before page load via initialization_script.
+    // Fallback values for direct browser preview only.
+    if (!window.__SESSION_TOKEN__) window.__SESSION_TOKEN__ = 'dev-token';
+    if (!window.__API_PORT__)      window.__API_PORT__      = 47821;
+
+    // Configure HTMX to always send the session token.
+    document.addEventListener('htmx:configRequest', function (evt) {
+      evt.detail.headers['Authorization'] = 'Bearer ' + window.__SESSION_TOKEN__;
+    });
+  </script>
+
+  <style>
+    /* Minimal custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    /* Active nav item highlight */
+    .nav-item.active { background-color: #1f2937; }
+  </style>
+</head>
+
+<body class="h-full flex" x-data="{ activeTool: 'clipboard' }">
+
+  <!-- ── Sidebar (desktop ≥1024px) ──────────────────────────────────────── -->
+  <nav id="sidebar"
+       class="hidden lg:flex flex-col w-52 shrink-0 bg-gray-900 border-r border-gray-800 py-4">
+
+    <div class="px-4 mb-6">
+      <span class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Eleutheria</span>
+    </div>
+
+    <ul class="flex-1 space-y-1 px-2">
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'clipboard' }"
+                hx-get="/tools/clipboard"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                hx-push-url="false"
+                @click="activeTool = 'clipboard'">
+          <span class="text-lg">📋</span>
+          <span>Clipboard</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'notes' }"
+                hx-get="/tools/notes"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'notes'">
+          <span class="text-lg">📝</span>
+          <span>Notes</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'voice' }"
+                hx-get="/tools/voice"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'voice'">
+          <span class="text-lg">🎙️</span>
+          <span>Voice</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'ocr' }"
+                hx-get="/tools/ocr"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'ocr'">
+          <span class="text-lg">🔤</span>
+          <span>OCR</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'translate' }"
+                hx-get="/tools/translate"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'translate'">
+          <span class="text-lg">🌐</span>
+          <span>Translate</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'search' }"
+                hx-get="/tools/search"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'search'">
+          <span class="text-lg">🔍</span>
+          <span>Search</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="px-2 mt-auto">
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+              :class="{ 'active': activeTool === 'settings' }"
+              hx-get="/tools/settings"
+              hx-target="#tool-panel"
+              hx-swap="innerHTML"
+              @click="activeTool = 'settings'">
+        <span class="text-lg">⚙️</span>
+        <span>Settings</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── Icon-only sidebar (tablet 640px–1023px) ───────────────────────── -->
+  <nav id="sidebar-tablet"
+       class="hidden sm:flex lg:hidden flex-col w-14 shrink-0 bg-gray-900 border-r border-gray-800 py-4 items-center">
+    <ul class="flex-1 space-y-2">
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Clipboard"
+                hx-get="/tools/clipboard"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'clipboard'">📋</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Notes"
+                hx-get="/tools/notes"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'notes'">📝</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Voice"
+                hx-get="/tools/voice"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'voice'">🎙️</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="OCR"
+                hx-get="/tools/ocr"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'ocr'">🔤</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Translate"
+                hx-get="/tools/translate"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'translate'">🌐</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Search"
+                hx-get="/tools/search"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'search'">🔍</button>
+      </li>
+    </ul>
+    <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors mt-auto"
+            title="Settings"
+            hx-get="/tools/settings"
+            hx-target="#tool-panel"
+            hx-swap="innerHTML"
+            @click="activeTool = 'settings'">⚙️</button>
+  </nav>
+
+  <!-- ── Main content ───────────────────────────────────────────────────── -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Tool panel: HTMX swaps content here -->
+    <div id="tool-panel"
+         class="flex-1 overflow-y-auto p-6"
+         hx-get="/tools/clipboard"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="flex items-center justify-center h-full text-gray-600">
+        Loading…
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Bottom nav (mobile <640px) ────────────────────────────────────── -->
+  <nav id="bottom-nav"
+       class="sm:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-2 z-50">
+    <button class="flex flex-col items-center gap-1 text-xs p-2"
+            hx-get="/tools/clipboard"
+            hx-target="#tool-panel"
+            hx-swap="innerHTML"
+            @click="activeTool = 'clipboard'">
+      <span class="text-xl">📋</span>
+      <span>Clip</span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-xs p-2"
+            hx-get="/tools/notes"
+            hx-target="#tool-panel"
+            hx-swap="innerHTML"
+            @click="activeTool = 'notes'">
+      <span class="text-xl">📝</span>
+      <span>Notes</span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-xs p-2"
+            hx-get="/tools/voice"
+            hx-target="#tool-panel"
+            hx-swap="innerHTML"
+            @click="activeTool = 'voice'">
+      <span class="text-xl">🎙️</span>
+      <span>Voice</span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-xs p-2"
+            hx-get="/tools/ocr"
+            hx-target="#tool-panel"
+            hx-swap="innerHTML"
+            @click="activeTool = 'ocr'">
+      <span class="text-xl">🔤</span>
+      <span>OCR</span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-xs p-2"
+            hx-get="/tools/settings"
+            hx-target="#tool-panel"
+            hx-swap="innerHTML"
+            @click="activeTool = 'settings'">
+      <span class="text-xl">⚙️</span>
+      <span>More</span>
+    </button>
+  </nav>
+
+</body>
+</html>
