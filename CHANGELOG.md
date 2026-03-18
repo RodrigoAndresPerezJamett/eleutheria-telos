@@ -83,3 +83,29 @@ Phase 0 — Foundation. Goal: Tauri app running with Axum internal server, HTMX 
 ### Next session should start with
 Phase 1 — Core Tools. Implement Clipboard History (arboard monitor + SQLite storage + HTMX list), Notes (CRUD + FTS5), and Search (command palette Ctrl+K). Start with clipboard.rs, then notes.rs, then search.rs.
 
+---
+
+## [2026-03-18] — Phase 0 dev-mode fix
+
+### Problem
+`cargo tauri dev` polls `devUrl` (http://localhost:47821) **before** the Rust binary is compiled. On first build (600+ crates), compilation takes >180s — exceeding Tauri CLI's hard-coded timeout. The binary never starts in time for Tauri to connect.
+
+### Root cause
+The architecture had `devUrl: http://localhost:47821` in `tauri.conf.json`. Tauri CLI interprets this as "wait for an external dev server before opening the window". But our Axum server **is** embedded inside the Rust binary — it cannot respond until the binary is compiled and running. This creates an unsolvable chicken-and-egg problem on first run.
+
+### Fix
+Removed `devUrl` from `tauri.conf.json`. Tauri now serves the shell as a static file from `frontendDist: ../ui` (loads `ui/index.html` instantly via `tauri://localhost/`). Axum still starts in the background as before. HTMX requests are redirected to Axum via a `htmx:configRequest` event handler that rewrites relative paths (`/tools/...`) to absolute URLs (`http://127.0.0.1:{PORT}/...`). CORS headers added to Axum via `tower-http CorsLayer` so the WebView (origin `tauri://localhost`) can reach the API server.
+
+### Files changed
+- `src-tauri/Cargo.toml` — added `tower-http = { version = "0.5", features = ["cors"] }`
+- `src-tauri/src/server.rs` — added `CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any)` to router
+- `src-tauri/tauri.conf.json` — removed `devUrl`, `beforeDevCommand`, `beforeBuildCommand`
+- `src-tauri/src/lib.rs` — `WebviewUrl::App("index.html")` (explicit, no devUrl dependency)
+- `ui/index.html` — new entry point (same layout as shell.html + `htmx:configRequest` URL rewrite)
+
+### Result
+`cargo tauri dev` compiles in ~28s incremental (first full build ~2min), no polling timeout. App window opens immediately after binary starts.
+
+### Next session should start with
+Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
+

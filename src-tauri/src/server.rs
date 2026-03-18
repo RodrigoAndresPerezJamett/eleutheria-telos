@@ -11,6 +11,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
@@ -179,10 +180,18 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             auth_middleware,
         ));
 
+    // CORS: allow Tauri WebView (tauri://localhost) and direct browser access to
+    // reach Axum. Authorization header is exposed so the preflight passes.
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     Router::new()
         .route("/health", get(health_handler))
         .route("/", get(shell_handler))
         .merge(protected)
+        .layer(cors)
         .with_state(state)
 }
 

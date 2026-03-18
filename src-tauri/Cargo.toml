@@ -15,7 +15,7 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.5.6" }
+tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 arboard = "3"                                                      # Used for: clipboard monitoring | pinned: 2026-03-18
@@ -29,3 +29,4 @@ tauri-plugin-log = "2"                                             # Used for: l
 tracing = "0.1"                                                    # Used for: observability | pinned: 2026-03-18
 uuid = { version = "1.0", features = ["v4"] }                     # Used for: unique IDs | pinned: 2026-03-18
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] } # Used for: async runtime | pinned: 2026-03-18
+tower-http = { version = "0.5", features = ["cors"] }              # Used for: CORS headers (Tauri WebView → Axum) | pinned: 2026-03-18

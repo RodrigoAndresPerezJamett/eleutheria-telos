@@ -87,7 +87,11 @@ pub fn run() {
                 session_token, port
             );
 
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App(std::path::PathBuf::from("/")))
+            WebviewWindowBuilder::new(
+                app,
+                "main",
+                WebviewUrl::App(std::path::PathBuf::from("index.html")),
+            )
                 .title("Eleutheria Telos")
                 .inner_size(1100.0, 700.0)
                 .min_inner_size(640.0, 480.0)
