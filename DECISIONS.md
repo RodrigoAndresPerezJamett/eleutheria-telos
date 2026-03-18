@@ -155,3 +155,18 @@ Format:
 **Reason:** Everything related to the project should live in the repo itself so Claude Code can read it directly. Notion requires a separate MCP call and creates a split source of truth. Ideas and notes go in IDEAS.md; decisions go in DECISIONS.md; progress goes in CHANGELOG.md; tasks go in GitHub Issues.
 
 **Date:** 2026-03-18
+
+---
+
+## D-011 — Shell served as static file (frontendDist), not from Axum
+
+**Decision:** `ui/index.html` is served by Tauri directly via `frontendDist` (loaded as `tauri://localhost/index.html`). HTMX requests are rewritten at runtime via a `htmx:configRequest` event handler that prepends the Axum base URL (`http://127.0.0.1:{PORT}`) to all relative paths. A `CorsLayer` (tower-http) on Axum allows the WebView origin (`tauri://localhost`) to reach the API server.
+
+**Rejected alternatives:**
+- `devUrl: http://localhost:47821` in `tauri.conf.json` — Tauri CLI polls this URL before compiling the Rust binary. First build takes ~2 min (600+ crates); Tauri CLI's hard-coded timeout is 180s. Since Axum is embedded inside the binary, it cannot respond until the binary is compiled. Irresolvable chicken-and-egg problem on first run.
+
+**Reason:** With `frontendDist`, Tauri serves the shell instantly from the bundled binary without any external server dependency. Axum still starts in the background as designed. Dynamic HTMX requests reach Axum via absolute URL rewrite. CORS is required because `tauri://localhost` and `http://127.0.0.1` are different origins.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Tauri CLI exposes a configurable devUrl poll timeout or a `--no-dev-server-wait` flag.
