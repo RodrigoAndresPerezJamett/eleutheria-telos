@@ -8,15 +8,20 @@
   <!-- Tailwind CSS (CDN — will be replaced with compiled build in Phase 5) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <!-- HTMX — bundled locally for offline-first (D-015) -->
+  <script src="/assets/htmx.min.js"></script>
 
-  <!-- Alpine.js -->
-  <script src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+  <!-- Alpine.js — bundled locally for offline-first (D-015) -->
+  <script src="/assets/alpine.min.js" defer></script>
 
   <script>
-    // Injected by Tauri before page load via initialization_script.
-    // Fallback values for direct browser preview only.
+    // HTMX 2.x defaults: selfRequestsOnly=true blocks cross-origin requests.
+    // Our shell is on tauri://localhost but Axum is http://127.0.0.1:{PORT}.
+    // Disable the restriction so HTMX can reach the API server.
+    htmx.config.selfRequestsOnly = false;
+
+    // Injected by Tauri initialization_script before any page scripts run.
+    // Fallback values used only when not running inside Tauri (browser preview).
     if (!window.__SESSION_TOKEN__) window.__SESSION_TOKEN__ = 'dev-token';
     if (!window.__API_PORT__)      window.__API_PORT__      = 47821;
 
@@ -28,11 +33,56 @@
     document.addEventListener('htmx:configRequest', function (evt) {
       evt.detail.headers['Authorization'] = 'Bearer ' + window.__SESSION_TOKEN__;
 
-      if (evt.detail.path && evt.detail.path.charAt(0) === '/') {
-        evt.detail.path =
-          'http://127.0.0.1:' + window.__API_PORT__ + evt.detail.path;
+      const p = evt.detail.path;
+      if (!p || p.startsWith('http://127.0.0.1:')) return; // already pointing at Axum
+
+      // HTMX 2.x resolves relative paths to absolute tauri:// URLs for elements
+      // injected via dynamic swap. Extract pathname+search regardless of format.
+      const apiPath = p.startsWith('/') ? p : new URL(p).pathname + (new URL(p).search || '');
+      evt.detail.path = 'http://127.0.0.1:' + window.__API_PORT__ + apiPath;
+    });
+
+    // After every swap into #tool-panel, force-process the new content so that
+    // hx-trigger="load" elements inside swapped partials are properly initialized.
+    // htmx.ajax() uses document.body as the source element (no real source), which
+    // can cause the post-swap Ae() task to miss child initialization in some builds.
+    document.addEventListener('htmx:afterSwap', function (evt) {
+      if (evt.detail.target && evt.detail.target.id === 'tool-panel') {
+        htmx.process(evt.detail.target);
       }
     });
+
+    // App init: optionally confirm token+port via Tauri invoke, then load
+    // the default tool panel. initialization_script already set the values;
+    // invoke is only called if the function is actually available in this
+    // context (it is not always exposed without withGlobalTauri: true).
+    async function initApp() {
+      try {
+        const invoke =
+          typeof window.__TAURI__?.core?.invoke === 'function'
+            ? window.__TAURI__.core.invoke
+            : typeof window.__TAURI__?.invoke === 'function'
+              ? window.__TAURI__.invoke
+              : null;
+        if (invoke) {
+          window.__SESSION_TOKEN__ = await invoke('get_session_token');
+          window.__API_PORT__      = await invoke('get_api_port');
+        }
+      } catch (e) {
+        // initialization_script already set the values — proceed with those.
+      }
+      // Load the default tool panel using the confirmed token and port.
+      // Pass the full absolute URL so htmx:configRequest path-rewriting is not needed.
+      const token = window.__SESSION_TOKEN__;
+      const port  = window.__API_PORT__;
+      htmx.ajax('GET', 'http://127.0.0.1:' + port + '/tools/clipboard', {
+        target:  '#tool-panel',
+        swap:    'innerHTML',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', initApp);
   </script>
 
   <style>
@@ -43,7 +93,10 @@
   </style>
 </head>
 
-<body class="h-full flex" x-data="{ activeTool: 'clipboard' }">
+<body class="h-full flex"
+      x-data="{ activeTool: 'clipboard', paletteOpen: false }"
+      @keydown.ctrl.k.window.prevent="paletteOpen = true"
+      @keydown.escape.window="paletteOpen = false">
 
   <!-- ── Sidebar (desktop ≥1024px) ──────────────────────────────────────── -->
   <nav id="sidebar"
@@ -200,10 +253,7 @@
   <main class="flex-1 flex flex-col overflow-hidden">
 
     <div id="tool-panel"
-         class="flex-1 overflow-y-auto p-6"
-         hx-get="/tools/clipboard"
-         hx-trigger="load"
-         hx-swap="innerHTML">
+         class="flex-1 overflow-y-auto p-6">
       <div class="flex items-center justify-center h-full text-gray-600">
         Loading…
       </div>
@@ -255,6 +305,35 @@
       <span>More</span>
     </button>
   </nav>
+
+
+  <!-- ── Ctrl+K Command Palette ─────────────────────────────────────────── -->
+  <div x-show="paletteOpen"
+       x-transition.opacity
+       class="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60"
+       @click.self="paletteOpen = false">
+    <div class="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
+         @click.stop="">
+      <input x-ref="paletteInput"
+             x-effect="if (paletteOpen) $nextTick(() => $refs.paletteInput.focus())"
+             @input.stop=""
+             type="text"
+             name="q"
+             placeholder="Search notes and clipboard…"
+             class="w-full bg-transparent px-4 py-3 text-gray-100 placeholder-gray-500 outline-none border-b border-gray-700 text-sm"
+             hx-get="/api/search"
+             hx-trigger="input changed delay:250ms"
+             hx-target="#palette-results"
+             hx-swap="innerHTML"
+             @keydown.escape.stop="paletteOpen = false" />
+      <div id="palette-results" class="max-h-72 overflow-y-auto py-1">
+        <p class="text-xs text-gray-600 px-3 py-2">Type to search…</p>
+      </div>
+      <div class="border-t border-gray-800 px-3 py-2 flex gap-4">
+        <span class="text-xs text-gray-600">↵ open &nbsp; Esc close</span>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>

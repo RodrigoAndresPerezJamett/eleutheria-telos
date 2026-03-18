@@ -1,6 +1,5 @@
-// Phase 0: EventBus infrastructure is defined here but not yet wired to tools.
-// Tools connect to it in Phase 1+. Suppress dead-code lints until then.
-#![allow(dead_code)]
+// Phase 1: ClipboardChanged, NoteCreated, NoteUpdated are now wired to handlers.
+// Remaining events (OcrCompleted, TranscriptionCompleted, etc.) will be wired in Phase 2+.
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

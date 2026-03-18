@@ -125,6 +125,26 @@ This project has zero dependency conflicts. Keep it that way.
 - Do NOT assume ffmpeg codec availability — verify against the ffmpeg-free build
 - Do NOT assume Python 3.14 package support — verify first
 
+### Tauri + HTMX 2.x + Wayland — lessons from the "Loading…" bug
+
+These were all diagnosed during Phase 1. Each caused silent failure with no visible error.
+
+- **Axum 0.7 route params: always use `:param`, never `{param}`** — `{param}` compiles cleanly but returns 404 at runtime. matchit 0.7.3 (Axum 0.7's router) uses `:param` syntax. The `{param}` brace syntax was only added in matchit 0.8. (D-020)
+
+- **HTMX 2.x blocks cross-origin requests by default** — `selfRequestsOnly: true` is the default in HTMX 2.0+. The shell is `tauri://localhost`, Axum is `http://127.0.0.1:{PORT}` — different origins. Every HTMX request is silently dropped with no error or log. Always set `htmx.config.selfRequestsOnly = false` before any `hx-*` processing. (D-017)
+
+- **Never load HTMX or Alpine from CDN** — WebKitGTK on Linux can be slow or blocked reaching `unpkg.com`. If HTMX fails to initialize, all `hx-*` attributes are inert. Bundle locally under `ui/assets/`. (D-018)
+
+- **`hx-trigger="load"` for initial panel load is fragile** — it fires before Tauri's `initialization_script` guarantees `window.__SESSION_TOKEN__`. Use `initApp()` on `DOMContentLoaded` with an `invoke('get_session_token')` call, then `htmx.ajax()` with a full absolute URL and explicit headers. (D-019)
+
+- **Panels loaded via `htmx.ajax()` need `htmx.process()`** — `htmx.ajax()` with no source element uses `document.body` as source. HTMX's post-swap initialization can miss `hx-trigger="load"` children. Add an `htmx:afterSwap` listener that calls `htmx.process(evt.detail.target)` when `#tool-panel` is swapped.
+
+- **HTMX handlers must use `Form<T>`, not `Json<T>`** — HTMX POSTs via `hx-vals` or form submission use `application/x-www-form-urlencoded`. A handler with `Json<T>` returns 415 silently — no error surfaces in the UI. Only use `Json<T>` for handlers called explicitly via `fetch()` with `Content-Type: application/json`. (D-021)
+
+- **arboard on Wayland requires `features = ["wayland-data-control"]`** — Without this feature, arboard compiles with X11-only backend. On Wayland + Hyprland, every `get_text()` call fails silently. The monitor loop swallows the error and clipboard history is always empty. (D-022)
+
+- **Tailwind Preflight resets heading sizes** — `h1`–`h6` are reset to `font-size: inherit`. Without the Typography plugin (`@tailwindcss/typography`), `prose` classes don't re-apply heading styles. In any panel that renders markdown, add explicit `.prose h1`–`h4` styles or load `https://cdn.tailwindcss.com?plugins=typography`.
+
 ---
 
 ## Git & Versioning

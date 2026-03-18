@@ -170,3 +170,175 @@ Format:
 **Date:** 2026-03-18
 
 **Revisit if:** Tauri CLI exposes a configurable devUrl poll timeout or a `--no-dev-server-wait` flag.
+
+---
+
+## D-012 — FTS5 sync via SQL triggers
+
+**Decision:** Sync the `notes_fts` virtual table via SQL triggers defined in migration 002, not in Rust handler code.
+
+**Rejected alternatives:**
+- In-Rust sync (INSERT/DELETE into notes_fts after every notes CRUD operation) — adds boilerplate to every handler, risks divergence if any handler is updated without also updating FTS sync
+- Periodic rebuild (`INSERT INTO notes_fts(notes_fts) VALUES ('rebuild')`) — stale search results between rebuilds
+
+**Reason:** SQL triggers are atomic with the DML that fires them. FTS5 is always consistent with the notes table. Zero Rust code required to maintain sync.
+
+**Date:** 2026-03-18
+
+**Revisit if:** FTS5 trigger behavior causes issues across SQLite versions, or if content_fts needs Markdown stripping (Phase 2 — at that point, in-Rust pre-processing before INSERT is still compatible with triggers).
+
+---
+
+## D-013 — Clipboard dedup via DefaultHasher hash
+
+**Decision:** Dedup clipboard entries in the monitor using an in-memory `u64` hash of the clipboard text via `std::hash::DefaultHasher`.
+
+**Rejected alternatives:**
+- DB query on every poll (`SELECT content FROM clipboard ORDER BY created_at DESC LIMIT 1`) — adds async overhead to a tight polling loop running every 500ms inside `spawn_blocking`
+- SHA-256 — overkill for dedup; collisions are acceptable (worst case: duplicate entry)
+
+**Reason:** Zero I/O per poll cycle after startup seed. Hash fits in a register. DefaultHasher is fast and stdlib-only.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Collision false-positives cause real duplicate suppression (very unlikely with short clipboard text).
+
+---
+
+## D-014 — Clipboard suppress channel via `tokio::sync::watch`
+
+**Decision:** Use `tokio::sync::watch::Sender<u64>` in AppState to suppress the clipboard monitor from re-inserting content that was just recopied via the recopy handler.
+
+**Rejected alternatives:**
+- `Mutex<u64>` — works but adds lock contention; watch is designed for single-writer multi-reader broadcast of the latest value
+- Skip dedup on recopy entirely — would insert duplicate entries every time a clipboard item is recopied
+
+**Reason:** `watch` is the idiomatic tokio primitive for "broadcast the latest value to interested readers". Monitor uses `has_changed()` + `borrow_and_update()` for non-blocking check.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Multiple simultaneous recopy calls cause a race (only the last hash would be suppressed); acceptable for Phase 1.
+
+---
+
+## D-015 — marked.js bundled under ui/assets/
+
+**Decision:** Bundle `marked.min.js` under `ui/assets/marked.min.js` rather than loading from CDN.
+
+**Rejected alternatives:**
+- CDN load (`<script src="https://cdn.jsdelivr.net/npm/marked/...">`) — violates offline-first principle; app would fail to render Markdown previews without internet
+
+**Reason:** Offline-first is a core principle. All static assets must be bundled. The file is ~40KB — negligible.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Asset bundling pipeline is introduced in Phase 5 (at that point, npm/bundler will manage this automatically).
+
+---
+
+## D-016 — Tower oneshot + direct handler calls for tests
+
+**Decision:** Integration tests use `tower::ServiceExt::oneshot()` for non-path-parameterized routes, and direct handler function calls for path-parameterized routes.
+
+**Rejected alternatives:**
+- `axum-test v15` — path-parameterized routes return 404 when using `{id}` syntax with axum 0.7 (root cause: matchit 0.7.3 uses `:param` not `{param}`; production routes now use `:id` but tests still use direct handler calls for simplicity)
+- `axum-test v19` — targets axum 0.8; would require upgrading axum (forbidden without explicit approval)
+
+**Reason:** Direct handler calls bypass routing and test the business logic (DB operations, FTS sync) which is the meaningful test target. HTTP routing is implicitly tested by running `cargo tauri dev` and using the app.
+
+**Date:** 2026-03-18
+
+**Revisit if:** A version of axum-test is found that correctly handles `:id` path params with axum 0.7.
+
+---
+
+## D-017 — `htmx.config.selfRequestsOnly = false`
+
+**Decision:** Set `htmx.config.selfRequestsOnly = false` in the shell HTML.
+
+**Rejected alternatives:**
+- Leave default (`true`) — HTMX 2.0.4 silently drops all cross-origin requests with no error; every HTMX call is blocked
+
+**Reason:** Shell is served from `tauri://localhost` (static file via Tauri frontendDist); Axum runs on `http://127.0.0.1:{PORT}`. These are different origins. HTMX 2.0.4 defaults to blocking cross-origin requests.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Shell and API server are ever on the same origin.
+
+---
+
+## D-018 — HTMX and Alpine.js bundled locally
+
+**Decision:** Bundle `htmx.min.js` and `alpine.min.js` under `ui/assets/`.
+
+**Rejected alternatives:**
+- CDN load — violates offline-first principle; WebKitGTK on Linux can be slow or blocked from reaching CDN
+
+**Reason:** Same principle as D-015 (marked.js). All JS dependencies must be available without internet.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Asset bundling pipeline in Phase 5 manages this automatically.
+
+---
+
+## D-019 — Initial panel load via `htmx.ajax()` in `initApp()`
+
+**Decision:** Load the default tool panel using `htmx.ajax()` with a full absolute URL inside `initApp()` on `DOMContentLoaded`.
+
+**Rejected alternatives:**
+- `hx-trigger="load"` on `#tool-panel` — fires before `initialization_script` is guaranteed to have set `window.__SESSION_TOKEN__`; token may be undefined on first request
+
+**Reason:** `initApp()` awaits `window.__TAURI__.core.invoke('get_session_token')` to confirm the real token before making any request.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Tauri exposes a synchronous token mechanism.
+
+---
+
+## D-020 — Axum 0.7 route params use `:param` syntax, not `{param}`
+
+**Decision:** All Axum route definitions use `:param` syntax (e.g. `/api/notes/:id`), not `{param}`.
+
+**Rejected alternatives:**
+- `{param}` syntax — compiles without error but routes return 404 at runtime; matchit 0.7.3 (the version Axum 0.7.9 depends on) uses `:param` syntax; `{param}` is only supported in matchit 0.8+
+
+**Reason:** Axum 0.7.9 depends on matchit 0.7 which uses `:param` for named parameters. The `{param}` brace syntax was introduced in matchit 0.8. Axum passes route strings directly to matchit without transformation, so using braces results in matchit treating the entire `{param}` as a literal string segment.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Axum is upgraded to 0.8+ (which depends on matchit 0.8+ and uses `{param}` syntax natively).
+
+---
+
+## D-021 — HTMX handlers use `Form<T>`, not `Json<T>`
+
+**Decision:** Axum handlers that receive data from HTMX form submissions or `hx-vals` use `Form<T>` (application/x-www-form-urlencoded), not `Json<T>`.
+
+**Rejected alternatives:**
+- `Json<T>` — HTMX sends `hx-vals` and standard form submissions as form-encoded data by default; `Json<T>` returns 415 silently (no HTMX error event is surfaced by default)
+- `hx-ext="json-enc"` — would allow JSON, but requires bundling the json-enc HTMX extension; adds complexity for no benefit
+
+**Reason:** HTMX's default content type for POST/PUT is `application/x-www-form-urlencoded`. Mismatching with `Json<T>` fails silently (no visible error in the UI), making it extremely hard to diagnose.
+
+**Exception:** Handlers called by Alpine `fetch()` (like `update_handler` for notes auto-save) explicitly set `Content-Type: application/json` and correctly use `Json<T>`.
+
+**Date:** 2026-03-18
+
+**Revisit if:** The project adopts `hx-ext="json-enc"` globally.
+
+---
+
+## D-022 — arboard requires `wayland-data-control` feature on Linux
+
+**Decision:** `arboard` is specified as `{ version = "3", features = ["wayland-data-control"] }` in Cargo.toml.
+
+**Rejected alternatives:**
+- `arboard = "3"` (no features) — compiles with X11-only backend; on Wayland the monitor silently fails on every poll cycle (`Err(_) => continue`); clipboard history always empty
+
+**Reason:** The machine runs Wayland + Hyprland. Hyprland implements the `wlr-data-control` Wayland protocol. arboard's `wayland-data-control` feature enables the correct backend via `wl-clipboard-rs`. Without it, arboard falls back to X11/XWayland where the real system clipboard is not accessible.
+
+**Date:** 2026-03-18
+
+**Revisit if:** The project adds Windows or macOS support (those platforms don't need this feature; it is Linux-only and Cargo conditionally compiles it).

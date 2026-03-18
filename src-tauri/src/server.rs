@@ -11,10 +11,12 @@ use serde_json::json;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::watch;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
+use crate::tools::{clipboard, notes, search};
 
 pub const DEFAULT_PORT: u16 = 47821;
 
@@ -23,8 +25,9 @@ pub struct AppState {
     pub db: SqlitePool,
     pub session_token: String,
     pub port: u16,
-    #[allow(dead_code)]
     pub event_bus: EventBus,
+    /// Used by the clipboard monitor to skip re-inserting just-recopied content.
+    pub clipboard_suppress_tx: watch::Sender<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -79,10 +82,28 @@ pub async fn auth_middleware(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "));
 
-    match token {
-        Some(t) if t == state.session_token => next.run(req).await,
-        _ => AppError::unauthorized().into_response(),
-    }
+    let path = req.uri().path().to_owned();
+    let method = req.method().clone();
+    let token_valid = token
+        .map(|t| t == state.session_token.as_str())
+        .unwrap_or(false);
+
+    log::info!(
+        "→ {} {} | auth: {}",
+        method,
+        path,
+        token.map_or("none", |_| "present")
+    );
+
+    let resp = if token_valid {
+        next.run(req).await
+    } else {
+        log::warn!("Auth failed — token mismatch or missing");
+        AppError::unauthorized().into_response()
+    };
+
+    log::info!("← {} {} | status: {}", method, path, resp.status());
+    resp
 }
 
 // ── Route handlers ───────────────────────────────────────────────────────────
@@ -166,7 +187,6 @@ async fn settings_post_handler(
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
-        .route("/tools/{tool_name}", get(tool_panel_handler))
         .route(
             "/api/settings",
             get(settings_get_handler).post(settings_post_handler),
@@ -175,7 +195,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/mcp",
             get(mcp::mcp_sse_handler).post(mcp::mcp_post_handler),
         )
-        .layer(middleware::from_fn_with_state(
+        .merge(clipboard::router())
+        .merge(notes::router())
+        .merge(search::router())
+        .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
         ));
@@ -188,6 +211,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .allow_headers(Any);
 
     Router::new()
+        .route("/tools/:tool_name", get(tool_panel_handler))
         .route("/health", get(health_handler))
         .route("/", get(shell_handler))
         .merge(protected)

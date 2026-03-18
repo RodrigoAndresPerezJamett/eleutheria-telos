@@ -109,3 +109,228 @@ Removed `devUrl` from `tauri.conf.json`. Tauri now serves the shell as a static 
 ### Next session should start with
 Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
+---
+
+## [2026-03-18] — Phase 1 implementation
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/migrations/002_phase1_indexes.sql` — perf indexes on clipboard and notes; FTS5 sync triggers (insert/delete/update) for notes_fts
+- `src-tauri/src/tools/clipboard.rs` — list (with search), recopy, delete-one, clear-all handlers; clipboard monitor with arboard polling + dedup hash + suppress channel; 5 integration tests
+- `src-tauri/src/tools/notes.rs` — list (plain + FTS5 MATCH), create, get (editor HTML), update (dynamic SET), delete, pin-toggle handlers; 6 integration tests
+- `src-tauri/src/tools/search.rs` — merged FTS5 (notes) + LIKE (clipboard) search handler; 3 integration tests
+- `src-tauri/src/tools/mod.rs` — registered clipboard, notes, search modules
+- `src-tauri/src/server.rs` — added `clipboard_suppress_tx: watch::Sender<u64>` to AppState; merged three tool routers into build_router
+- `src-tauri/src/lib.rs` — construct watch channel, pass to AppState, spawn clipboard monitor background task
+- `src-tauri/src/event_bus.rs` — removed Phase 0 dead-code suppression; ClipboardChanged, NoteCreated, NoteUpdated now in active use
+
+**Cargo.toml changes**
+- Added `"sync"` to tokio features (for watch channel)
+- Replaced `axum-test = "15"` (broken path-param routing) with `tower = "0.4"` + `http-body-util = "0.1"` dev deps
+
+**Frontend**
+- `ui/tools/clipboard/index.html` — full clipboard panel with search, list, recopy, delete, clear-all
+- `ui/tools/notes/index.html` — split-view panel: note list (left) + editor area (right); marked.js loaded
+- `ui/tools/search/index.html` — search panel with live HTMX input
+- `ui/index.html` — Ctrl+K command palette overlay (Alpine `paletteOpen` state, HTMX search input, Escape to close)
+- `ui/assets/marked.min.js` — marked.js bundled locally (offline-first, D-015)
+- `ui/locales/en.json` — added ~20 new strings for clipboard, notes, search, palette
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Decisions made
+- **D-012:** FTS5 sync via SQL triggers (not in-Rust handlers) — triggers in migration 002
+- **D-013:** Clipboard dedup via in-memory `DefaultHasher` hash — no DB query per poll cycle
+- **D-014:** Clipboard suppress channel via `tokio::sync::watch` in AppState — recopy handler sends hash before writing to clipboard
+- **D-015:** `marked.js` bundled under `ui/assets/` (not CDN) for offline-first correctness
+- **D-016:** Integration tests use `tower::ServiceExt::oneshot()` + direct handler calls for path-parameterized routes (axum-test v15 has broken path-param routing with `{id}` syntax in axum 0.7)
+
+### Known issues / notes
+- Path-parameterized routes work correctly in the running app (`cargo tauri dev`); the test limitation is only in the test harness (tower oneshot with `from_fn_with_state` + `with_state` doesn't route path params in tests)
+- Notes editor Alpine component uses `fetch()` directly for debounced PUT (exception to HTMX rule per CLAUDE.md — HTMX form-encode limitations)
+
+### Next session should start with
+Phase 2 — Voice (Whisper) or OCR (Tesseract). Start by choosing which tool to implement first based on ROADMAP.md, verify Python package compatibility for Whisper with Python 3.14.2, and check Tesseract 5.5.2 Rust bindings compatibility.
+
+---
+
+## [2026-03-18] — Phase 1 WebView fix (tools loading)
+
+### Problem
+All tool panels showed "Loading…" forever in `cargo tauri dev`. No HTMX requests reached the Axum server.
+
+### Root causes (three separate issues, all fixed):
+
+**1. HTMX loaded from CDN (blocked/slow on WebKitGTK)**
+HTMX and Alpine.js were loaded from `unpkg.com`. If the WebView can't reach CDN or is slow, HTMX never initializes and no `hx-*` processing happens.
+
+**2. HTMX 2.0.4 `selfRequestsOnly: true` default**
+HTMX 2.0.4 defaults to `selfRequestsOnly: true`, which blocks all cross-origin requests. Since the shell is served from `tauri://localhost` and Axum runs on `http://127.0.0.1:{PORT}`, every HTMX request was silently blocked (no error, no network activity).
+
+**3. Fragile `hx-trigger="load"` initial panel load**
+The shell had `hx-trigger="load"` on `#tool-panel`, which fired before token/port were guaranteed to be set by `initialization_script`. Also, the invoke fallback in `initApp()` could silently overwrite `window.__SESSION_TOKEN__` and `window.__API_PORT__` with `undefined` if `window.__TAURI__.invoke` wasn't a function.
+
+### Fixes
+- `ui/assets/htmx.min.js` — HTMX 2.0.4 bundled locally (50KB)
+- `ui/assets/alpine.min.js` — Alpine.js 3.14.9 bundled locally (45KB)
+- `ui/index.html` — replaced CDN script tags with local `/assets/` paths
+- `ui/index.html` — added `htmx.config.selfRequestsOnly = false` before any HTMX requests
+- `ui/index.html` — removed `hx-trigger="load"` from `#tool-panel`; added `initApp()` async function on `DOMContentLoaded` that uses Tauri invoke (with proper `typeof` guard) then calls `htmx.ajax()` with full absolute URL and explicit auth headers
+- `src-tauri/src/api.rs` — fixed `get_session_token` to return the real token from `AppState` (not a new UUID); added `get_api_port` command
+- `src-tauri/src/lib.rs` — added `app.manage(state.clone())` to register `AppState` with Tauri's state management so invoke commands can access it
+- `src-tauri/tauri.conf.json` — added `"withGlobalTauri": true` so `window.__TAURI__` is available in the WebView
+- `src-tauri/src/server.rs` — added request logging in `auth_middleware` (INFO + WARN) for diagnostics
+
+### Decisions made
+- **D-017:** `htmx.config.selfRequestsOnly = false` required because app shell and API server are on different origins (tauri:// vs http://)
+- **D-018:** HTMX and Alpine.js bundled locally (same principle as D-015 for marked.js)
+- **D-019:** Initial tool panel load uses `htmx.ajax()` with full absolute URL in `initApp()`, not `hx-trigger="load"`, to ensure token is confirmed before the request fires
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Next session should start with
+Phase 2 — Voice (Whisper) or OCR (Tesseract). (Unchanged from Phase 1 entry.)
+
+---
+
+## [2026-03-18] — Route param syntax fix (D-020)
+
+### Problem
+All parameterized routes (`/tools/{tool_name}`, `/api/clipboard/{id}`, `/api/notes/{id}`, etc.) returned 404 at runtime despite compiling without errors.
+
+### Root cause
+Axum 0.7.9 depends on **matchit 0.7.3**, which uses `:param` syntax for named path parameters. The `{param}` brace syntax was introduced in matchit 0.8.x. Axum passes route strings directly to matchit without any transformation — so `{param}` was treated as a literal string segment, never matching any actual request path.
+
+### Fix
+Changed all route definitions from `{param}` to `:param` syntax:
+- `src-tauri/src/server.rs` — `/tools/:tool_name`
+- `src-tauri/src/tools/clipboard.rs` — `/api/clipboard/:id/recopy`, `/api/clipboard/:id`
+- `src-tauri/src/tools/notes.rs` — `/api/notes/:id`, `/api/notes/:id/pin`
+
+### Also cleaned up
+- Removed diagnostic code added during investigation: `debug_log_handler`, `/debug/log` route, `dbgLog()` JS function, extra `htmx:beforeRequest`/`htmx:responseError`/`htmx:sendError` listeners, `tool_panel_handler` log line, `/test/:param` test route
+- Updated D-016 note: root cause of axum-test path param failures is now known (matchit 0.7 syntax)
+- Added D-017 through D-020 to DECISIONS.md (previously only in CHANGELOG)
+
+### CI status
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Next session should start with
+Phase 2 — Voice (Whisper) or OCR (Tesseract). Routing is now fully working — all tool panels load, all API endpoints are reachable. Verify with `cargo tauri dev` then proceed to Phase 2.
+
+---
+
+## [2026-03-18] — Post-mortem: Full "Loading…" bug saga + follow-up fixes
+
+This entry documents the complete arc of bugs that caused the app to show "Loading…" forever, in the order they were discovered and fixed. Multiple sessions were needed.
+
+---
+
+### Root cause 1: Axum 0.7 route param syntax
+
+**Symptom:** `GET /tools/clipboard` returned 404. Confirmed by adding a fallback handler that fired for every path — including `/tools/clipboard`. The registered route was not matching.
+
+**Root cause:** All route definitions used `{param}` syntax (e.g. `/tools/{tool_name}`, `/api/notes/{id}`). Axum 0.7.9 depends on **matchit 0.7.3**, which uses `:param` syntax. The `{param}` brace syntax was only introduced in matchit 0.8. Axum passes route strings to matchit verbatim — no transformation. So `{param}` was treated as a literal static segment and never matched a real request path. The code compiled without warnings.
+
+**Diagnostic path:** Added test route `/test/{param}` alongside `/tools/{tool_name}`. Both returned 404. Static routes (`/health`) returned 200. Confirmed matchit 0.7.3 source uses `:param`. Verified Axum source does no path conversion before inserting into matchit.
+
+**Fix:** Changed all route definitions from `{param}` to `:param` in `server.rs`, `clipboard.rs`, `notes.rs`. (D-020)
+
+---
+
+### Root cause 2: HTMX 2.x `selfRequestsOnly = true` default
+
+**Symptom:** Even after routing was fixed, inner HTMX requests (`hx-trigger="load"` on `#clipboard-list`) produced zero network activity. No errors, no logs.
+
+**Root cause:** HTMX 2.0.4 defaults `selfRequestsOnly: true`, which silently blocks all requests to a different origin. The app shell is served from `tauri://localhost` (via Tauri frontendDist) while Axum runs on `http://127.0.0.1:{PORT}`. These are different origins. HTMX drops every request with no error event, no log, no indication.
+
+**Fix:** `htmx.config.selfRequestsOnly = false` in the inline script of `index.html`, before any `hx-*` attributes are processed. (D-017)
+
+---
+
+### Root cause 3: HTMX and Alpine loaded from CDN
+
+**Symptom:** Intermittent — on WebKitGTK (used by Tauri on Linux), CDN requests to `unpkg.com` were slow or blocked. HTMX failed to initialize entirely, making every `hx-*` attribute inert.
+
+**Fix:** Bundle `htmx.min.js` (2.0.4) and `alpine.min.js` (3.14.9) locally under `ui/assets/`. Same offline-first principle as marked.js (D-018).
+
+---
+
+### Root cause 4: `hx-trigger="load"` on initial panel before token was confirmed
+
+**Symptom:** On fast startup, the initial `hx-trigger="load"` on `#tool-panel` fired before Tauri's `initialization_script` had set `window.__SESSION_TOKEN__`. The first request went out with an undefined token and got a 401. Panel never retried.
+
+**Fix:** Removed `hx-trigger="load"` from `#tool-panel`. Added `initApp()` async function on `DOMContentLoaded` that calls `window.__TAURI__.core.invoke('get_session_token')` (with proper `typeof` guard) to confirm the real token, then loads the default panel via `htmx.ajax()` with full absolute URL and explicit auth headers. (D-019)
+
+---
+
+### Root cause 5: `htmx.ajax()` source-element context breaks child `hx-trigger="load"`
+
+**Symptom:** After the routing fix, the clipboard panel HTML loaded correctly into `#tool-panel`, but `#clipboard-list` (which has `hx-trigger="load"`) never fired its `GET /api/clipboard` request.
+
+**Root cause:** `htmx.ajax()` with no explicit source element uses `document.body` as the source. HTMX's post-swap initialization task (`Ae()`) can miss child elements' load triggers when the source is `document.body` rather than a real ancestor.
+
+**Fix:** Added `htmx:afterSwap` listener that calls `htmx.process(evt.detail.target)` when `#tool-panel` is the swap target. This re-processes all `hx-*` attributes in the newly loaded panel, including `hx-trigger="load"` children. (D-019 addendum)
+
+---
+
+### Root cause 6: Notes `+New` — JSON vs Form mismatch
+
+**Symptom:** Clicking `+ New` did nothing. No note was created. No visible error.
+
+**Root cause:** `create_handler` in `notes.rs` used `Json<CreateBody>` extractor, which expects `Content-Type: application/json`. HTMX sends `hx-vals` as `application/x-www-form-urlencoded` (form data). Axum returned 415 Unsupported Media Type, silently. HTMX had no error handler to surface this.
+
+**Fix:** Changed `create_handler` to `Form<CreateBody>`. Updated the test helper from `post_json` to `post_form` to match. (No new decision — follows the principle: HTMX submits form data by default.)
+
+---
+
+### Root cause 7: Clipboard monitor capturing nothing on Wayland
+
+**Symptom:** Clipboard history always empty despite copying text from other apps.
+
+**Root cause:** `arboard = "3"` without features compiles with the X11 backend only. On Wayland + Hyprland, `arboard::get_text()` fails on every poll because the X11/XWayland clipboard is not the real system clipboard. The failure is caught by `Err(_) => continue` and produces no log output.
+
+**Root cause detail:** arboard 3 has a `wayland-data-control` feature that enables the `wlr-data-control` Wayland protocol backend (via `wl-clipboard-rs`). Hyprland implements this protocol. Without the feature, arboard never tries Wayland and falls back to X11 silently.
+
+**Fix:** Changed to `arboard = { version = "3", features = ["wayland-data-control"] }` in Cargo.toml.
+
+---
+
+### Follow-up fixes (UX)
+
+**Clipboard auto-refresh:** `hx-trigger="load"` loads once. Changed to `hx-trigger="load, every 3s"` so the list polls while the panel is open.
+
+**Notes list title sync:** Alpine `save()` sends a `PUT` via `fetch()` but nothing told `#notes-list` to refresh. Added `htmx.trigger(document.body, 'noteUpdated')` after save. Notes list gained `hx-trigger="load, noteUpdated from:body"` to refresh when triggered.
+
+**Markdown `#` headings invisible:** Tailwind Preflight resets `h1`–`h6` to `font-size: inherit`. Without the Typography plugin (`@tailwindcss/typography`), `prose` classes don't re-apply heading sizes. Added explicit heading styles scoped to `.prose` in `ui/tools/notes/index.html`.
+
+---
+
+### Files changed across this entire saga
+
+- `src-tauri/Cargo.toml` — arboard `wayland-data-control` feature
+- `src-tauri/src/server.rs` — `:param` syntax, removed diagnostic code
+- `src-tauri/src/tools/clipboard.rs` — `:param` syntax
+- `src-tauri/src/tools/notes.rs` — `:param` syntax, `Form<CreateBody>`, `htmx.trigger` after save
+- `ui/index.html` — `selfRequestsOnly=false`, local assets, `initApp()`, `htmx:afterSwap`
+- `ui/assets/htmx.min.js` — bundled HTMX 2.0.4
+- `ui/assets/alpine.min.js` — bundled Alpine.js 3.14.9
+- `ui/tools/clipboard/index.html` — `every 3s` polling
+- `ui/tools/notes/index.html` — `noteUpdated from:body`, heading styles
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Next session should start with
+Phase 2 — Voice (Whisper) or OCR (Tesseract). All Phase 1 functionality is confirmed working end-to-end.
+

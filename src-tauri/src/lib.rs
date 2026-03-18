@@ -14,6 +14,7 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
 };
+use tokio::sync::watch;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,17 +32,29 @@ pub fn run() {
             // ── Database ────────────────────────────────────────────────────
             let db = tauri::async_runtime::block_on(db::init_db())?;
 
+            let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+
             let state = Arc::new(AppState {
                 db,
                 session_token: session_token.clone(),
                 port,
                 event_bus: event_bus::EventBus::new(),
+                clipboard_suppress_tx,
             });
+
+            // ── Tauri managed state (for invoke commands) ───────────────────
+            app.manage(state.clone());
 
             // ── Axum server (background task) ───────────────────────────────
             let state_for_server = state.clone();
             tauri::async_runtime::spawn(async move {
                 server::start_server(state_for_server, port).await;
+            });
+
+            // ── Clipboard monitor (background task) ─────────────────────────
+            let state_for_monitor = state.clone();
+            tauri::async_runtime::spawn(async move {
+                tools::clipboard::start_monitor(state_for_monitor).await;
             });
 
             // ── i18n ────────────────────────────────────────────────────────
@@ -92,17 +105,18 @@ pub fn run() {
                 "main",
                 WebviewUrl::App(std::path::PathBuf::from("index.html")),
             )
-                .title("Eleutheria Telos")
-                .inner_size(1100.0, 700.0)
-                .min_inner_size(640.0, 480.0)
-                .initialization_script(&init_script)
-                .build()?;
+            .title("Eleutheria Telos")
+            .inner_size(1100.0, 700.0)
+            .min_inner_size(640.0, 480.0)
+            .initialization_script(&init_script)
+            .build()?;
 
             log::info!("Eleutheria Telos started. Server on http://127.0.0.1:{port}");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             api::get_session_token,
+            api::get_api_port,
             api::health_check,
             api::get_config,
         ])

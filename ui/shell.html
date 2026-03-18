@@ -8,21 +8,34 @@
   <!-- Tailwind CSS (CDN — will be replaced with compiled build in Phase 5) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <!-- HTMX — bundled locally for offline-first (D-018) -->
+  <script src="/assets/htmx.min.js"></script>
 
-  <!-- Alpine.js -->
-  <script src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+  <!-- Alpine.js — bundled locally for offline-first (D-018) -->
+  <script src="/assets/alpine.min.js" defer></script>
 
   <script>
+    // HTMX 2.x defaults: selfRequestsOnly=true blocks cross-origin requests (D-017).
+    htmx.config.selfRequestsOnly = false;
+
     // Injected by Tauri before page load via initialization_script.
     // Fallback values for direct browser preview only.
     if (!window.__SESSION_TOKEN__) window.__SESSION_TOKEN__ = 'dev-token';
     if (!window.__API_PORT__)      window.__API_PORT__      = 47821;
 
-    // Configure HTMX to always send the session token.
+    // Always send the session token and rewrite relative paths to Axum (D-017, D-019).
     document.addEventListener('htmx:configRequest', function (evt) {
       evt.detail.headers['Authorization'] = 'Bearer ' + window.__SESSION_TOKEN__;
+      const p = evt.detail.path;
+      if (!p || p.startsWith('http://127.0.0.1:')) return;
+      const apiPath = p.startsWith('/') ? p : new URL(p).pathname + (new URL(p).search || '');
+      evt.detail.path = 'http://127.0.0.1:' + window.__API_PORT__ + apiPath;
+    });
+
+    document.addEventListener('htmx:afterSwap', function (evt) {
+      if (evt.detail.target && evt.detail.target.id === 'tool-panel') {
+        htmx.process(evt.detail.target);
+      }
     });
   </script>
 

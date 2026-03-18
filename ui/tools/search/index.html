@@ -1,10 +1,20 @@
-<div id="tool-panel">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold">🔍 Search</h2>
+<div id="tool-panel" class="flex flex-col h-full">
+
+  <div class="mb-4 shrink-0">
+    <h2 class="text-lg font-semibold text-gray-100 mb-3">Search</h2>
+    <input type="text"
+           name="q"
+           autofocus
+           placeholder="Search notes and clipboard…"
+           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500"
+           hx-get="/api/search"
+           hx-trigger="input changed delay:250ms"
+           hx-target="#search-results"
+           hx-swap="innerHTML" />
   </div>
-  <div class="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
-    <p class="text-4xl mb-3">🔍</p>
-    <p class="font-medium">Full-Text Search</p>
-    <p class="text-sm mt-1">Coming in Phase 1 (SQLite FTS5 across notes and clipboard).</p>
+
+  <div id="search-results" class="flex-1 overflow-y-auto">
+    <p class="text-gray-600 text-sm">Type to search across notes and clipboard.</p>
   </div>
+
 </div>

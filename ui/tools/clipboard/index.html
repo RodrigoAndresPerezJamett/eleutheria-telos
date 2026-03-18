@@ -1,10 +1,36 @@
-<div id="tool-panel">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold">📋 Clipboard History</h2>
+<div id="tool-panel" class="flex flex-col h-full">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-4 shrink-0">
+    <h2 class="text-lg font-semibold text-gray-100">Clipboard History</h2>
+    <button class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-red-400 hover:text-red-300 transition-colors"
+            hx-delete="/api/clipboard"
+            hx-target="#clipboard-list"
+            hx-swap="innerHTML"
+            hx-confirm="Clear all clipboard history?">
+      Clear all
+    </button>
   </div>
-  <div class="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
-    <p class="text-4xl mb-3">📋</p>
-    <p class="font-medium">Clipboard History</p>
-    <p class="text-sm mt-1">Coming in Phase 1.</p>
+
+  <!-- Search -->
+  <div class="mb-4 shrink-0">
+    <input type="text"
+           name="q"
+           placeholder="Search clipboard…"
+           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500"
+           hx-get="/api/clipboard"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#clipboard-list"
+           hx-swap="innerHTML" />
   </div>
+
+  <!-- List -->
+  <div id="clipboard-list"
+       class="flex-1 overflow-y-auto"
+       hx-get="/api/clipboard"
+       hx-trigger="load, every 3s"
+       hx-swap="innerHTML">
+    <p class="text-gray-500 text-sm">Loading…</p>
+  </div>
+
 </div>
