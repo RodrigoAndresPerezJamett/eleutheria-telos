@@ -102,7 +102,7 @@
 - [ ] Phone layout (<640px): bottom nav with 4 tools: Voice-to-Text, OCR (camera input), Notes, Clipboard
 - [ ] Tablet layout (640px–1023px): icon-only sidebar with same 4 tools
 - [ ] Background Foreground Service for clipboard monitoring on Android
-- [ ] OCR uses device camera as capture source (not screen area)
+- [ ] OCR uses device camera as capture source (it also can use screen area, it has to be available on all platforms)
 - [ ] APK available for sideloading, eventually submitted to F-Droid
 
 **iOS / iPhone / iPad:** Not scheduled. Blocked on Tauri iOS reaching stable. The responsive layouts (mobile + tablet breakpoints) are already designed to work on iOS screen sizes — no architecture changes needed when Tauri iOS is ready.
