@@ -7,6 +7,29 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.6 Complete
+
+### Completed
+
+- **Item 1 — Translation backend fix** (`scripts/translate.py`, `install_argos_package.py`, `uninstall_argos_package.py`, `requirements.txt`) — argostranslate replaced with ctranslate2 + sentencepiece. Eliminates Python 3.14 incompatibility and ~3GB dependency footprint. See D-036.
+- **Item 2 — Contextual pipeline CTA** (`src-tauri/src/tools/ocr.rs`, `voice.rs`, `ui/tools/quick-actions/index.html`) — "Create pipeline from this" button on OCR and Voice result cards; navigates to Quick Actions and pre-selects the correct trigger via `window.__qaPreTrigger`.
+- **Item 3 — Pipeline templates** (`src-tauri/src/tools/quick_actions.rs`, `ui/tools/quick-actions/index.html`) — 5 pre-built templates shown in right panel when no pipeline is selected. "Use this" creates pipeline + steps and opens editor in one click via HTMX OOB swap.
+- **Item 4 — Problem-first empty states** (`clipboard.rs`, `notes.rs`, `translate.rs`, `quick_actions.rs`, `ui/tools/notes/index.html`, `ui/tools/search/index.html`) — all generic "nothing here" messages replaced with problem-framing copy.
+- **Item 5 — First community plugin** — deferred to backlog. Plugin system already stress-tested in Phase 4; Obsidian Send and GitHub Issues creator logged in IDEAS.md.
+
+### Also this session
+- Command palette footer: added `Ctrl K` kbd hint (discoverability)
+- Search panel: added "Tip: press Ctrl K to open quick search from anywhere" below search bar
+- IDEAS.md: clipboard blur mode, rich content preview (images/audio), OCR auto language detection, translation auto source detection, keybindings settings section
+
+### Phase 4.6 status
+**COMPLETE.** Moving to Phase 5 — Monetization + Distribution.
+
+### Next
+Phase 5 — starting with **license key system** (Gumroad integration, asymmetric key verification, no server required) or **onboarding flow** (first-run wizard). Recommend onboarding first — it surfaces the "which tools do you want?" question before monetization makes sense.
+
+---
+
 ## [2026-03-19] — Phase 4.6 Item 1: Translation backend — argostranslate → ctranslate2
 
 ### Completed

@@ -120,7 +120,7 @@
 - [x] **Translation backend fix** — replace argostranslate with ctranslate2 + Opus-MT models directly; eliminates Python 3.14 incompatibility and ~3GB dependency footprint (see D-036)
 - [ ] **Contextual pipeline CTA** — add "Create pipeline from this" button to OCR and Voice result cards, pre-filling the Quick Actions builder with the correct trigger
 - [ ] **Pipeline templates** — 3-5 built-in templates featured prominently in the Quick Actions panel (e.g., "OCR → Translate → Copy", "Voice → Save as Note", "Clipboard → Translate")
-- [ ] **First real community plugin** — build and open-source one non-trivial plugin (Obsidian send or GitHub Issues creator); stress-tests the plugin API and serves as reference implementation
+- [ ] **First real community plugin** — build and open-source one non-trivial plugin (Obsidian send or GitHub Issues creator); stress-tests the plugin API and serves as reference implementation *(deferred to backlog — plugin system already stress-tested in Phase 4; moved to IDEAS.md)*
 - [ ] **Problem-first empty states** — replace generic "nothing here" messages with problem-framing CTAs (e.g., "Lost something you copied? Your clipboard history lives here.", "Need text from an image? Capture a screen region.")
 
 **Phase 4.6 is complete when** translation works end-to-end, pipelines are discoverable from result cards, at least one real plugin is published, and every major empty state has a problem-first CTA.

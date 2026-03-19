@@ -72,6 +72,10 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## Community / Ecosystem Ideas
 
+- **Plugin: Obsidian Send** — from any result card (OCR, voice, note), send the text directly to an Obsidian vault as a new `.md` file. Configured with vault path in plugin settings. Good reference implementation for plugins that write to the filesystem and integrate with a third-party app.
+
+- **Plugin: GitHub Issues creator** — select text from any result and create a GitHub issue in a configured repository with that content pre-filled. Auth via personal access token stored in plugin settings. Good reference implementation for plugins that call external APIs.
+
 - **Plugin Registry** — a hosted JSON file listing community plugins with name, author, version, download URL. The app shows a browsable "Plugin Store" and installs with one click. Requires minimal server infrastructure (static JSON on GitHub Pages would work).
 - **Plugin Templates** — `cargo generate` or `npx` templates for scaffolding a new plugin in Python or Node in seconds.
 - **Plugin Sandboxing V2** — more granular permissions (e.g., `network.outbound.allowlist: ["api.example.com"]`) and resource limits (CPU, memory) per plugin.
