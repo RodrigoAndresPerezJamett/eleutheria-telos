@@ -37,6 +37,11 @@ Claude Code: do not implement anything from this file unless it has been explici
 ## Media Tools (Phase 3+)
 
 - **Video Timeline Editor** — a visual NLE with multiple tracks. Explicitly a major community plugin project, not a core feature. Estimated effort: months. Would use the Video Processor as its ffmpeg backend.
+- **Video Processor UX improvements (Phase 5 polish):**
+  - **Drag-and-drop file input** — drag a video file onto the panel to populate the path field automatically, avoiding manual copy-paste of filesystem paths.
+  - **Click-to-browse file picker** — a "Browse…" button that opens the system file manager via `tauri-plugin-dialog` (`dialog.open()` with video file filters). Requires adding `tauri-plugin-dialog` as a dependency with capability configuration.
+  - **Video preview / thumbnail** — show a static thumbnail or short preview of the loaded video before processing, so the user can confirm they selected the right file.
+  - **Visual timeline** — a minimal waveform + keyframe strip showing the video duration, with draggable in/out handles for the Trim operation. Eliminates manual `HH:MM:SS` typing. Could use `ffprobe` for duration metadata and `ffmpeg -vf thumbnail` for frame extraction.
 - **Audio Editor** — trim, fade, normalize audio. ffmpeg-based. Smaller scope than video editor.
 - **Batch Image Processing** — resize, convert, compress multiple images at once. rembg for batch background removal.
 - **Screen Annotation** — draw, highlight, and annotate on top of live screen content. Overlay window using Tauri's transparent window capabilities.
