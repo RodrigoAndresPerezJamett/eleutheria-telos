@@ -19,7 +19,7 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 arboard = { version = "3", features = ["wayland-data-control"] }  # Used for: clipboard monitoring (Wayland via wlr-data-control) | pinned: 2026-03-18
-axum = { version = "0.7", features = ["json"] }                   # Used for: internal HTTP server | pinned: 2026-03-18
+axum = { version = "0.7", features = ["json", "multipart"] }      # Used for: internal HTTP server + image upload | pinned: 2026-03-18
 log = "0.4"                                                        # Used for: logging | pinned: 2026-03-18
 serde = { version = "1.0", features = ["derive"] }                # Used for: JSON serialization | pinned: 2026-03-18
 serde_json = "1.0"                                                 # Used for: JSON handling | pinned: 2026-03-18
@@ -28,8 +28,9 @@ tauri = { version = "2.10.3", features = ["tray-icon"] }           # Used for: d
 tauri-plugin-log = "2"                                             # Used for: logging plugin | pinned: 2026-03-18
 tracing = "0.1"                                                    # Used for: observability | pinned: 2026-03-18
 uuid = { version = "1.0", features = ["v4"] }                     # Used for: unique IDs | pinned: 2026-03-18
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync"] } # Used for: async runtime + watch channels | pinned: 2026-03-18
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync", "fs", "process"] } # Used for: async runtime + watch channels + fs + subprocess | pinned: 2026-03-18
 tower-http = { version = "0.5", features = ["cors"] }              # Used for: CORS headers (Tauri WebView → Axum) | pinned: 2026-03-18
+reqwest    = { version = "0.12", features = ["stream"] }           # Used for: streaming model file downloads | pinned: 2026-03-18
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }                    # Used for: ServiceExt::oneshot() in route integration tests | pinned: 2026-03-18

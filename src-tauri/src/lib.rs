@@ -8,13 +8,15 @@ mod server;
 pub mod tools;
 
 use server::AppState;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Arc as StdArc;
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem},
     tray::TrayIconBuilder,
     AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
 };
-use tokio::sync::watch;
+use tokio::sync::{watch, Mutex};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -33,6 +35,8 @@ pub fn run() {
             let db = tauri::async_runtime::block_on(db::init_db())?;
 
             let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+            let download_states = StdArc::new(Mutex::new(HashMap::new()));
+            let voice_recording = StdArc::new(Mutex::new(None));
 
             let state = Arc::new(AppState {
                 db,
@@ -40,6 +44,8 @@ pub fn run() {
                 port,
                 event_bus: event_bus::EventBus::new(),
                 clipboard_suppress_tx,
+                download_states,
+                voice_recording,
             });
 
             // ── Tauri managed state (for invoke commands) ───────────────────

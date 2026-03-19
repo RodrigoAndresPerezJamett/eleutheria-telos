@@ -330,6 +330,62 @@ Format:
 
 ---
 
+## D-023 — Raw string `r#"..."#` terminates at first `"#` in content
+
+**Decision:** Never put `"#` sequences inside `r#"..."#` raw strings. Pre-compute any string that would contain `"#` (e.g. CSS selectors like `#model-card-ID`) before the format! call.
+
+**Rejected alternatives:**
+- Use `r##"..."##` (double-hash raw strings) — valid, but requires ensuring no `"##` in content; pre-computing is simpler and more obvious.
+
+**Reason:** `hx-target="#model-card-{id}"` inside `r#"..."#` is silently parsed as: the raw string ends at the first `"#`, and everything after is outside the string. The format! macro then sees malformed syntax and emits "expected `,` found `-`" (a confusing error). Pre-computing `let target = format!("#model-card-{id}")` and using `{target}` in the format string avoids the `"#` sequence inside the raw literal.
+
+**Date:** 2026-03-18
+
+---
+
+## D-024 — Whisper model download via reqwest streaming
+
+**Decision:** Download Whisper ggml model files directly from HuggingFace via `reqwest` with the `stream` feature, using `Response::chunk()` for byte-level progress tracking.
+
+**Rejected alternatives:**
+- subprocess download (curl/wget) — no byte-level progress; harder to track and report percentage
+- `futures::StreamExt::next()` — requires adding the `futures` crate; `reqwest::Response::chunk()` provides the same streaming without extra deps
+
+**Reason:** `reqwest` is already added for downloads; `chunk()` is the idiomatic async chunk reader that doesn't require `futures::StreamExt`, keeping deps minimal.
+
+**Date:** 2026-03-18
+
+---
+
+## D-025 — Argos Translate models managed via Python subprocess
+
+**Decision:** Use `python3 scripts/install_argos_package.py {from} {to}` to install Argos language packs. Python handles package index fetching and installation. Rust only tracks `downloaded` status in the DB.
+
+**Rejected alternatives:**
+- Direct `.argosmodel` file download from Rust — Argos package URLs are managed by their own index (JSON at GitHub); duplicating that logic in Rust is fragile
+
+**Reason:** argostranslate's Python API handles package discovery, download, and installation. Python 3.14 compatible: argostranslate 1.11.0 (pure Python), ctranslate2 4.7.1 (cp314 manylinux wheel), sentencepiece 0.2.1 (cp314 manylinux wheel) — all verified.
+
+**Date:** 2026-03-18
+
+---
+
+## D-026 — scripts/ directory path via compile-time `env!("CARGO_MANIFEST_DIR")`
+
+**Decision:** Resolve Python scripts path using `PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().join("scripts")` at compile time.
+
+**Rejected alternatives:**
+- Runtime env var — not set when running as Tauri app binary
+- `std::env::current_exe().parent()` — unreliable; the binary location varies across dev/release/Tauri bundle
+
+**Reason:** In dev mode (`cargo tauri dev`), `CARGO_MANIFEST_DIR` is the `src-tauri/` directory — correct path to `../scripts/`. Phase 5 will replace with Tauri's `app.path().resource_dir()` which correctly resolves bundled resources.
+
+**Date:** 2026-03-18
+
+**Revisit if:** App is built for production (Phase 5) — must switch to Tauri resource path and bundle scripts as Tauri resources.
+
+---
+
 ## D-022 — arboard requires `wayland-data-control` feature on Linux
 
 **Decision:** `arboard` is specified as `{ version = "3", features = ["wayland-data-control"] }` in Cargo.toml.

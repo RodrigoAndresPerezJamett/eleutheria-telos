@@ -1,3 +1,5 @@
+use crate::tools::models::DownloadMap;
+use crate::tools::voice::VoiceRecording;
 use axum::{
     extract::{Path, Request, State},
     http::StatusCode,
@@ -16,7 +18,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
-use crate::tools::{clipboard, notes, search};
+use crate::tools::{clipboard, models as models_tool, notes, ocr, search, voice};
 
 pub const DEFAULT_PORT: u16 = 47821;
 
@@ -28,6 +30,10 @@ pub struct AppState {
     pub event_bus: EventBus,
     /// Used by the clipboard monitor to skip re-inserting just-recopied content.
     pub clipboard_suppress_tx: watch::Sender<u64>,
+    /// Tracks in-progress model downloads (model_id → DownloadState).
+    pub download_states: DownloadMap,
+    /// Holds the ffmpeg child process while a voice recording is in progress.
+    pub voice_recording: VoiceRecording,
 }
 
 #[derive(Debug, Serialize)]
@@ -196,8 +202,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(mcp::mcp_sse_handler).post(mcp::mcp_post_handler),
         )
         .merge(clipboard::router())
+        .merge(models_tool::router())
         .merge(notes::router())
+        .merge(ocr::router())
         .merge(search::router())
+        .merge(voice::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

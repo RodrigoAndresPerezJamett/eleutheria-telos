@@ -90,6 +90,9 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
     .nav-item.active { background-color: #1f2937; }
+    /* HTMX request indicator: hidden by default, shown while request is in-flight */
+    .htmx-indicator { display: none; }
+    .htmx-indicator.htmx-request { display: inline; }
   </style>
 </head>
 
@@ -175,7 +178,16 @@
       </li>
     </ul>
 
-    <div class="px-2 mt-auto">
+    <div class="px-2 mt-auto space-y-1">
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+              :class="{ 'active': activeTool === 'models' }"
+              hx-get="/tools/models"
+              hx-target="#tool-panel"
+              hx-swap="innerHTML"
+              @click="activeTool = 'models'">
+        <span class="text-lg">🧠</span>
+        <span>Models</span>
+      </button>
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
               :class="{ 'active': activeTool === 'settings' }"
               hx-get="/tools/settings"
@@ -241,12 +253,20 @@
                 @click="activeTool = 'search'">🔍</button>
       </li>
     </ul>
-    <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors mt-auto"
-            title="Settings"
-            hx-get="/tools/settings"
-            hx-target="#tool-panel"
-            hx-swap="innerHTML"
-            @click="activeTool = 'settings'">⚙️</button>
+    <div class="mt-auto flex flex-col gap-1">
+      <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+              title="Models"
+              hx-get="/tools/models"
+              hx-target="#tool-panel"
+              hx-swap="innerHTML"
+              @click="activeTool = 'models'">🧠</button>
+      <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+              title="Settings"
+              hx-get="/tools/settings"
+              hx-target="#tool-panel"
+              hx-swap="innerHTML"
+              @click="activeTool = 'settings'">⚙️</button>
+    </div>
   </nav>
 
   <!-- ── Main content ───────────────────────────────────────────────────── -->

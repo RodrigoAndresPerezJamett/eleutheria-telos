@@ -111,6 +111,141 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-18] — Phase 2 Step 3: Voice tool
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/voice.rs` — 6 route handlers:
+  - `GET /api/voice/status` — returns idle/recording badge HTML
+  - `POST /api/voice/record/start` — spawns `ffmpeg -f pulse -i default` with piped stdin; stores child in `AppState.voice_recording`
+  - `POST /api/voice/record/stop` — writes `q\n` to ffmpeg stdin, waits for process exit, runs `python3 scripts/transcribe.py` on the WAV output; returns result card HTML
+  - `POST /api/voice/file` — accepts multipart audio upload (wav/mp3/ogg/flac/m4a), saves to `/tmp/`, runs Whisper transcription
+  - `POST /api/voice/copy` — copies transcript to clipboard via arboard (no suppress — new content, D-014)
+  - `POST /api/voice/save-note` — inserts transcript as a new Note in SQLite
+- `src-tauri/src/tools/mod.rs` — registered `voice` module
+- `src-tauri/src/server.rs` — imported `VoiceRecording`, added `voice_recording` to `AppState`, merged `voice::router()`
+- `src-tauri/src/lib.rs` — initialized `voice_recording: Arc<Mutex<None>>`
+- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs` — test AppState constructors updated with `voice_recording` field
+
+**Python scripts**
+- `scripts/transcribe.py` — Whisper transcription via `pywhispercpp`; auto-discovers ggml model from `~/.local/share/eleutheria-telos/models/whisper/`; `--lang <code|auto>` flag
+- `scripts/requirements.txt` — added `pywhispercpp>=1.4.1`
+
+**Frontend**
+- `ui/tools/voice/index.html` — full voice panel:
+  - Language selector (auto/en/es/fr/de/pt/it/zh/ja)
+  - Start/Stop recording controls with Alpine.js mm:ss timer and pulsing "● Recording" badge
+  - Stop sends `lang` via hidden form (`hx-include="#voice-stop-form"`)
+  - File upload (wav/mp3/ogg/flac/m4a) with `hx-trigger="change"`
+  - Result card: transcript + Copy to Clipboard + Save as Note
+
+### Architecture
+- `VoiceRecording = Arc<Mutex<Option<tokio::process::Child>>>` held in AppState — allows concurrent HTTP handlers to safely check/take the recording child
+- ffmpeg stopped gracefully via stdin `q\n` (not SIGKILL) so WAV file is properly finalized
+- Transcription always runs in an async tokio task — never blocks Axum handler thread
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Next session should start with
+Phase 2 Step 4: Translation tool (Argos Translate via Python subprocess). Routes: `GET /tools/translate`, `POST /api/translate/text`. Then Step 5: OCR → Translate pipeline.
+
+---
+
+## [2026-03-18] — Phase 2 Step 2: OCR tool
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/ocr.rs` — 4 route handlers:
+  - `POST /api/ocr/capture` — runs `slurp` (interactive Wayland region selector) → `grim` (screenshot) → `tesseract`. Accepts `lang` form field (eng/spa).
+  - `POST /api/ocr/file` — receives multipart image upload, saves to `/tmp/`, runs `tesseract`
+  - `POST /api/ocr/copy` — copies OCR text to clipboard via arboard (with suppress hash D-014)
+  - `POST /api/ocr/save-note` — inserts OCR text as a new Note in SQLite; first non-empty line becomes title
+- `src-tauri/src/tools/mod.rs` — registered `ocr` module
+- `src-tauri/src/server.rs` — imported `ocr`, merged `ocr::router()`
+
+**Cargo.toml changes**
+- Added `multipart` feature to axum — enables `axum::extract::Multipart` for image file upload
+
+**Frontend**
+- `ui/tools/ocr/index.html` — full OCR panel:
+  - Language selector (English / Spanish — only installed Tesseract langpacks)
+  - "Capture Screen Area" button with loading indicator and `hx-disabled-elt`
+  - "Open Image File" label+input with auto-submit on file selection (`hx-trigger="change"`)
+  - Result area: extracted text + "Copy to Clipboard" + "Save as Note" actions
+  - `hx-include` pattern for passing OCR text to copy/save handlers (D-021 compliant)
+- `ui/index.html` — added `.htmx-indicator` / `.htmx-indicator.htmx-request` CSS for loading indicators
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Notes
+- Tesseract languages available: `eng`, `spa` (verified via `tesseract --list-langs`)
+- Screen capture UX: move window aside before clicking "Capture Screen Area" (slurp overlay covers full screen but Tauri window will also be visible in the captured region if not moved)
+- Phase 5: add window hide/show around slurp capture using AppHandle in AppState
+
+### Next session should start with
+Phase 2 Step 3: Voice tool (Whisper subprocess). User has Whisper Base already downloaded.
+
+---
+
+## [2026-03-18] — Phase 2 Step 1: Models panel
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/migrations/003_phase2_models.sql` — `ALTER TABLE models ADD COLUMN url TEXT`; seeds full catalog: 4 Whisper models (tiny/base/small/medium) + 8 Argos language pairs (EN↔ES/FR/DE/PT)
+- `src-tauri/src/tools/models.rs` — full models panel backend:
+  - `GET /api/models` — renders full catalog list grouped by tool (Voice / Translation)
+  - `POST /api/models/:id/download` — starts non-blocking download in `tokio::spawn`; returns card HTML immediately
+  - `GET /api/models/:id/progress` — polled every 2s by downloading cards; returns card HTML reflecting current state
+  - `DELETE /api/models/:id` — removes file, resets DB, uninstalls Argos package via Python subprocess
+  - Whisper download via `reqwest` streaming with byte-level progress tracking
+  - Argos download via `python3 scripts/install_argos_package.py {from} {to}` subprocess
+  - `DownloadMap = Arc<Mutex<HashMap<String, DownloadState>>>` stored in `AppState`
+- `src-tauri/src/tools/mod.rs` — registered `models` module
+- `src-tauri/src/server.rs` — imported `DownloadMap`, added `download_states` to `AppState`, merged `models_tool::router()`
+- `src-tauri/src/lib.rs` — initialized `download_states` HashMap, passed to `AppState`
+- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs` — test `AppState` constructors updated with `download_states` field
+
+**Cargo.toml changes**
+- Added `reqwest = { version = "0.12", features = ["stream"] }` — streaming model downloads
+- Added `"fs"` and `"process"` to tokio features — `tokio::fs` (file ops) and `tokio::process::Command` (Python subprocess)
+
+**Frontend**
+- `ui/tools/models/index.html` — models panel with `hx-trigger="load"` → `GET /api/models`
+- `ui/index.html` — added "Models" (🧠) entry to desktop sidebar and tablet icon sidebar
+
+**Python scripts**
+- `scripts/install_argos_package.py` — downloads and installs an Argos Translate language pack
+- `scripts/uninstall_argos_package.py` — removes an installed Argos Translate language pack
+- `scripts/requirements.txt` — `argostranslate>=1.11.0`
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (14 tests, 0 failures)
+
+### Bug fixed during implementation
+- **`r#"..."#` raw strings terminate prematurely at `"#`** — `hx-target="#model-card-{id}"` contains `"#` which Rust's raw string parser (`r#"..."#`) treats as the closing delimiter. Fix: pre-compute `let target = format!("#model-card-{id}")` and use `{target}` in the format string, avoiding `"#` inside the raw literal. (D-023)
+
+### Decisions made
+- **D-023:** Screen capture via `slurp | grim` subprocess on Wayland — both verified installed at `/usr/bin`
+- **D-024:** Whisper download via `reqwest` streaming (direct binary download from HuggingFace ggml format)
+- **D-025:** Argos Translate models managed via Python subprocess (argostranslate's own package manager) — Python 3.14 compatible (ctranslate2 4.7.1 + sentencepiece 0.2.1 both have cp314 manylinux wheels)
+- **D-026:** `scripts/` directory used for Python subprocess scripts; path resolved at compile time via `env!("CARGO_MANIFEST_DIR")` — Phase 5 will replace with Tauri resource path
+
+### Next session should start with
+Phase 2 Step 2: OCR tool (Tesseract subprocess + grim/slurp screen capture). Then Voice (Whisper subprocess), then Translation (Argos subprocess).
+
+---
+
 ## [2026-03-18] — Phase 1 implementation
 
 ### Completed

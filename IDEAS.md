@@ -52,6 +52,25 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ---
 
+## Voice Tool Enhancements
+
+- **Audio playback in Voice panel** — after recording or uploading, show an HTML5 `<audio>` player so the user can listen back to the recording before or after transcription. Includes play/pause controls.
+- **Save audio file** — "Save Recording" button that copies the WAV/audio file from `/tmp/` to a user-chosen location (or a default `~/Documents/eleutheria-recordings/`). Currently only the transcript is saved; the audio is discarded after transcription.
+
+---
+
+## Python Dependency Management (Phase 5)
+
+- **Bundled venv + first-run setup** — instead of requiring `pip install` manually, the app should:
+  1. On first launch, detect if `~/.local/share/eleutheria-telos/venv/` exists
+  2. If not, show a "Setting up AI tools…" screen with a progress indicator
+  3. Run `python3 -m venv` + `pip install -r requirements.txt` automatically in the background
+  4. All subsequent Python subprocess calls use the venv's Python interpreter (`venv/bin/python3`) instead of the system one
+  - This means the user never sees `pip` — the app is self-contained from their perspective
+  - Alternative to evaluate: replace `pywhispercpp` with `whisper-rs` (Rust crate wrapping whisper.cpp) to eliminate Python entirely for voice transcription
+
+---
+
 ## Distribution & Monetization Ideas
 
 - **"Supporter" tier** — optional $10-20 one-time for users who want to give more than the $5 minimum. No extra features — just a "supporter" badge in the about screen.

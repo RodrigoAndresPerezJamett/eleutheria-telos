@@ -158,12 +158,17 @@ mod tests {
             .await
             .expect("migrations");
         let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+        let download_states =
+            std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+        let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
         Arc::new(AppState {
             db,
             session_token: "test-token".to_string(),
             port: 0,
             event_bus: crate::event_bus::EventBus::new(),
             clipboard_suppress_tx,
+            download_states,
+            voice_recording,
         })
     }
 

@@ -1,10 +1,76 @@
-<div id="tool-panel">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold">🔤 OCR</h2>
+<!DOCTYPE html>
+<div id="tool-panel" class="flex flex-col h-full p-6">
+
+  <div class="mb-5">
+    <h2 class="text-xl font-semibold text-gray-100">OCR</h2>
+    <p class="text-sm text-gray-400 mt-1">Extract text from a screen area or image file.</p>
   </div>
-  <div class="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
-    <p class="text-4xl mb-3">🔤</p>
-    <p class="font-medium">OCR — Text from Screen</p>
-    <p class="text-sm mt-1">Coming in Phase 2 (powered by Tesseract 5).</p>
+
+  <!-- ── Language selector ──────────────────────────────────────────────── -->
+  <div class="flex items-center gap-3 mb-4">
+    <label class="text-xs text-gray-400">Language:</label>
+    <select id="ocr-lang"
+            class="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-200">
+      <option value="eng">English</option>
+      <option value="spa">Spanish</option>
+    </select>
   </div>
+
+  <!-- ── Actions ────────────────────────────────────────────────────────── -->
+  <div class="flex flex-wrap gap-3 mb-2 items-center">
+
+    <!-- Screen capture -->
+    <!-- hx-include picks up lang from the hidden form below.
+         onclick syncs the select value into that hidden input before HTMX reads it. -->
+    <button id="capture-btn"
+            class="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded px-4 py-2"
+            hx-post="/api/ocr/capture"
+            hx-target="#ocr-result"
+            hx-swap="innerHTML"
+            hx-disabled-elt="#capture-btn"
+            hx-indicator="#capture-indicator"
+            hx-include="#ocr-capture-form"
+            onclick="document.getElementById('ocr-capture-lang').value = document.getElementById('ocr-lang').value">
+      Capture Screen Area
+    </button>
+    <span id="capture-indicator"
+          class="htmx-indicator text-xs text-gray-400 italic">
+      Move this window aside, then drag to select a region…
+    </span>
+
+    <!-- File upload: auto-submits on file selection via hx-trigger="change" on the input -->
+    <form id="ocr-file-form"
+          hx-encoding="multipart/form-data">
+      <input type="hidden" name="lang" id="ocr-file-lang" value="eng">
+      <label class="cursor-pointer text-sm border border-gray-600 hover:bg-gray-800 rounded px-4 py-2 text-gray-200 inline-block"
+             onclick="document.getElementById('ocr-file-lang').value = document.getElementById('ocr-lang').value">
+        Open Image File
+        <input type="file"
+               name="image"
+               accept="image/png,image/jpeg,image/bmp,image/gif,image/tiff"
+               class="hidden"
+               hx-post="/api/ocr/file"
+               hx-target="#ocr-result"
+               hx-swap="innerHTML"
+               hx-encoding="multipart/form-data"
+               hx-trigger="change"
+               hx-include="#ocr-file-form"
+               hx-indicator="#file-indicator">
+      </label>
+    </form>
+    <span id="file-indicator"
+          class="htmx-indicator text-xs text-gray-400 italic">Processing…</span>
+
+  </div>
+
+  <!-- Hidden form that carries the lang field for the capture button -->
+  <form id="ocr-capture-form" class="hidden">
+    <input type="hidden" name="lang" id="ocr-capture-lang" value="eng">
+  </form>
+
+  <!-- ── Result area ────────────────────────────────────────────────────── -->
+  <div id="ocr-result" class="flex-1 overflow-y-auto mt-2">
+    <!-- Populated by HTMX after capture or file upload -->
+  </div>
+
 </div>
