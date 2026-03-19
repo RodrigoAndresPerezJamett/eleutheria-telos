@@ -1,20 +1,26 @@
-<div id="tool-panel" class="flex flex-col h-full">
+<div class="panel" style="display:flex;flex-direction:column;height:100%;">
 
-  <div class="mb-4 shrink-0">
-    <h2 class="text-lg font-semibold text-gray-100 mb-3">Search</h2>
+  <div class="panel-header" style="flex-shrink:0;">
+    <div>
+      <h1 class="panel-title">Search</h1>
+      <p class="panel-subtitle">Search across notes and clipboard history.</p>
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px;flex-shrink:0;">
     <input type="text"
            name="q"
            autofocus
            placeholder="Search notes and clipboard…"
-           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500"
+           class="input"
            hx-get="/api/search"
            hx-trigger="input changed delay:250ms"
            hx-target="#search-results"
            hx-swap="innerHTML" />
   </div>
 
-  <div id="search-results" class="flex-1 overflow-y-auto">
-    <p class="text-gray-600 text-sm">Type to search across notes and clipboard.</p>
+  <div id="search-results" style="flex:1;overflow-y:auto;">
+    <p style="font-size:13px;color:var(--text-muted);">Type to search across notes and clipboard.</p>
   </div>
 
 </div>

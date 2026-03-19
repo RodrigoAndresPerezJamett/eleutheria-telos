@@ -111,19 +111,12 @@ html.no-glass #sidebar-tablet {
   border-right: 1px solid var(--border);
 }
 
-/* Responsive sidebar visibility — owned by base.css, not Tailwind */
-#sidebar        { display: none; width: 200px; }
-#sidebar-tablet { display: none; width: 56px; align-items: center; }
-#bottom-nav     { display: flex; }
-
-@media (min-width: 640px) {
-  #sidebar-tablet { display: flex; }
-  #bottom-nav     { display: none; }
-}
-@media (min-width: 1024px) {
-  #sidebar        { display: flex; }
-  #sidebar-tablet { display: none; }
-}
+/* Sidebar visibility — always show full sidebar in desktop Tauri app.
+   Tablet/mobile breakpoints removed: responsive hiding doesn't apply to
+   a native desktop window where the user controls the window size. */
+#sidebar        { display: flex; width: 200px; }
+#sidebar-tablet { display: none; }
+#bottom-nav     { display: none; }
 
 .sidebar-logo {
   padding: 4px 16px 12px;

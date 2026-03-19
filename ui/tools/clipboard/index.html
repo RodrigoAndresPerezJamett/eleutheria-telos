@@ -1,9 +1,11 @@
-<div id="tool-panel" class="flex flex-col h-full">
+<div class="panel" style="display:flex;flex-direction:column;height:100%;">
 
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-4 shrink-0">
-    <h2 class="text-lg font-semibold text-gray-100">Clipboard History</h2>
-    <button class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-red-400 hover:text-red-300 transition-colors"
+  <div class="panel-header" style="flex-shrink:0;">
+    <div>
+      <h1 class="panel-title">Clipboard History</h1>
+      <p class="panel-subtitle">Everything you've copied, searchable and one-click to recopy.</p>
+    </div>
+    <button class="btn btn-danger btn-sm"
             hx-delete="/api/clipboard"
             hx-target="#clipboard-list"
             hx-swap="innerHTML"
@@ -13,11 +15,11 @@
   </div>
 
   <!-- Search -->
-  <div class="mb-4 shrink-0">
+  <div style="margin-bottom:16px;flex-shrink:0;">
     <input type="text"
            name="q"
            placeholder="Search clipboard…"
-           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500"
+           class="input"
            hx-get="/api/clipboard"
            hx-trigger="input changed delay:300ms"
            hx-target="#clipboard-list"
@@ -26,11 +28,11 @@
 
   <!-- List -->
   <div id="clipboard-list"
-       class="flex-1 overflow-y-auto"
+       style="flex:1;overflow-y:auto;"
        hx-get="/api/clipboard"
        hx-trigger="load, every 3s"
        hx-swap="innerHTML">
-    <p class="text-gray-500 text-sm">Loading…</p>
+    <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
   </div>
 
 </div>

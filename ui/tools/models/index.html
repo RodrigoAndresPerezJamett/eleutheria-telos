@@ -1,0 +1,18 @@
+<div class="panel" style="display:flex;flex-direction:column;height:100%;">
+
+  <div class="panel-header" style="flex-shrink:0;">
+    <div>
+      <h1 class="panel-title">Models</h1>
+      <p class="panel-subtitle">Download offline AI models used by Voice and Translate tools.</p>
+    </div>
+  </div>
+
+  <div id="models-list"
+       style="flex:1;overflow-y:auto;"
+       hx-get="/api/models"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
+  </div>
+
+</div>
