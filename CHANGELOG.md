@@ -111,6 +111,19 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 3 bugfix: Video Processor encoder
+
+### Fixed
+- **compress + resize failing** — `h264_vaapi` unavailable at runtime: AMD GPU open-source mesa driver has no H.264 VAAPI entrypoints (`vainfo` empty; error: `No usable encoding entrypoint found for profile VAProfileH264High`).
+- Switched both operations to `libx264 -crf {value} -preset fast` (confirmed available via `ffmpeg -encoders` on Nobara's build). CRF range 18–40 matches the existing QP slider — no UX change needed beyond relabeling.
+- UI label updated: "QP" → "CRF", description updated from h264_vaapi to libx264.
+- D-032 added to DECISIONS.md documenting the switch and the vaapi failure root cause.
+
+### CI status
+- `cargo fmt --check` ✓ · `cargo clippy -- -D warnings` ✓ · `cargo test` ✓ (19 tests)
+
+---
+
 ## [2026-03-19] — Phase 3 Step 4: Video Processor (Phase 3 complete)
 
 ### Completed
