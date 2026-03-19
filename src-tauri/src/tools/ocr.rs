@@ -47,7 +47,7 @@ async fn run_tesseract(image_path: &str, lang: &str, state: &Arc<AppState>) -> R
             let text = raw.trim();
             if text.is_empty() {
                 return Html(
-                    r#"<p class="text-gray-400 text-sm mt-4">No text found in image.</p>"#
+                    r#"<p style="font-size:13px;color:var(--text-muted);margin-top:16px;">No text found in image.</p>"#
                         .to_string(),
                 )
                 .into_response();
@@ -61,12 +61,12 @@ async fn run_tesseract(image_path: &str, lang: &str, state: &Arc<AppState>) -> R
         Ok(o) => {
             let err = html_escape(String::from_utf8_lossy(&o.stderr).trim());
             Html(format!(
-                r##"<p class="text-red-400 text-sm mt-4">Tesseract error: {err}</p>"##
+                r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Tesseract error: {err}</p>"#
             ))
             .into_response()
         }
         Err(e) => Html(format!(
-            r##"<p class="text-red-400 text-sm mt-4">Could not run tesseract: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Could not run tesseract: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),
@@ -82,42 +82,41 @@ fn render_result(text: &str) -> Html<String> {
     let ocr_feedback = "#ocr-feedback";
     let ocr_translate_result = "#ocr-translate-result";
     Html(format!(
-        r##"<div class="mt-4 flex flex-col gap-3">
-  <pre class="text-sm text-gray-200 bg-gray-800 rounded-lg p-4 whitespace-pre-wrap break-words max-h-64 overflow-y-auto font-sans leading-relaxed">{escaped}</pre>
+        r##"<div style="margin-top:16px;display:flex;flex-direction:column;gap:12px;">
+  <pre style="font-size:13px;color:var(--text-primary);background:var(--bg-elevated);border-radius:var(--radius-md);padding:16px;white-space:pre-wrap;word-break:break-words;max-height:256px;overflow-y:auto;font-family:inherit;line-height:1.6;">{escaped}</pre>
   <form id="ocr-text-form">
-    <textarea name="text" class="hidden">{escaped}</textarea>
+    <textarea name="text" style="display:none;">{escaped}</textarea>
   </form>
-  <div class="flex gap-2 flex-wrap">
-    <button class="text-xs text-blue-400 hover:text-blue-300 border border-blue-700 rounded px-3 py-1.5"
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary btn-sm"
             hx-post="/api/ocr/copy"
             hx-include="{ocr_text_form}"
             hx-target="{ocr_feedback}"
             hx-swap="innerHTML">Copy to Clipboard</button>
-    <button class="text-xs text-green-400 hover:text-green-300 border border-green-700 rounded px-3 py-1.5"
+    <button class="btn btn-secondary btn-sm"
             hx-post="/api/ocr/save-note"
             hx-include="{ocr_text_form}"
             hx-target="{ocr_feedback}"
             hx-swap="innerHTML">Save as Note</button>
   </div>
-  <div id="ocr-feedback" class="text-xs"></div>
+  <div id="ocr-feedback" style="font-size:12px;"></div>
 
   <!-- ── OCR → Translate pipeline ───────────────────────────────────────── -->
-  <div class="border-t border-gray-700 pt-3" x-data="{{ showTranslate: false }}">
-    <button class="text-xs text-purple-400 hover:text-purple-300 border border-purple-800 rounded px-3 py-1.5"
+  <div style="border-top:1px solid var(--border);padding-top:12px;" x-data="{{ showTranslate: false }}">
+    <button class="btn btn-ghost btn-sm"
             @click="showTranslate = !showTranslate">
       Translate…
     </button>
-    <div x-show="showTranslate" x-cloak class="mt-3 flex flex-col gap-2">
+    <div x-show="showTranslate" x-cloak style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
       <form hx-post="/api/translate/text"
             hx-target="{ocr_translate_result}"
             hx-swap="innerHTML"
             hx-indicator="#ocr-translate-spinner"
-            class="flex items-end gap-2 flex-wrap">
-        <textarea name="text" class="hidden">{escaped}</textarea>
+            style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+        <textarea name="text" style="display:none;">{escaped}</textarea>
         <div>
-          <label class="block text-xs text-gray-400 mb-1">From</label>
-          <select name="from_lang"
-                  class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200">
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;">From</label>
+          <select name="from_lang" class="input" style="font-size:12px;padding:4px 8px;">
             <option value="en">English</option>
             <option value="es">Spanish</option>
             <option value="fr">French</option>
@@ -125,11 +124,10 @@ fn render_result(text: &str) -> Html<String> {
             <option value="pt">Portuguese</option>
           </select>
         </div>
-        <span class="text-gray-500 pb-1">→</span>
+        <span style="color:var(--text-muted);padding-bottom:4px;">→</span>
         <div>
-          <label class="block text-xs text-gray-400 mb-1">To</label>
-          <select name="to_lang"
-                  class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200">
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;">To</label>
+          <select name="to_lang" class="input" style="font-size:12px;padding:4px 8px;">
             <option value="es">Spanish</option>
             <option value="en">English</option>
             <option value="fr">French</option>
@@ -137,13 +135,10 @@ fn render_result(text: &str) -> Html<String> {
             <option value="pt">Portuguese</option>
           </select>
         </div>
-        <button type="submit"
-                class="text-xs bg-purple-700 hover:bg-purple-600 text-white rounded px-3 py-1.5">
-          Translate
-        </button>
-        <span id="ocr-translate-spinner" class="htmx-indicator text-xs text-gray-400 italic">Translating…</span>
+        <button type="submit" class="btn btn-primary btn-sm">Translate</button>
+        <span id="ocr-translate-spinner" class="htmx-indicator" style="font-size:12px;color:var(--text-muted);font-style:italic;">Translating…</span>
       </form>
-      <div id="ocr-translate-result" class="text-sm"></div>
+      <div id="ocr-translate-result" style="font-size:13px;"></div>
     </div>
   </div>
 </div>"##,
@@ -187,7 +182,7 @@ pub async fn capture_handler(
         Ok(s) => s,
         Err(e) => {
             return Html(format!(
-                r##"<p class="text-red-400 text-sm mt-4">slurp not found: {}</p>"##,
+                r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">slurp not found: {}</p>"#,
                 html_escape(&e.to_string())
             ))
             .into_response();
@@ -196,13 +191,13 @@ pub async fn capture_handler(
 
     if !slurp.status.success() {
         // User pressed Escape to cancel
-        return Html(r#"<p class="text-gray-500 text-sm mt-4">Capture cancelled.</p>"#.to_string())
+        return Html(r#"<p style="font-size:13px;color:var(--text-muted);margin-top:16px;">Capture cancelled.</p>"#.to_string())
             .into_response();
     }
 
     let geometry = String::from_utf8_lossy(&slurp.stdout).trim().to_string();
     if geometry.is_empty() {
-        return Html(r#"<p class="text-gray-500 text-sm mt-4">Capture cancelled.</p>"#.to_string())
+        return Html(r#"<p style="font-size:13px;color:var(--text-muted);margin-top:16px;">Capture cancelled.</p>"#.to_string())
             .into_response();
     }
 
@@ -219,13 +214,13 @@ pub async fn capture_handler(
         Ok(g) => {
             let err = html_escape(String::from_utf8_lossy(&g.stderr).trim());
             return Html(format!(
-                r##"<p class="text-red-400 text-sm mt-4">grim error: {err}</p>"##
+                r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">grim error: {err}</p>"#
             ))
             .into_response();
         }
         Err(e) => {
             return Html(format!(
-                r##"<p class="text-red-400 text-sm mt-4">grim not found: {}</p>"##,
+                r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">grim not found: {}</p>"#,
                 html_escape(&e.to_string())
             ))
             .into_response();
@@ -256,7 +251,7 @@ pub async fn file_handler(
                     Ok(b) => image_bytes = Some(b.to_vec()),
                     Err(e) => {
                         return Html(format!(
-                            r##"<p class="text-red-400 text-sm mt-4">Upload error: {}</p>"##,
+                            r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Upload error: {}</p>"#,
                             html_escape(&e.to_string())
                         ))
                         .into_response();
@@ -276,7 +271,7 @@ pub async fn file_handler(
         Some(b) if !b.is_empty() => b,
         _ => {
             return Html(
-                r#"<p class="text-gray-400 text-sm mt-4">No image received.</p>"#.to_string(),
+                r#"<p style="font-size:13px;color:var(--text-muted);margin-top:16px;">No image received.</p>"#.to_string(),
             )
             .into_response();
         }
@@ -296,7 +291,7 @@ pub async fn file_handler(
     let tmp_path = format!("{UPLOAD_TMP_BASE}.{ext}");
     if let Err(e) = tokio::fs::write(&tmp_path, &bytes).await {
         return Html(format!(
-            r##"<p class="text-red-400 text-sm mt-4">Write error: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Write error: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response();
@@ -312,7 +307,7 @@ pub async fn copy_handler(
     Form(body): Form<TextBody>,
 ) -> impl IntoResponse {
     if body.text.is_empty() {
-        return Html(r#"<span class="text-gray-400">Nothing to copy.</span>"#.to_string())
+        return Html(r#"<span style="color:var(--text-muted);">Nothing to copy.</span>"#.to_string())
             .into_response();
     }
 
@@ -325,7 +320,7 @@ pub async fn copy_handler(
         }
     });
 
-    Html(r#"<span class="text-green-400">Copied to clipboard!</span>"#.to_string()).into_response()
+    Html(r#"<span style="color:var(--success);">Copied to clipboard!</span>"#.to_string()).into_response()
 }
 
 /// POST /api/ocr/save-note  (form-encoded, field: text)
@@ -335,7 +330,7 @@ pub async fn save_note_handler(
     Form(body): Form<TextBody>,
 ) -> impl IntoResponse {
     if body.text.is_empty() {
-        return Html(r#"<span class="text-gray-400">Nothing to save.</span>"#.to_string())
+        return Html(r#"<span style="color:var(--text-muted);">Nothing to save.</span>"#.to_string())
             .into_response();
     }
 
@@ -365,10 +360,10 @@ pub async fn save_note_handler(
     .await;
 
     match result {
-        Ok(_) => Html(r#"<span class="text-green-400">Saved to Notes!</span>"#.to_string())
+        Ok(_) => Html(r#"<span style="color:var(--success);">Saved to Notes!</span>"#.to_string())
             .into_response(),
         Err(e) => Html(format!(
-            r##"<span class="text-red-400">DB error: {}</span>"##,
+            r#"<span style="color:var(--destructive);">DB error: {}</span>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),

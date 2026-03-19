@@ -37,14 +37,14 @@ fn render_results(
     clips: &[(String, String)], // (id, content_preview)
 ) -> String {
     if notes.is_empty() && clips.is_empty() {
-        return r#"<p class="text-gray-500 text-sm px-3 py-2">No results.</p>"#.to_string();
+        return r#"<p style="font-size:13px;color:var(--text-muted);padding:8px 12px;">No results.</p>"#.to_string();
     }
 
     let mut out = String::new();
 
     if !notes.is_empty() {
         out.push_str(
-            "<p class=\"text-xs text-gray-500 uppercase tracking-wider px-3 pt-2 pb-1\">Notes</p>",
+            "<p style=\"font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:8px 12px 4px;\">Notes</p>",
         );
         for (_id, title) in notes {
             let display = if title.is_empty() {
@@ -54,19 +54,21 @@ fn render_results(
             };
             // r##"..."## used because the HTML contains "# sequences (hx-target="#tool-panel")
             out.push_str(&format!(
-                r##"<button class="w-full text-left px-3 py-2 hover:bg-gray-700 rounded text-sm text-gray-100 flex items-center gap-2"
+                r##"<button style="width:100%;text-align:left;padding:6px 12px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;"
+                          onmouseenter="this.style.background='var(--bg-elevated)'"
+                          onmouseleave="this.style.background='none'"
                           hx-get="/tools/notes"
                           hx-target="#tool-panel"
                           hx-swap="innerHTML"
                           @click="paletteOpen = false"
-                          >📝 {title}</button>"##,
+                          >{title}</button>"##,
                 title = html_escape(display),
             ));
         }
     }
 
     if !clips.is_empty() {
-        out.push_str("<p class=\"text-xs text-gray-500 uppercase tracking-wider px-3 pt-2 pb-1\">Clipboard</p>");
+        out.push_str("<p style=\"font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:8px 12px 4px;\">Clipboard</p>");
         for (id, preview) in clips {
             let truncated = if preview.len() > 80 {
                 format!("{}…", &preview[..80])
@@ -74,10 +76,12 @@ fn render_results(
                 preview.clone()
             };
             out.push_str(&format!(
-                "<button class=\"w-full text-left px-3 py-2 hover:bg-gray-700 rounded text-sm text-gray-300 flex items-center gap-2\" \
+                "<button style=\"width:100%;text-align:left;padding:6px 12px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;\" \
+                          onmouseenter=\"this.style.background='var(--bg-elevated)'\" \
+                          onmouseleave=\"this.style.background='none'\" \
                           hx-post=\"/api/clipboard/{id}/recopy\" \
                           @click=\"paletteOpen = false\" \
-                          >📋 {preview}</button>",
+                          >{preview}</button>",
                 id = id,
                 preview = html_escape(&truncated),
             ));

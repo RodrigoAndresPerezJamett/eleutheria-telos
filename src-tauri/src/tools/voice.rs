@@ -59,7 +59,7 @@ async fn run_transcription(audio_path: &str, lang: &str, state: &Arc<AppState>) 
             let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
             if text.is_empty() {
                 return Html(
-                    r#"<p class="text-gray-400 text-sm mt-4">No speech detected in audio.</p>"#
+                    r#"<p style="font-size:13px;color:var(--text-muted);margin-top:16px;">No speech detected in audio.</p>"#
                         .to_string(),
                 )
                 .into_response();
@@ -73,12 +73,12 @@ async fn run_transcription(audio_path: &str, lang: &str, state: &Arc<AppState>) 
         Ok(o) => {
             let err = html_escape(String::from_utf8_lossy(&o.stderr).trim());
             Html(format!(
-                r##"<p class="text-red-400 text-sm mt-4">Transcription error: {err}</p>"##
+                r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Transcription error: {err}</p>"#
             ))
             .into_response()
         }
         Err(e) => Html(format!(
-            r##"<p class="text-red-400 text-sm mt-4">Could not run python3: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Could not run python3: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),
@@ -92,24 +92,24 @@ fn render_result(text: &str) -> Html<String> {
     let include_target = "#voice-text-form";
     let feedback_target = "#voice-feedback";
     Html(format!(
-        r##"<div class="mt-4 flex flex-col gap-3">
-  <pre class="text-sm text-gray-200 bg-gray-800 rounded-lg p-4 whitespace-pre-wrap break-words max-h-64 overflow-y-auto font-sans leading-relaxed">{escaped}</pre>
+        r##"<div style="margin-top:16px;display:flex;flex-direction:column;gap:12px;">
+  <pre style="font-size:13px;color:var(--text-primary);background:var(--bg-elevated);border-radius:var(--radius-md);padding:16px;white-space:pre-wrap;word-break:break-words;max-height:256px;overflow-y:auto;font-family:inherit;line-height:1.6;">{escaped}</pre>
   <form id="voice-text-form">
-    <textarea name="text" class="hidden">{escaped}</textarea>
+    <textarea name="text" style="display:none;">{escaped}</textarea>
   </form>
-  <div class="flex gap-2">
-    <button class="text-xs text-blue-400 hover:text-blue-300 border border-blue-700 rounded px-3 py-1.5"
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-primary btn-sm"
             hx-post="/api/voice/copy"
             hx-include="{include_target}"
             hx-target="{feedback_target}"
             hx-swap="innerHTML">Copy to Clipboard</button>
-    <button class="text-xs text-green-400 hover:text-green-300 border border-green-700 rounded px-3 py-1.5"
+    <button class="btn btn-secondary btn-sm"
             hx-post="/api/voice/save-note"
             hx-include="{include_target}"
             hx-target="{feedback_target}"
             hx-swap="innerHTML">Save as Note</button>
   </div>
-  <div id="voice-feedback" class="text-xs"></div>
+  <div id="voice-feedback" style="font-size:12px;"></div>
 </div>"##
     ))
 }
@@ -138,9 +138,9 @@ fn default_lang() -> String {
 pub async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let recording = state.voice_recording.lock().await;
     if recording.is_some() {
-        Html(r#"<span class="text-red-400 font-medium">● Recording</span>"#.to_string())
+        Html(r#"<span style="color:var(--destructive);font-weight:500;">● Recording</span>"#.to_string())
     } else {
-        Html(r#"<span class="text-gray-500">Idle</span>"#.to_string())
+        Html(r#"<span style="color:var(--text-muted);">Idle</span>"#.to_string())
     }
 }
 
@@ -150,7 +150,7 @@ pub async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResp
 pub async fn record_start_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let mut recording = state.voice_recording.lock().await;
     if recording.is_some() {
-        return Html(r#"<p class="text-yellow-400 text-sm">Already recording.</p>"#.to_string())
+        return Html(r#"<p style="font-size:13px;color:var(--text-muted);">Already recording.</p>"#.to_string())
             .into_response();
     }
 
@@ -178,13 +178,13 @@ pub async fn record_start_handler(State(state): State<Arc<AppState>>) -> impl In
         Ok(c) => {
             *recording = Some(c);
             Html(
-                r#"<p class="text-red-400 text-sm font-medium animate-pulse">● Recording… press Stop when done.</p>"#
+                r#"<p style="font-size:13px;color:var(--destructive);font-weight:500;">● Recording… press Stop when done.</p>"#
                     .to_string(),
             )
             .into_response()
         }
         Err(e) => Html(format!(
-            r##"<p class="text-red-400 text-sm">Failed to start ffmpeg: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);">Failed to start ffmpeg: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),
@@ -203,7 +203,7 @@ pub async fn record_stop_handler(
         Some(c) => c,
         None => {
             return Html(
-                r#"<p class="text-gray-400 text-sm">No recording in progress.</p>"#.to_string(),
+                r#"<p style="font-size:13px;color:var(--text-muted);">No recording in progress.</p>"#.to_string(),
             )
             .into_response();
         }
@@ -224,7 +224,7 @@ pub async fn record_stop_handler(
         Ok(m) if m.len() > 0 => {}
         _ => {
             return Html(
-                r#"<p class="text-gray-400 text-sm">Recording was empty or was not saved.</p>"#
+                r#"<p style="font-size:13px;color:var(--text-muted);">Recording was empty or was not saved.</p>"#
                     .to_string(),
             )
             .into_response();
@@ -271,7 +271,7 @@ pub async fn file_handler(
                     Ok(b) => audio_bytes = Some(b.to_vec()),
                     Err(e) => {
                         return Html(format!(
-                            r##"<p class="text-red-400 text-sm mt-4">Upload error: {}</p>"##,
+                            r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Upload error: {}</p>"#,
                             html_escape(&e.to_string())
                         ))
                         .into_response();
@@ -291,7 +291,7 @@ pub async fn file_handler(
         Some(b) if !b.is_empty() => b,
         _ => {
             return Html(
-                r#"<p class="text-gray-400 text-sm mt-4">No audio file received.</p>"#.to_string(),
+                r#"<p style="font-size:13px;color:var(--text-muted);margin-top:16px;">No audio file received.</p>"#.to_string(),
             )
             .into_response();
         }
@@ -300,7 +300,7 @@ pub async fn file_handler(
     let tmp_path = format!("{UPLOAD_TMP_BASE}.{ext}");
     if let Err(e) = tokio::fs::write(&tmp_path, &bytes).await {
         return Html(format!(
-            r##"<p class="text-red-400 text-sm mt-4">Write error: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);margin-top:16px;">Write error: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response();
@@ -317,7 +317,7 @@ pub async fn copy_handler(
     Form(body): Form<TextBody>,
 ) -> impl IntoResponse {
     if body.text.is_empty() {
-        return Html(r#"<span class="text-gray-400">Nothing to copy.</span>"#.to_string())
+        return Html(r#"<span style="color:var(--text-muted);">Nothing to copy.</span>"#.to_string())
             .into_response();
     }
 
@@ -328,7 +328,7 @@ pub async fn copy_handler(
         }
     });
 
-    Html(r#"<span class="text-green-400">Copied to clipboard!</span>"#.to_string()).into_response()
+    Html(r#"<span style="color:var(--success);">Copied to clipboard!</span>"#.to_string()).into_response()
 }
 
 /// POST /api/voice/save-note  (form-encoded, field: text)
@@ -338,7 +338,7 @@ pub async fn save_note_handler(
     Form(body): Form<TextBody>,
 ) -> impl IntoResponse {
     if body.text.is_empty() {
-        return Html(r#"<span class="text-gray-400">Nothing to save.</span>"#.to_string())
+        return Html(r#"<span style="color:var(--text-muted);">Nothing to save.</span>"#.to_string())
             .into_response();
     }
 
@@ -367,10 +367,10 @@ pub async fn save_note_handler(
     .await;
 
     match result {
-        Ok(_) => Html(r#"<span class="text-green-400">Saved to Notes!</span>"#.to_string())
+        Ok(_) => Html(r#"<span style="color:var(--success);">Saved to Notes!</span>"#.to_string())
             .into_response(),
         Err(e) => Html(format!(
-            r##"<span class="text-red-400">DB error: {}</span>"##,
+            r#"<span style="color:var(--destructive);">DB error: {}</span>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),

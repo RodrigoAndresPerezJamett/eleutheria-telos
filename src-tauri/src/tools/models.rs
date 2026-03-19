@@ -110,33 +110,32 @@ fn render_card(row: &ModelRow, ds: Option<&DownloadState>) -> String {
     match ds {
         Some(state) if state.status == "downloading" => {
             // Card with progress bar — polls itself every 2s.
-            // Use `{progress}` named capture instead of `{}` to avoid mixing positional+named.
             let progress = state.progress;
             format!(
-                r#"<div id="model-card-{id}" class="flex items-center justify-between bg-gray-800 rounded-lg p-3 mb-2"
+                r#"<div id="model-card-{id}" class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"
                         hx-get="/api/models/{id}/progress"
                         hx-trigger="every 2s"
                         hx-swap="outerHTML">
-  <div class="flex-1 min-w-0 mr-3">
-    <p class="text-sm font-medium text-gray-100 truncate">{name}</p>
-    <div class="mt-1.5 w-full bg-gray-700 rounded-full h-1.5">
-      <div class="bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: {progress}%"></div>
+  <div style="flex:1;min-width:0;margin-right:12px;">
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
+    <div style="margin-top:6px;width:100%;background:var(--border);border-radius:999px;height:4px;">
+      <div style="background:var(--accent);height:4px;border-radius:999px;transition:width 300ms;width:{progress}%;"></div>
     </div>
-    <p class="text-xs text-gray-500 mt-1">Downloading… {progress}%</p>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Downloading… {progress}%</p>
   </div>
-  <button disabled class="text-xs text-gray-600 cursor-not-allowed">Cancel</button>
+  <button disabled class="btn btn-ghost btn-sm btn-disabled">Cancel</button>
 </div>"#
             )
         }
         Some(state) if state.status == "error" => {
             let err_html = html_escape(state.error.as_deref().unwrap_or("Unknown error"));
             format!(
-                r#"<div id="model-card-{id}" class="flex items-center justify-between bg-gray-800 rounded-lg p-3 mb-2">
+                r#"<div id="model-card-{id}" class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
   <div>
-    <p class="text-sm font-medium text-gray-100">{name}</p>
-    <p class="text-xs text-red-400 mt-1">{err_html}</p>
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);">{name}</p>
+    <p style="font-size:11px;color:var(--destructive);margin-top:4px;">{err_html}</p>
   </div>
-  <button class="text-xs text-blue-400 hover:text-blue-300 ml-3"
+  <button class="btn btn-secondary btn-sm" style="margin-left:12px;"
           hx-post="/api/models/{id}/download"
           hx-target="{target}"
           hx-swap="outerHTML">Retry</button>
@@ -145,12 +144,12 @@ fn render_card(row: &ModelRow, ds: Option<&DownloadState>) -> String {
         }
         _ if row.downloaded == 1 => {
             format!(
-                r#"<div id="model-card-{id}" class="flex items-center justify-between bg-gray-800 rounded-lg p-3 mb-2">
+                r#"<div id="model-card-{id}" class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
   <div>
-    <p class="text-sm font-medium text-gray-100">{name}</p>
-    <p class="text-xs text-green-400 mt-1">Downloaded</p>
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);">{name}</p>
+    <p style="font-size:11px;color:var(--success);margin-top:4px;">Downloaded</p>
   </div>
-  <button class="text-xs text-red-400 hover:text-red-300"
+  <button class="btn btn-danger btn-sm"
           hx-delete="/api/models/{id}"
           hx-target="{target}"
           hx-swap="outerHTML"
@@ -161,12 +160,12 @@ fn render_card(row: &ModelRow, ds: Option<&DownloadState>) -> String {
         _ => {
             // Not downloaded, not in progress
             format!(
-                r#"<div id="model-card-{id}" class="flex items-center justify-between bg-gray-800 rounded-lg p-3 mb-2">
+                r#"<div id="model-card-{id}" class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
   <div>
-    <p class="text-sm font-medium text-gray-100">{name}</p>
-    <p class="text-xs text-gray-500 mt-1">{size_str}</p>
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);">{name}</p>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">{size_str}</p>
   </div>
-  <button class="text-xs text-blue-400 hover:text-blue-300 border border-blue-700 rounded px-2 py-1"
+  <button class="btn btn-primary btn-sm"
           hx-post="/api/models/{id}/download"
           hx-target="{target}"
           hx-swap="outerHTML">Download</button>
@@ -204,21 +203,21 @@ pub async fn list_handler(State(state): State<Arc<AppState>>) -> impl IntoRespon
 
     if voice_html.is_empty() {
         voice_html =
-            r#"<p class="text-sm text-gray-500">No voice models in catalog.</p>"#.to_string();
+            r#"<p style="font-size:13px;color:var(--text-muted);">No voice models in catalog.</p>"#.to_string();
     }
     if translate_html.is_empty() {
         translate_html =
-            r#"<p class="text-sm text-gray-500">No translation models in catalog.</p>"#.to_string();
+            r#"<p style="font-size:13px;color:var(--text-muted);">No translation models in catalog.</p>"#.to_string();
     }
 
     Html(format!(
         r#"<div id="models-list">
-  <section class="mb-6">
-    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Voice (Whisper)</h3>
+  <section style="margin-bottom:24px;">
+    <h3 style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Voice (Whisper)</h3>
     {voice_html}
   </section>
   <section>
-    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Translation (Argos)</h3>
+    <h3 style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Translation (Argos)</h3>
     {translate_html}
   </section>
 </div>"#
@@ -241,7 +240,7 @@ pub async fn progress_handler(
         return (
             StatusCode::NOT_FOUND,
             Html(format!(
-                r#"<div id="model-card-{model_id}"><p class="text-red-400 text-sm">Model not found.</p></div>"#
+                r#"<div id="model-card-{model_id}"><p style="font-size:13px;color:var(--destructive);">Model not found.</p></div>"#
             )),
         )
             .into_response();

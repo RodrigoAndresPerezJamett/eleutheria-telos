@@ -64,7 +64,7 @@ pub async fn export_handler(
     let b64 = match body.data.split_once(',') {
         Some((_, b)) => b,
         None => {
-            return Html(r#"<p class="text-red-400 text-sm">Invalid image data.</p>"#.to_string())
+            return Html(r#"<p style="font-size:13px;color:var(--destructive);">Invalid image data.</p>"#.to_string())
                 .into_response();
         }
     };
@@ -74,7 +74,7 @@ pub async fn export_handler(
         Ok(b) => b,
         Err(e) => {
             return Html(format!(
-                r##"<p class="text-red-400 text-sm">Decode error: {}</p>"##,
+                r#"<p style="font-size:13px;color:var(--destructive);">Decode error: {}</p>"#,
                 html_escape(&e.to_string())
             ))
             .into_response();
@@ -85,7 +85,7 @@ pub async fn export_handler(
         Ok(p) => p,
         Err(e) => {
             return Html(format!(
-                r##"<p class="text-red-400 text-sm">Could not create output directory: {}</p>"##,
+                r#"<p style="font-size:13px;color:var(--destructive);">Could not create output directory: {}</p>"#,
                 html_escape(&e.to_string())
             ))
             .into_response();
@@ -94,7 +94,7 @@ pub async fn export_handler(
 
     if let Err(e) = tokio::fs::write(&path, &bytes).await {
         return Html(format!(
-            r##"<p class="text-red-400 text-sm">Write error: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);">Write error: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response();
@@ -102,10 +102,10 @@ pub async fn export_handler(
 
     let escaped = html_escape(&path);
     Html(format!(
-        r##"<div class="flex flex-col gap-2">
-  <span class="text-green-400 text-sm font-medium">✓ Exported</span>
-  <code class="text-xs text-gray-300 bg-gray-800 rounded px-3 py-2 break-all select-all">{escaped}</code>
-  <p class="text-xs text-gray-500">Saved to ~/Pictures/Eleutheria/</p>
+        r##"<div style="display:flex;flex-direction:column;gap:8px;">
+  <span style="font-size:13px;color:var(--success);font-weight:500;">✓ Exported</span>
+  <code style="font-size:11px;color:var(--text-secondary);background:var(--bg-elevated);border-radius:var(--radius-sm);padding:8px 12px;word-break:break-all;user-select:all;">{escaped}</code>
+  <p style="font-size:11px;color:var(--text-muted);">Saved to ~/Pictures/Eleutheria/</p>
 </div>"##
     ))
     .into_response()

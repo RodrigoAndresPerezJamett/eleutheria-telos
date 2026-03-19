@@ -78,7 +78,7 @@ pub async fn langs_handler(State(state): State<Arc<AppState>>) -> impl IntoRespo
         Ok(r) => r,
         Err(e) => {
             return Html(format!(
-                r##"<p class="text-red-400 text-sm">DB error: {}</p>"##,
+                r#"<p style="font-size:13px;color:var(--destructive);">DB error: {}</p>"#,
                 html_escape(&e.to_string())
             ))
             .into_response();
@@ -151,23 +151,20 @@ pub async fn langs_handler(State(state): State<Arc<AppState>>) -> impl IntoRespo
         hx-target="#translate-result"
         hx-swap="innerHTML"
         hx-indicator="#translate-spinner"
-        class="flex flex-col gap-4">
+        style="display:flex;flex-direction:column;gap:16px;">
 
     <!-- Language selectors -->
-    <div class="flex items-center gap-3">
-      <div class="flex-1">
-        <label class="block text-xs text-gray-400 mb-1">From</label>
-        <select name="from_lang"
-                x-model="fromLang"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="flex:1;">
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;">From</label>
+        <select name="from_lang" x-model="fromLang" class="input">
           {from_opts}
         </select>
       </div>
-      <span class="text-gray-500 mt-5">→</span>
-      <div class="flex-1">
-        <label class="block text-xs text-gray-400 mb-1">To</label>
-        <select name="to_lang"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+      <span style="color:var(--text-muted);margin-top:16px;">→</span>
+      <div style="flex:1;">
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;">To</label>
+        <select name="to_lang" class="input">
           <template x-for="code in toLangs" :key="code">
             <option :value="code" x-text="code === 'en' ? 'English' : code === 'es' ? 'Spanish' : code === 'fr' ? 'French' : code === 'de' ? 'German' : code === 'pt' ? 'Portuguese' : code"></option>
           </template>
@@ -177,25 +174,23 @@ pub async fn langs_handler(State(state): State<Arc<AppState>>) -> impl IntoRespo
 
     <!-- Input textarea -->
     <div>
-      <label class="block text-xs text-gray-400 mb-1">Text to translate</label>
+      <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;">Text to translate</label>
       <textarea name="text"
                 rows="6"
                 placeholder="Enter text to translate…"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-y"></textarea>
+                class="input"
+                style="resize:vertical;"></textarea>
     </div>
 
     <!-- Submit -->
-    <div class="flex items-center gap-3">
-      <button type="submit"
-              class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-5 py-2 transition-colors">
-        Translate
-      </button>
-      <span id="translate-spinner" class="htmx-indicator text-xs text-gray-400">Translating…</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button type="submit" class="btn btn-primary">Translate</button>
+      <span id="translate-spinner" class="htmx-indicator" style="font-size:12px;color:var(--text-muted);">Translating…</span>
     </div>
   </form>
 
   <!-- Result -->
-  <div id="translate-result" class="mt-4"></div>
+  <div id="translate-result" style="margin-top:16px;"></div>
 </div>"##,
         pairs_json = pairs_json,
         default_from = default_from,
@@ -213,7 +208,7 @@ pub async fn translate_handler(
 ) -> impl IntoResponse {
     if params.text.trim().is_empty() {
         return Html(
-            r#"<p class="text-gray-400 text-sm">Enter some text to translate.</p>"#.to_string(),
+            r#"<p style="font-size:13px;color:var(--text-muted);">Enter some text to translate.</p>"#.to_string(),
         )
         .into_response();
     }
@@ -239,7 +234,7 @@ pub async fn translate_handler(
             let translated = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if translated.is_empty() {
                 Html(
-                    r#"<p class="text-gray-400 text-sm">Translation returned empty.</p>"#
+                    r#"<p style="font-size:13px;color:var(--text-muted);">Translation returned empty.</p>"#
                         .to_string(),
                 )
                 .into_response()
@@ -250,17 +245,17 @@ pub async fn translate_handler(
         Ok(Ok(output)) => {
             let err = html_escape(String::from_utf8_lossy(&output.stderr).trim());
             Html(format!(
-                r##"<p class="text-red-400 text-sm">Translation error: {err}</p>"##
+                r#"<p style="font-size:13px;color:var(--destructive);">Translation error: {err}</p>"#
             ))
             .into_response()
         }
         Ok(Err(e)) => Html(format!(
-            r##"<p class="text-red-400 text-sm">Could not run python3: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);">Could not run python3: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),
         Err(e) => Html(format!(
-            r##"<p class="text-red-400 text-sm">Task error: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);">Task error: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),
@@ -274,19 +269,19 @@ fn render_result(text: &str) -> Html<String> {
     let include_target = "#translate-text-form";
     let feedback_target = "#translate-feedback";
     Html(format!(
-        r##"<div class="flex flex-col gap-3">
-  <pre class="text-sm text-gray-200 bg-gray-800 rounded-lg p-4 whitespace-pre-wrap break-words max-h-64 overflow-y-auto font-sans leading-relaxed">{escaped}</pre>
+        r##"<div style="display:flex;flex-direction:column;gap:12px;">
+  <pre style="font-size:13px;color:var(--text-primary);background:var(--bg-elevated);border-radius:var(--radius-md);padding:16px;white-space:pre-wrap;word-break:break-words;max-height:256px;overflow-y:auto;font-family:inherit;line-height:1.6;">{escaped}</pre>
   <form id="translate-text-form">
-    <textarea name="text" class="hidden">{escaped}</textarea>
+    <textarea name="text" style="display:none;">{escaped}</textarea>
   </form>
-  <div class="flex gap-2">
-    <button class="text-xs text-blue-400 hover:text-blue-300 border border-blue-700 rounded px-3 py-1.5"
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-primary btn-sm"
             hx-post="/api/translate/copy"
             hx-include="{include_target}"
             hx-target="{feedback_target}"
             hx-swap="innerHTML">Copy to Clipboard</button>
   </div>
-  <div id="translate-feedback" class="text-xs"></div>
+  <div id="translate-feedback" style="font-size:12px;"></div>
 </div>"##
     ))
 }
@@ -298,7 +293,7 @@ pub async fn copy_handler(
     Form(body): Form<TextBody>,
 ) -> impl IntoResponse {
     if body.text.is_empty() {
-        return Html(r#"<span class="text-gray-400">Nothing to copy.</span>"#.to_string())
+        return Html(r#"<span style="color:var(--text-muted);">Nothing to copy.</span>"#.to_string())
             .into_response();
     }
 
@@ -309,7 +304,7 @@ pub async fn copy_handler(
         }
     });
 
-    Html(r#"<span class="text-green-400">Copied to clipboard!</span>"#.to_string()).into_response()
+    Html(r#"<span style="color:var(--success);">Copied to clipboard!</span>"#.to_string()).into_response()
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────

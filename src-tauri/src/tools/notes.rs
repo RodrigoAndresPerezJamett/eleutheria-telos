@@ -32,23 +32,27 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
     let ts = format_timestamp(updated_at);
     // r##"..."## used because the HTML contains "# sequences (HTMX targets like "#note-id")
     format!(
-        r##"<div id="note-{id}" class="group bg-gray-800 rounded-lg p-3 mb-2 cursor-pointer hover:bg-gray-750"
+        r##"<div id="note-{id}" style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:6px;cursor:pointer;"
+             onmouseenter="this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=1)"
+             onmouseleave="this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=0)"
              hx-get="/api/notes/{id}"
              hx-target="#note-editor"
              hx-swap="innerHTML">
-  <div class="flex items-start justify-between gap-2">
-    <h3 class="text-sm font-medium text-gray-100 truncate">{pin_icon}{escaped_title}</h3>
-    <button class="shrink-0 text-xs text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100"
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
+    <h3 style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0;">{pin_icon}{escaped_title}</h3>
+    <button class="btn btn-ghost btn-sm note-action"
+            style="flex-shrink:0;opacity:0;transition:opacity 150ms;"
             hx-post="/api/notes/{id}/pin"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
             title="Toggle pin"
             @click.stop="">Pin</button>
   </div>
-  <p class="text-xs text-gray-400 mt-1 line-clamp-2">{escaped_preview}</p>
-  <div class="flex items-center justify-between mt-2">
-    <span class="text-xs text-gray-600">{ts}</span>
-    <button class="text-xs text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100"
+  <p style="font-size:11px;color:var(--text-muted);margin:4px 0 6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{escaped_preview}</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
+    <button class="btn btn-danger btn-sm note-action"
+            style="opacity:0;transition:opacity 150ms;"
             hx-delete="/api/notes/{id}"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
@@ -66,7 +70,7 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
 
 fn render_note_list(entries: &[(String, String, String, i64, i64)]) -> String {
     if entries.is_empty() {
-        return r#"<p class="text-gray-500 text-sm">No notes yet.</p>"#.to_string();
+        return r#"<p style="font-size:13px;color:var(--text-muted);">No notes yet.</p>"#.to_string();
     }
     entries
         .iter()
@@ -79,27 +83,27 @@ fn render_note_list(entries: &[(String, String, String, i64, i64)]) -> String {
 fn render_editor(id: &str, title: &str, content: &str) -> String {
     let escaped_content = html_escape(content);
     format!(
-        r#"<div x-data="notesEditor('{id}')" class="flex flex-col h-full">
-  <div class="flex items-center gap-2 mb-3">
+        r#"<div x-data="notesEditor('{id}')" style="display:flex;flex-direction:column;height:100%;">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px;flex-shrink:0;">
     <input type="text"
            x-model="title"
            @input.debounce.800ms="save()"
            placeholder="Note title…"
-           class="flex-1 bg-transparent text-lg font-semibold text-gray-100 outline-none border-b border-gray-700 pb-1 focus:border-blue-500"/>
+           style="flex:1;background:transparent;font-size:16px;font-weight:600;color:var(--text-primary);outline:none;border:none;font-family:inherit;"/>
     <button @click="preview = !preview"
-            class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">
+            class="btn btn-secondary btn-sm">
       Preview
     </button>
-    <span x-show="saving" class="text-xs text-gray-500">Saving…</span>
-    <span x-show="saved && !saving" x-transition class="text-xs text-green-500">Saved</span>
+    <span x-show="saving" style="font-size:12px;color:var(--text-muted);">Saving…</span>
+    <span x-show="saved && !saving" x-transition style="font-size:12px;color:var(--success);">Saved</span>
   </div>
-  <div x-show="!preview" class="flex-1 min-h-0">
+  <div x-show="!preview" style="flex:1;min-height:0;">
     <textarea x-model="content"
               @input.debounce.800ms="save()"
               placeholder="Start writing…"
-              class="w-full h-full bg-transparent text-sm text-gray-200 resize-none outline-none leading-relaxed font-mono">{escaped_content}</textarea>
+              style="width:100%;height:100%;background:transparent;font-size:13px;color:var(--text-primary);resize:none;outline:none;border:none;line-height:1.6;font-family:monospace;box-sizing:border-box;">{escaped_content}</textarea>
   </div>
-  <div x-show="preview" class="flex-1 overflow-y-auto prose prose-invert prose-sm max-w-none"
+  <div x-show="preview" style="flex:1;overflow-y:auto;" class="prose prose-invert prose-sm max-w-none"
        x-html="renderMarkdown()"></div>
 </div>
 <script>

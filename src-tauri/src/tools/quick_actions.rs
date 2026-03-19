@@ -263,7 +263,7 @@ fn render_steps(pipeline_id: &str, steps: &[StepRow]) -> String {
         ));
 
         if i < steps.len() - 1 {
-            parts.push(r#"<div class="text-center text-gray-700 text-xs select-none">↓</div>"#.to_string());
+            parts.push(r#"<div style="text-align:center;color:var(--border);font-size:12px;user-select:none;">↓</div>"#.to_string());
         }
     }
 
@@ -480,7 +480,7 @@ async fn create_handler(
 ) -> impl IntoResponse {
     let name = params.name.trim().to_string();
     if name.is_empty() {
-        return Html(r#"<p class="text-red-400 text-xs">Name required.</p>"#.to_string());
+        return Html(r#"<p style="font-size:12px;color:var(--destructive);">Name required.</p>"#.to_string());
     }
     let id = uuid::Uuid::new_v4().to_string();
     let now = now_secs();
@@ -557,7 +557,7 @@ async fn editor_handler(
     .unwrap_or(None);
 
     let Some(pipeline) = pipeline else {
-        return Html(r#"<p class="text-red-400 text-sm">Pipeline not found.</p>"#.to_string());
+        return Html(r#"<p style="font-size:13px;color:var(--destructive);">Pipeline not found.</p>"#.to_string());
     };
 
     let steps: Vec<StepRow> = sqlx::query_as(
@@ -710,17 +710,17 @@ async fn run_handler(
                 .text
                 .map(|t| {
                     format!(
-                        r#"<p class="text-green-400">✓ Done: <span class="font-mono">{}</span></p>"#,
+                        r#"<p style="font-size:13px;color:var(--success);">✓ Done: <span style="font-family:monospace;">{}</span></p>"#,
                         html_escape(&t.chars().take(120).collect::<String>())
                     )
                 })
                 .unwrap_or_else(|| {
-                    r#"<p class="text-green-400">✓ Pipeline completed.</p>"#.to_string()
+                    r#"<p style="font-size:13px;color:var(--success);">✓ Pipeline completed.</p>"#.to_string()
                 });
             Html(output)
         }
         Err(e) => Html(format!(
-            r#"<p class="text-red-400">✗ {}</p>"#,
+            r#"<p style="font-size:13px;color:var(--destructive);">✗ {}</p>"#,
             html_escape(&e)
         )),
     }

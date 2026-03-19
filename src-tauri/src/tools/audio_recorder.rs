@@ -84,11 +84,11 @@ pub async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResp
     let recording = state.audio_recording.lock().await;
     if recording.is_some() {
         Html(
-            r#"<span class="text-red-400 font-medium text-sm animate-pulse">● Recording</span>"#
+            r#"<span style="color:var(--destructive);font-weight:500;">● Recording</span>"#
                 .to_string(),
         )
     } else {
-        Html(r#"<span class="text-gray-500 text-sm">Idle</span>"#.to_string())
+        Html(r#"<span style="color:var(--text-muted);">Idle</span>"#.to_string())
     }
 }
 
@@ -100,7 +100,7 @@ pub async fn record_start_handler(
 ) -> impl IntoResponse {
     let mut recording = state.audio_recording.lock().await;
     if recording.is_some() {
-        return Html(r#"<p class="text-yellow-400 text-sm">Already recording.</p>"#.to_string())
+        return Html(r#"<p style="font-size:13px;color:var(--text-muted);">Already recording.</p>"#.to_string())
             .into_response();
     }
 
@@ -113,7 +113,7 @@ pub async fn record_start_handler(
         Ok(p) => p,
         Err(e) => {
             return Html(format!(
-                r##"<p class="text-red-400 text-sm">Could not create output directory: {}</p>"##,
+                r#"<p style="font-size:13px;color:var(--destructive);">Could not create output directory: {}</p>"#,
                 html_escape(&e.to_string())
             ))
             .into_response();
@@ -133,12 +133,12 @@ pub async fn record_start_handler(
             let started_at = now_secs();
             *recording = Some((child, output_path.clone(), started_at));
             Html(format!(
-                r##"<p class="text-red-400 text-sm font-medium animate-pulse">● Recording {ext}… press Stop when done.</p>"##
+                r#"<p style="font-size:13px;color:var(--destructive);font-weight:500;">● Recording {ext}… press Stop when done.</p>"#
             ))
             .into_response()
         }
         Err(e) => Html(format!(
-            r##"<p class="text-red-400 text-sm">Failed to start ffmpeg: {}</p>"##,
+            r#"<p style="font-size:13px;color:var(--destructive);">Failed to start ffmpeg: {}</p>"#,
             html_escape(&e.to_string())
         ))
         .into_response(),
@@ -153,7 +153,7 @@ pub async fn record_stop_handler(State(state): State<Arc<AppState>>) -> impl Int
         Some(p) => p,
         None => {
             return Html(
-                r#"<p class="text-gray-400 text-sm">No recording in progress.</p>"#.to_string(),
+                r#"<p style="font-size:13px;color:var(--text-muted);">No recording in progress.</p>"#.to_string(),
             )
             .into_response();
         }
@@ -170,7 +170,7 @@ pub async fn record_stop_handler(State(state): State<Arc<AppState>>) -> impl Int
         Ok(m) if m.len() > 0 => {}
         _ => {
             return Html(
-                r#"<p class="text-gray-400 text-sm">Recording was empty or was not saved.</p>"#
+                r#"<p style="font-size:13px;color:var(--text-muted);">Recording was empty or was not saved.</p>"#
                     .to_string(),
             )
             .into_response();
@@ -185,10 +185,10 @@ pub async fn record_stop_handler(State(state): State<Arc<AppState>>) -> impl Int
         .to_uppercase();
 
     Html(format!(
-        r##"<div class="mt-4 flex flex-col gap-3">
-  <span class="text-green-400 text-sm font-medium">✓ {ext} saved</span>
-  <code class="text-xs text-gray-300 bg-gray-800 rounded px-3 py-2 break-all select-all">{escaped_path}</code>
-  <p class="text-xs text-gray-500">Saved to ~/Music/Eleutheria/</p>
+        r##"<div style="margin-top:16px;display:flex;flex-direction:column;gap:12px;">
+  <span style="font-size:13px;color:var(--success);font-weight:500;">✓ {ext} saved</span>
+  <code style="font-size:11px;color:var(--text-secondary);background:var(--bg-elevated);border-radius:var(--radius-sm);padding:8px 12px;word-break:break-all;user-select:all;">{escaped_path}</code>
+  <p style="font-size:11px;color:var(--text-muted);">Saved to ~/Music/Eleutheria/</p>
 </div>"##
     ))
     .into_response()

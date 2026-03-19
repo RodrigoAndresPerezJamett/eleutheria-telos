@@ -51,16 +51,16 @@ fn audio_out(ext: &str) -> std::io::Result<String> {
 fn success_card(output_path: &str, label: &str) -> String {
     let escaped = html_escape(output_path);
     format!(
-        r##"<div class="flex flex-col gap-2">
-  <span class="text-green-400 text-sm font-medium">✓ {label} complete</span>
-  <code class="text-xs text-gray-300 bg-gray-800 rounded px-3 py-2 break-all select-all">{escaped}</code>
+        r##"<div style="display:flex;flex-direction:column;gap:8px;">
+  <span style="font-size:13px;color:var(--success);font-weight:500;">✓ {label} complete</span>
+  <code style="font-size:11px;color:var(--text-secondary);background:var(--bg-elevated);border-radius:var(--radius-sm);padding:8px 12px;word-break:break-all;user-select:all;">{escaped}</code>
 </div>"##
     )
 }
 
 fn error_card(msg: &str) -> String {
     let escaped = html_escape(msg);
-    format!(r##"<pre class="text-red-400 text-xs whitespace-pre-wrap break-all">{escaped}</pre>"##)
+    format!(r#"<pre style="font-size:12px;color:var(--destructive);white-space:pre-wrap;word-break:break-all;">{escaped}</pre>"#)
 }
 
 /// Trims ffmpeg's verbose stderr to the last N lines.

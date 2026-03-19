@@ -31,15 +31,17 @@ fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
     let ts = format_timestamp(created_at);
     // r##"..."## used because the HTML contains "# sequences (HTMX target="#clip-id")
     format!(
-        r##"<div id="clip-{id}" class="group relative bg-gray-800 rounded-lg p-3 mb-2 hover:bg-gray-750">
-  <pre class="text-sm text-gray-200 whitespace-pre-wrap break-words font-sans leading-relaxed">{escaped}</pre>
-  <div class="flex items-center justify-between mt-2">
-    <span class="text-xs text-gray-500">{ts}</span>
-    <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-      <button class="text-xs text-blue-400 hover:text-blue-300"
+        r##"<div id="clip-{id}" style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px;margin-bottom:8px;"
+             onmouseenter="this.querySelector('.clip-actions').style.opacity=1"
+             onmouseleave="this.querySelector('.clip-actions').style.opacity=0">
+  <pre style="font-size:13px;color:var(--text-primary);white-space:pre-wrap;word-break:break-words;font-family:inherit;line-height:1.5;margin:0 0 8px;">{escaped}</pre>
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
+    <div class="clip-actions" style="display:flex;gap:6px;opacity:0;transition:opacity 150ms;">
+      <button class="btn btn-ghost btn-sm"
               hx-post="/api/clipboard/{id}/recopy"
               title="Copy to clipboard">Copy</button>
-      <button class="text-xs text-red-400 hover:text-red-300"
+      <button class="btn btn-danger btn-sm"
               hx-delete="/api/clipboard/{id}"
               hx-target="#clip-{id}"
               hx-swap="outerHTML"
@@ -53,7 +55,7 @@ fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
 
 fn render_list(entries: &[(String, String, i64)]) -> String {
     if entries.is_empty() {
-        return r#"<p class="text-gray-500 text-sm">Nothing copied yet.</p>"#.to_string();
+        return r#"<p style="font-size:13px;color:var(--text-muted);">Nothing copied yet.</p>"#.to_string();
     }
     entries
         .iter()

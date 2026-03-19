@@ -307,6 +307,23 @@ html.no-glass #sidebar-tablet {
 .btn:disabled,
 .btn-disabled { opacity: 0.45; pointer-events: none; }
 
+/* ── Global select reset ──────────────────────────────────────────────────── */
+/* WebKit renders <select> with native white background by default;
+   override globally so every select uses theme colors without needing .input */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+}
+option {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 /* ── Inputs ───────────────────────────────────────────────────────────────── */
 .input {
   width: 100%;
