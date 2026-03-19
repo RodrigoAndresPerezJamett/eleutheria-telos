@@ -54,10 +54,10 @@
 
 **Goal:** Screen recording and basic photo editing.
 
-- [ ] **Screen recorder** — record full screen or selected window, optional mic audio overlay, save as mp4
-- [ ] **Audio recorder** — record microphone to mp3/wav
-- [ ] **Photo editor** — open image, paint/erase (for manual background removal), layer a second image on top, export
-- [ ] **Background removal** — remove image background with rembg (AI, offline), or manually with eraser brush
+- [x] **Screen recorder** — record full screen or selected window, optional mic audio overlay, save as mp4
+- [x] **Audio recorder** — record microphone to mp3/wav
+- [x] **Photo editor** — open image, paint/erase (for manual background removal), layer a second image on top, export
+- [x] **Background removal** — remove image background with rembg (AI, offline), or manually with eraser brush
 - [ ] **Video processor** — cut/trim video, extract audio, compress, change resolution — all via ffmpeg, no visual timeline
 
 **Phase 3 is complete when** a user can record their screen, do basic photo compositing, and process videos without a third-party app.

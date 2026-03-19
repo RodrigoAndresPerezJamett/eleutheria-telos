@@ -436,3 +436,20 @@ Format:
 **Date:** 2026-03-18
 
 **Revisit if:** Adding Windows/macOS support (use `ffmpeg -f gdigrab` on Windows, `ffmpeg -f avfoundation` on macOS — platform-conditional logic in start handler).
+
+---
+
+## D-029 — Photo editor layer system using off-screen canvases outside Alpine
+
+**Decision:** Store each layer as a plain `HTMLCanvasElement` in `window.__peLayers[]` (outside Alpine's reactive proxy) and composite them onto a single visible display canvas on every stroke/redraw.
+
+**Rejected alternatives:**
+- Single canvas for all operations — no layer isolation; erasing on one image would destroy pixels from another
+- Multiple stacked `<canvas>` elements in the DOM — requires CSS absolute positioning, z-index management, and per-layer pointer-event routing; complex to implement in an HTMX fragment
+- Storing canvases inside Alpine `x-data` — Alpine wraps objects in a Proxy on assignment; canvas elements proxied this way lose their `getContext()` method (returns null), breaking all drawing operations
+
+**Reason:** Off-screen canvases in `window.__peLayers[]` bypass Alpine proxying completely while keeping the UI state (layer names, active index) reactive in Alpine. Compositing on every stroke is fast enough for typical photo sizes since we only redraw the display canvas (~microseconds for 2 layers at 4K).
+
+**Date:** 2026-03-19
+
+**Revisit if:** More than ~5 layers are needed, or layer blending modes are added (at that point a proper render loop with `requestAnimationFrame` and dirty-rect compositing would be worth the complexity).

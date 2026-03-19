@@ -111,6 +111,53 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 3 Step 3: Photo Editor + Background Removal
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/photo_editor.rs` — 2 route handlers:
+  - `POST /api/photo/export` — JSON body `{data: "data:image/png;base64,..."}`, strips dataURL prefix, base64-decodes, saves to `~/Pictures/Eleutheria/photo-{timestamp}.png`
+  - `POST /api/photo/rembg` — multipart `image` field, writes to `/tmp/eleutheria-photo-rembg-input.{ext}`, spawns `python3 scripts/rembg_remove.py {path}`, returns JSON `{ok, png_b64}`
+- `src-tauri/Cargo.toml` — added `base64 = "0.22"` for canvas PNG dataURL decoding
+- `src-tauri/src/tools/mod.rs` — registered `photo_editor` module
+- `src-tauri/src/server.rs` — imported `photo_editor`, merged `photo_editor::router()`
+
+**Python script**
+- `scripts/rembg_remove.py` — reads input image, runs `rembg.remove()`, outputs base64 PNG on stdout; exit 0 on success, 1 with stderr on error
+
+**Frontend**
+- `ui/tools/photo-editor/index.html` — canvas editor:
+  - Off-screen canvas per layer (`window.__peLayers[]`), "Open image" resets all layers, "+ Layer" adds overlay image (scaled to contain)
+  - Layer chip strip to switch active layer; brush/eraser/Remove BG act on active layer only
+  - Brush interpolation: `moveTo(lastPt) + lineTo(currentPt)` with `lineCap:round` — no more disconnected dots
+  - Canvas CSS-sized to fit container (`flex-1 min-h-0 overflow-hidden` + explicit `style.width/height` after load); internal resolution stays at full image size
+  - Export composites all layers onto a temp canvas, sends dataURL to `/api/photo/export`
+  - Checkerboard background via CSS gradient to visualize transparency
+- `ui/index.html` — added Photo Edit (🖼️) to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — 10 photo editor strings
+
+### Bugs fixed during session
+- **Canvas overflow on large images** — `max-width/max-height: 100%` on a canvas inside a flex container without `min-h-0` has no effect; the container expands to content size. Fix: `flex-1 min-h-0 overflow-hidden` on wrap + compute CSS scale explicitly after image load.
+- **Brush dots instead of strokes** — original code drew an `arc` circle per pointer event; rapid movement left disconnected dots. Fix: track `window.__peLastPt`, draw `moveTo → lineTo` between consecutive events; `lineCap:round` gives smooth strokes and a correct single-click dot.
+- **No layer support** — added multi-layer architecture using off-screen `HTMLCanvasElement` per layer stored outside Alpine (`window.__peLayers`) to avoid proxy issues; compositing on every redraw.
+
+### Architecture
+- No new AppState fields — photo editor is stateless on the server (no recording process to track)
+- Output saved to `~/Pictures/Eleutheria/photo-{timestamp}.png`
+- Layer system: off-screen canvases composited onto display canvas on every stroke; export uses a separate temp canvas at full resolution
+- rembg subprocess: Python 3.14 compatible (rembg 2.0.73 is py3-none-any; pillow, onnxruntime have cp314 wheels)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 3 Step 4: Video Processor (ffmpeg — trim, extract audio, compress, resize).
+
+---
+
 ## [2026-03-19] — Phase 3 Step 2: Audio Recorder
 
 ### Completed
