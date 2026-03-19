@@ -8,6 +8,10 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## UI / UX Ideas
 
+- **Clipboard: privacy blur mode** — a toggle in Settings (or directly in the Clipboard panel header) that blurs all clipboard history items. Useful when screen sharing or recording. When enabled, items show a blurred overlay that reveals on hover/click. State persisted in `settings` table (`clipboard_blur: bool`). Phase 5.
+
+- **Clipboard: rich content preview** — beyond plain text, show a thumbnail if the copied item is an image (arboard already supports `get_image()`), and a waveform or file icon if the source is an audio file path. Requires clipboard content-type detection at capture time and storing a `content_type` column alongside `content` in the `clipboard` table. Text remains the default; images and audio are opt-in previews. Phase 5.
+
 - **OCR: automatic language detection by default** — Tesseract supports `osd` (orientation and script detection) and language packs can be combined (`-l eng+spa`). The current default is hardcoded to `eng`. Better UX: default to `auto` which runs `tesseract --psm 0` first to detect the script, then selects the best installed language pack. Manual override remains available for edge cases. Requires testing across installed language packs. Phase 5.
 
 - **Translation: automatic source language detection by default** — the `from_lang` select currently defaults to English. The `auto` option exists in the select but is not the default. Change the default to `auto` (ctranslate2 supports source language detection via sentencepiece when `from_lang` is omitted or set to `auto`). Both OCR inline translate and the standalone Translate panel should default to `auto`. Phase 5.
