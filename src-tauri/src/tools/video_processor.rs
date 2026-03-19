@@ -169,66 +169,44 @@ pub async fn process_handler(
         }
 
         // ── Compress ──────────────────────────────────────────────────────────
-        // Re-encodes with h264_vaapi (GPU). QP 18–40 (lower = better quality).
+        // Re-encodes with libx264 (software). CRF 18–40 (lower = better quality).
         // Optionally downscales if compress_resolution is set.
         "compress" => {
-            let qp = form.qp.clamp(18, 40).to_string();
-            let vf = match form.compress_resolution.as_str() {
-                "1080" | "720" | "480" => {
-                    format!("scale=-2:{},format=nv12,hwupload", form.compress_resolution)
-                }
-                _ => "format=nv12,hwupload".to_string(),
-            };
+            let crf = form.qp.clamp(18, 40).to_string();
             let output = match video_out("compressed") {
                 Ok(p) => p,
                 Err(e) => return Html(error_card(&e.to_string())).into_response(),
             };
+            let mut args: Vec<&str> = vec!["-y", "-i", &input];
+            let scale_vf; // lifetime anchor
+            if matches!(form.compress_resolution.as_str(), "1080" | "720" | "480") {
+                scale_vf = format!("scale=-2:{}", form.compress_resolution);
+                args.extend(["-vf", &scale_vf]);
+            }
+            args.extend(["-c:v", "libx264", "-crf", &crf, "-preset", "fast", &output]);
             let result = tokio::process::Command::new("ffmpeg")
-                .args([
-                    "-y",
-                    "-vaapi_device",
-                    "/dev/dri/renderD128",
-                    "-i",
-                    &input,
-                    "-vf",
-                    &vf,
-                    "-c:v",
-                    "h264_vaapi",
-                    "-qp",
-                    &qp,
-                    &output,
-                ])
+                .args(&args)
                 .output()
                 .await;
             ffmpeg_result(result, &output, "Compress")
         }
 
         // ── Resize ────────────────────────────────────────────────────────────
-        // Changes resolution with h264_vaapi, preserving aspect ratio.
+        // Changes resolution with libx264, preserving aspect ratio (scale=-2:h).
         "resize" => {
             let height = form.resize_resolution.trim().to_string();
             if !matches!(height.as_str(), "1080" | "720" | "480" | "360" | "240") {
                 return Html(error_card("Select a valid target resolution.")).into_response();
             }
-            let vf = format!("scale=-2:{height},format=nv12,hwupload");
+            let vf = format!("scale=-2:{height}");
             let output = match video_out(&format!("{height}p")) {
                 Ok(p) => p,
                 Err(e) => return Html(error_card(&e.to_string())).into_response(),
             };
             let result = tokio::process::Command::new("ffmpeg")
                 .args([
-                    "-y",
-                    "-vaapi_device",
-                    "/dev/dri/renderD128",
-                    "-i",
-                    &input,
-                    "-vf",
-                    &vf,
-                    "-c:v",
-                    "h264_vaapi",
-                    "-qp",
-                    "28",
-                    &output,
+                    "-y", "-i", &input, "-vf", &vf, "-c:v", "libx264", "-crf", "28", "-preset",
+                    "fast", &output,
                 ])
                 .output()
                 .await;

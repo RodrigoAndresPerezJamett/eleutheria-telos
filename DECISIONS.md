@@ -485,3 +485,20 @@ Format:
 **Date:** 2026-03-19
 
 **Revisit if:** A form refactor replaces the dual-select pattern with a single shared field driven by Alpine state.
+
+---
+
+## D-032 — Video processor: libx264 instead of h264_vaapi
+
+**Decision:** Use `libx264 -crf` for compress and resize operations instead of `h264_vaapi -qp`.
+
+**Rejected alternatives:**
+- h264_vaapi — initial choice based on CLAUDE.md note ("h264_vaapi encoder available"), but `vainfo` returned empty output on this machine (AMD GPU with open-source mesa driver has no H.264 VAAPI entrypoints); runtime error: `No usable encoding entrypoint found for profile VAProfileH264High`.
+- vp9_vaapi — same VAAPI availability issue.
+- libvpx-vp9 (software) — available but very slow (10–30× slower than libx264 for HD video).
+
+**Reason:** libx264 is present in Nobara's ffmpeg build (confirmed via `ffmpeg -encoders`), widely compatible, fast with `-preset fast`, and produces MP4 output natively. CRF 18–40 maps to the same quality range as the QP slider already in the UI — no UX change needed.
+
+**Date:** 2026-03-19
+
+**Revisit if:** A machine with confirmed VAAPI H.264 support is targeted (check `vainfo | grep VAProfileH264` before switching back).

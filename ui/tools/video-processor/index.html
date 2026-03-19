@@ -110,10 +110,10 @@
     <div x-show="operation==='compress'"
          class="rounded-lg border border-gray-800 bg-gray-900 p-4 flex flex-col gap-3 shrink-0">
       <p class="text-xs text-gray-500">
-        Re-encodes with h264_vaapi (GPU). Lower QP = higher quality / larger file.
+        Re-encodes with libx264. Lower CRF = higher quality / larger file.
       </p>
       <div class="flex items-center gap-3">
-        <label class="text-xs text-gray-400 w-20 shrink-0">Quality (QP)</label>
+        <label class="text-xs text-gray-400 w-20 shrink-0">Quality (CRF)</label>
         <input type="range" min="18" max="40" name="qp"
                x-model.number="qp" class="w-32 accent-blue-500">
         <span x-text="qp" class="text-sm text-gray-300 font-mono w-6 text-right"></span>
@@ -137,7 +137,7 @@
     <div x-show="operation==='resize'"
          class="rounded-lg border border-gray-800 bg-gray-900 p-4 flex flex-col gap-3 shrink-0">
       <p class="text-xs text-gray-500">
-        Changes resolution with h264_vaapi (GPU). Aspect ratio preserved (scale=-2:height).
+        Changes resolution with libx264. Aspect ratio preserved (scale=-2:height).
       </p>
       <div class="flex items-center gap-3">
         <label class="text-xs text-gray-400 w-20 shrink-0">Target height</label>
