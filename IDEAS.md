@@ -22,14 +22,10 @@ Claude Code: do not implement anything from this file unless it has been explici
 - **Smart Copy** — previously considered and descoped. An OCR overlay that lets the user screenshot any part of the screen and extracts text, links, and media URLs from it. Useful for copying text from videos or images on web pages.
 - **Quick File Converter** — convert image to PDF, PDF to text, video to audio, etc. ffmpeg already handles most of this — just needs a UI. Low implementation cost.
 - **Reader Mode / Article Saver** — save a URL as clean readable text locally (like Pocket but offline). Useful with translation tool.
-- **Password Generator** — simple offline password generator and local encrypted store. No sync, no cloud. SQLite + encryption.
 - **Quick Timer / Stopwatch** — minimal but surprisingly often-needed. Trivial to implement. High MCP value: "set a 25-minute timer".
 - **Pomodoro** — extends the timer with work/break cycles. Community plugin candidate.
 - **Color Picker** — pick any color from anywhere on screen, copy hex/rgb/hsl. Common in developer toolkits.
-- **Hash Calculator** — calculate MD5/SHA256/etc of files or text. Common developer utility.
-- **JSON / YAML Formatter** — paste JSON, get it formatted. Community plugin candidate.
 - **Regex Tester** — test regular expressions with live matching. Community plugin candidate.
-- **Base64 Encoder/Decoder** — small utility, high daily use for developers.
 - **Diff Tool** — compare two pieces of text. Community plugin candidate.
 
 ---
