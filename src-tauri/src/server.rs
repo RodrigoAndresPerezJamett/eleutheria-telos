@@ -21,6 +21,8 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
+use crate::plugin_loader::PluginRegistry;
+use crate::plugins;
 use crate::tools::{
     audio_recorder, clipboard, models as models_tool, notes, ocr, photo_editor, screen_recorder,
     search, translate, video_processor, voice,
@@ -50,6 +52,10 @@ pub struct AppState {
     pub audio_recording: AudioRecording,
     /// Active MCP SSE sessions: session_id → channel sender.
     pub mcp_sessions: McpSessions,
+    /// Running plugins: plugin_id → port + manifest.
+    pub plugin_registry: PluginRegistry,
+    /// Child process handles for all running plugins (kept alive to avoid orphaning).
+    pub plugin_processes: Arc<std::sync::Mutex<Vec<std::process::Child>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -229,6 +235,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(video_processor::router())
         .merge(translate::router())
         .merge(voice::router())
+        .merge(plugins::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

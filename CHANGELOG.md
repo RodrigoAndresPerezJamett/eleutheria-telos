@@ -111,6 +111,56 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 4.3: Plugin system — full implementation
+
+### Completed
+
+**Plugin process management (`plugin_loader.rs`)**
+- Added `#[derive(Clone)]` to `PluginManifest` and `SidebarConfig`
+- Added `PluginInfo { manifest: PluginManifest, port: u16 }` struct (Clone)
+- Added `PluginRegistry = Arc<std::sync::Mutex<HashMap<String, PluginInfo>>>` type alias
+- Added `start_plugins(manifests, app_port, token) -> (PluginRegistry, Vec<std::process::Child>)`:
+  - Allocates a free port per plugin via `find_free_port_sync()`
+  - Spawns each plugin as a subprocess via `std::process::Command` (python3/node/binary runtimes)
+  - Injects env vars: `ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT`
+  - Returns populated registry + child handles (held alive to avoid orphaning)
+
+**Plugin proxy + sidebar (`src-tauri/src/plugins.rs` — new file)**
+- `GET /api/plugins` — JSON list of all running plugins
+- `GET /api/plugins/sidebar[?layout=tablet]` — HTMX `<li>` fragments sorted by `sidebar.order`, icon-only when `layout=tablet`
+- `* /plugins/:plugin_id` and `* /plugins/:plugin_id/*path` — full reverse proxy:
+  1. 404 if plugin not in registry
+  2. 403 if route not declared in `manifest.routes`
+  3. Strips `/plugins/{id}` prefix, builds `http://127.0.0.1:{port}/{subpath}` target
+  4. Forwards all non-hop-by-hop headers + `x-session-token` + `x-plugin-id`
+  5. Returns plugin response (status + headers + body) or 502 if unreachable
+
+**AppState extended (`server.rs`, `lib.rs`)**
+- Added `plugin_registry: PluginRegistry` and `plugin_processes: Arc<std::sync::Mutex<Vec<std::process::Child>>>` to `AppState`
+- `lib.rs`: calls `plugin_loader::start_plugins()` at startup, stores registry and child handles in state
+- `server.rs`: registers `plugins::router()` in `build_router()`
+
+**Test constructors updated**
+- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs` — added `plugin_registry` and `plugin_processes` fields to all `make_test_state()` functions
+
+**Shell HTMX plugin sidebar (`ui/shell.html`)**
+- Desktop sidebar: added `<ul id="plugin-sidebar-desktop">` after the main `<ul>`, loads via `hx-get="/api/plugins/sidebar"` on `load`
+- Tablet sidebar: added `<ul id="plugin-sidebar-tablet">`, loads via `hx-get="/api/plugins/sidebar?layout=tablet"` on `load`
+- Plugin entries appear below built-in tools, sorted by `sidebar.order` from manifest
+
+**Bug fix**
+- `plugins.rs`: raw string literals for HTML with `hx-target="#tool-panel"` changed from `r#"..."#` to `r##"..."##` — the `"#` sequence inside the HTML terminated the raw string early causing a parse error
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 4.4: Example plugin (Python) — a reference plugin implementation with `manifest.json`, HTTP server on assigned port, and at least one sidebar entry and one API route.
+
+---
+
 ## [2026-03-19] — Phase 4.2: MCP SSE transport
 
 ### Completed

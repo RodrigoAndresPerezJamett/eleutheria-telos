@@ -129,6 +129,13 @@
       </li>
     </ul>
 
+    <!-- Plugin sidebar items (HTMX-loaded, empty when no plugins installed) -->
+    <ul id="plugin-sidebar-desktop"
+        class="space-y-1 px-2 mt-2"
+        hx-get="/api/plugins/sidebar"
+        hx-trigger="load"
+        hx-swap="innerHTML"></ul>
+
     <div class="px-2 mt-auto">
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
               :class="{ 'active': activeTool === 'settings' }"
@@ -195,6 +202,14 @@
                 @click="activeTool = 'search'">🔍</button>
       </li>
     </ul>
+
+    <!-- Plugin sidebar items (icon-only, HTMX-loaded) -->
+    <ul id="plugin-sidebar-tablet"
+        class="space-y-2 mt-2"
+        hx-get="/api/plugins/sidebar?layout=tablet"
+        hx-trigger="load"
+        hx-swap="innerHTML"></ul>
+
     <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors mt-auto"
             title="Settings"
             hx-get="/tools/settings"

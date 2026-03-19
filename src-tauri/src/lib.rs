@@ -4,6 +4,7 @@ mod event_bus;
 mod i18n;
 mod mcp;
 mod plugin_loader;
+mod plugins;
 mod server;
 pub mod tools;
 
@@ -44,6 +45,13 @@ pub fn run() {
             let audio_recording = StdArc::new(Mutex::new(None));
             let mcp_sessions: server::McpSessions = StdArc::new(Mutex::new(HashMap::new()));
 
+            // ── Plugin loader ───────────────────────────────────────────────
+            let manifests = plugin_loader::scan_plugins();
+            log::info!("{} plugin(s) detected at startup", manifests.len());
+            let (plugin_registry, plugin_children) =
+                plugin_loader::start_plugins(manifests, port, &session_token);
+            let plugin_processes = StdArc::new(std::sync::Mutex::new(plugin_children));
+
             let state = Arc::new(AppState {
                 db,
                 session_token: session_token.clone(),
@@ -55,6 +63,8 @@ pub fn run() {
                 screen_recording,
                 audio_recording,
                 mcp_sessions,
+                plugin_registry,
+                plugin_processes,
             });
 
             // ── Tauri managed state (for invoke commands) ───────────────────
@@ -75,10 +85,6 @@ pub fn run() {
             // ── i18n ────────────────────────────────────────────────────────
             let i18n = i18n::I18n::load();
             log::info!("i18n ready: {}", i18n.t("app.name"));
-
-            // ── Plugin loader ───────────────────────────────────────────────
-            let plugins = plugin_loader::scan_plugins();
-            log::info!("{} plugin(s) detected at startup", plugins.len());
 
             // ── System tray ─────────────────────────────────────────────────
             let show_item = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
