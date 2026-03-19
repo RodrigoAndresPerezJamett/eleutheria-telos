@@ -7,6 +7,7 @@ pub mod clipboard;
 pub mod models;
 pub mod notes;
 pub mod ocr;
+pub mod screen_recorder;
 pub mod search;
 pub mod translate;
 pub mod voice;

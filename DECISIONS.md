@@ -419,3 +419,20 @@ Format:
 **Date:** 2026-03-18
 
 **Revisit if:** The project adds Windows or macOS support (those platforms don't need this feature; it is Linux-only and Cargo conditionally compiles it).
+
+---
+
+## D-028 — `wf-recorder` as screen recording backend on Wayland/Hyprland
+
+**Decision:** Use `wf-recorder` as a subprocess to capture the screen on Wayland. Stop via `kill -TERM {pid}` so it writes the mp4 trailer cleanly before exiting.
+
+**Rejected alternatives:**
+- `ffmpeg -f pipewire` — not compiled in the system's ffmpeg-free build (pipewire input device unavailable)
+- `ffmpeg -f kmsgrab` — requires `CAP_SYS_ADMIN` or root; not viable for a user-space app
+- `ffmpeg -f x11grab` — X11 only; the machine runs Wayland + Hyprland with no XWayland for screen content
+
+**Reason:** `wf-recorder` uses the wlroots `wlr-screencopy-v1` protocol, which Hyprland implements natively. It is the standard screen recorder for wlroots-based compositors. Available in the Nobara/Fedora repo (`dnf install wf-recorder`). Stopping with SIGTERM (not SIGKILL) ensures the mp4 container is properly finalized.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Adding Windows/macOS support (use `ffmpeg -f gdigrab` on Windows, `ffmpeg -f avfoundation` on macOS — platform-conditional logic in start handler).

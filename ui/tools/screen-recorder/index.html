@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<div id="tool-panel" class="flex flex-col h-full p-6">
+
+  <div class="mb-5">
+    <h2 class="text-xl font-semibold text-gray-100">Screen Recorder</h2>
+    <p class="text-sm text-gray-400 mt-1">Records to ~/Videos/Eleutheria/ as mp4.</p>
+  </div>
+
+  <!-- ── Recording controls ───────────────────────────────────────────────── -->
+  <div class="rounded-lg border border-gray-800 bg-gray-900 p-5 mb-4"
+       x-data="{ recording: false, elapsed: 0, timer: null }"
+       x-init="
+         fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/screen/state', {
+           headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
+         })
+         .then(r => r.json())
+         .then(d => {
+           if (d.recording) {
+             recording = true;
+             elapsed = Math.max(0, Math.floor(Date.now() / 1000) - d.started_at);
+             timer = setInterval(() => elapsed++, 1000);
+           }
+         })
+         .catch(() => {})
+       ">
+
+    <!-- Options — shown only when not recording -->
+    <div x-show="!recording" class="flex flex-col gap-3 mb-4">
+
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-400 w-16 shrink-0">Output:</label>
+        <select id="screen-output-select"
+                name="output"
+                class="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-200 flex-1"
+                hx-get="/api/screen/outputs"
+                hx-trigger="load"
+                hx-swap="innerHTML">
+          <option value="">Detecting…</option>
+        </select>
+      </div>
+
+      <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300 select-none">
+        <input type="checkbox"
+               id="screen-audio-toggle"
+               class="w-4 h-4 rounded accent-blue-500">
+        Include microphone audio
+      </label>
+
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+
+      <button x-show="!recording"
+              class="text-sm bg-blue-600 hover:bg-blue-500 text-white rounded px-4 py-2"
+              hx-post="/api/screen/start"
+              hx-target="#screen-record-status"
+              hx-swap="innerHTML"
+              hx-vals="js:{
+                audio:  document.getElementById('screen-audio-toggle').checked ? 'on' : '',
+                output: document.getElementById('screen-output-select').value
+              }"
+              @click="
+                recording = true;
+                elapsed = 0;
+                timer = setInterval(() => elapsed++, 1000);
+              ">
+        Start Recording
+      </button>
+
+      <button x-show="recording"
+              class="text-sm bg-red-600 hover:bg-red-500 text-white rounded px-4 py-2"
+              hx-post="/api/screen/stop"
+              hx-target="#screen-result"
+              hx-swap="innerHTML"
+              hx-indicator="#screen-stop-indicator"
+              @click="
+                recording = false;
+                clearInterval(timer);
+                timer = null;
+                document.getElementById('screen-record-status').innerHTML = '';
+              ">
+        Stop Recording
+      </button>
+
+      <span x-show="recording" class="text-xs text-red-400 font-mono">
+        ● <span x-text="String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0')"></span>
+      </span>
+
+      <span id="screen-stop-indicator"
+            class="htmx-indicator text-xs text-gray-400 italic">Finalizing…</span>
+    </div>
+
+    <div id="screen-record-status" class="mt-3 text-xs"></div>
+  </div>
+
+  <!-- ── Hint ──────────────────────────────────────────────────────────────── -->
+  <div class="rounded-lg border border-gray-800 bg-gray-900/50 p-4 mb-4">
+    <p class="text-xs text-gray-500 leading-relaxed">
+      <span class="text-gray-400 font-medium">To stop:</span>
+      Switch back with Alt+Tab or your window switcher, navigate here, press Stop.
+      The panel restores recording state automatically.
+    </p>
+  </div>
+
+  <div id="screen-result" class="flex-1 overflow-y-auto mt-2"></div>
+
+</div>

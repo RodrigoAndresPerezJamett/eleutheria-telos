@@ -111,6 +111,44 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-18] — Phase 3 Step 1: Screen Recorder
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/screen_recorder.rs` — 3 route handlers:
+  - `GET /api/screen/status` — returns recording/idle badge HTML
+  - `POST /api/screen/start` — spawns `wf-recorder -f /tmp/eleutheria-screen-{timestamp}.mp4 [-a]`; stores child + path in `AppState.screen_recording`
+  - `POST /api/screen/stop` — sends SIGTERM via `kill -TERM {pid}`, waits for exit, returns result card with file path
+- `src-tauri/src/tools/mod.rs` — registered `screen_recorder` module
+- `src-tauri/src/server.rs` — imported `ScreenRecording`, added `screen_recording` field to `AppState`, merged `screen_recorder::router()`
+- `src-tauri/src/lib.rs` — initialized `screen_recording: Arc<Mutex<None>>`
+- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs` — test `AppState` constructors updated with `screen_recording` field
+
+**Frontend**
+- `ui/tools/screen-recorder/index.html` — recording controls with Alpine.js mm:ss timer, audio toggle checkbox, Start/Stop buttons, tip about minimizing window
+- `ui/index.html` — added "Screen Rec" (🎬) entry to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — added 7 screen recorder strings
+
+### Architecture
+- `ScreenRecording = Arc<Mutex<Option<(Child, String)>>>` — holds wf-recorder child + output path
+- Timestamped output paths (`/tmp/eleutheria-screen-{unix_ts}.mp4`) avoid collisions between recordings
+- SIGTERM via `kill -TERM {pid}` subprocess instead of tokio `child.kill()` (SIGKILL) — ensures mp4 container is properly finalized (D-028)
+- Audio toggle: HTML checkbox sends `audio=on` when checked, field absent when unchecked; Rust deserializes as `String` and checks `!params.audio.is_empty()` (D-021 compliant)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Decisions made
+- **D-028:** `wf-recorder` as screen recording backend — see DECISIONS.md
+
+### Next session should start with
+Phase 3 Step 2: Audio Recorder (`ffmpeg -f pulse` → mp3/wav, no transcription, save to file).
+
+---
+
 ## [2026-03-18] — Phase 2 Step 5: OCR + Translation pipeline
 
 ### Completed

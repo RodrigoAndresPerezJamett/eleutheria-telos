@@ -13,6 +13,7 @@ Claude Code: do not implement anything from this file unless it has been explici
 - **Themes** — community CSS themes for the shell UI. Since everything is HTML + Tailwind, a theme is just an override CSS file.
 - **Mini mode** — a compact floating mode for the app (like a widget) that shows only the most-used tool, always on top.
 - **Keyboard-first mode** — navigate all tools entirely with keyboard shortcuts, no mouse required.
+- **Global hotkey for show/hide (Phase 5)** — configurable keybind to show/hide the app window without relying on the system tray. The tray is invisible in some shell environments (e.g. Hyprland + Noctalia). A global hotkey via `tauri-plugin-global-shortcut` makes the app accessible everywhere regardless of tray support. Should be user-configurable in Settings, default e.g. `Super+E`.
 
 ---
 
@@ -40,6 +41,7 @@ Claude Code: do not implement anything from this file unless it has been explici
 - **Batch Image Processing** — resize, convert, compress multiple images at once. rembg for batch background removal.
 - **Screen Annotation** — draw, highlight, and annotate on top of live screen content. Overlay window using Tauri's transparent window capabilities.
 - **GIF Recorder** — record a short screen region as a GIF. ffmpeg can do this. High demand for sharing demos.
+- **MKV output format for Screen Recorder** — wf-recorder supports `-f output.mkv` natively. MKV is a recoverable container (mp4 is not — a crash loses the file). Add a format selector (mp4 / mkv) to the Screen Recorder panel. Low effort, high value for long recordings.
 
 ---
 

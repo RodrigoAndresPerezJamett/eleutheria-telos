@@ -1,4 +1,5 @@
 use crate::tools::models::DownloadMap;
+use crate::tools::screen_recorder::ScreenRecording;
 use crate::tools::voice::VoiceRecording;
 use axum::{
     extract::{Path, Request, State},
@@ -18,7 +19,9 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
-use crate::tools::{clipboard, models as models_tool, notes, ocr, search, translate, voice};
+use crate::tools::{
+    clipboard, models as models_tool, notes, ocr, screen_recorder, search, translate, voice,
+};
 
 pub const DEFAULT_PORT: u16 = 47821;
 
@@ -34,6 +37,8 @@ pub struct AppState {
     pub download_states: DownloadMap,
     /// Holds the ffmpeg child process while a voice recording is in progress.
     pub voice_recording: VoiceRecording,
+    /// Holds the wf-recorder child process and output path while screen recording.
+    pub screen_recording: ScreenRecording,
 }
 
 #[derive(Debug, Serialize)]
@@ -206,6 +211,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(notes::router())
         .merge(ocr::router())
         .merge(search::router())
+        .merge(screen_recorder::router())
         .merge(translate::router())
         .merge(voice::router())
         .route_layer(middleware::from_fn_with_state(

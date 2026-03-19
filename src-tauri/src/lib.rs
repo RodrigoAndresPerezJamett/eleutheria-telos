@@ -37,6 +37,7 @@ pub fn run() {
             let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
             let download_states = StdArc::new(Mutex::new(HashMap::new()));
             let voice_recording = StdArc::new(Mutex::new(None));
+            let screen_recording = StdArc::new(Mutex::new(None));
 
             let state = Arc::new(AppState {
                 db,
@@ -46,6 +47,7 @@ pub fn run() {
                 clipboard_suppress_tx,
                 download_states,
                 voice_recording,
+                screen_recording,
             });
 
             // ── Tauri managed state (for invoke commands) ───────────────────
