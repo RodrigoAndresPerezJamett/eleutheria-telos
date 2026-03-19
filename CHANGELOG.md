@@ -7,6 +7,28 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.6: Plugin developer documentation
+
+### Completed
+
+- `plugins/README.md` (new) — full plugin developer guide covering:
+  - Manifest schema (all fields, `sidebar` config, `routes` permission declarations)
+  - Runtimes: `python`, `node`, `binary` — command used for each
+  - Environment variables injected by host (`ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT`) with Python + Node.js code examples
+  - Routing: how `/plugins/<id>/subpath` maps to `/subpath` at the plugin server; permission enforcement
+  - Calling the host API: auth pattern, available endpoints table
+  - HTMX UI conventions: fragment structure, absolute paths, Tailwind + Alpine already loaded
+  - HTML escaping: Python `html.escape` and JS helper
+  - Graceful shutdown: `SIGTERM` handling for Python and Node.js
+  - Local development: how to run standalone with env vars set manually, curl test examples
+  - Reference implementations table (hello-python, hello-node)
+  - New plugin checklist
+
+### Next session should start with
+Phase 4.7: Quick Actions (basic) — global keyboard shortcut to trigger a quick paste/note/search action without opening the full window.
+
+---
+
 ## [2026-03-19] — Phase 4 complete: Plugin system + sidebar + bug fixes
 
 ### Completed
