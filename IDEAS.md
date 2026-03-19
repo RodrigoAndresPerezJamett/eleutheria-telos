@@ -9,7 +9,10 @@ Claude Code: do not implement anything from this file unless it has been explici
 ## UI / UX Ideas
 
 - **Command Palette (`Ctrl+K`)** — global search across all tools and notes, launcher for quick actions. Already planned for MVP but worth noting here as a high-priority idea.
-- **Quick Actions / Pipelines** — user-defined chains of tool events without code. Example: "after OCR, auto-translate and copy to clipboard". Event Bus already supports this — just needs a UI.
+- **Quick Actions / Pipelines** — user-defined chains of tool events without code. Example: "after OCR, auto-translate and copy to clipboard". Event Bus already supports this — just needs a UI. *(Implemented in Phase 4.7 — ideas below are for future enhancement.)*
+- **Quick Actions: keybinds per pipeline** — assign a keyboard shortcut to a pipeline so it can be triggered manually without auto-running after every OCR/voice/clipboard event. Useful when the user only sometimes wants to run a pipeline after a tool completes, e.g. "I want to translate this particular OCR result but not all of them". Requires `tauri-plugin-global-shortcut` for global hotkeys, or a local hotkey approach within the app window.
+- **Quick Actions: opt-in / opt-out for auto-triggered pipelines** — when a pipeline trigger fires (e.g. `OcrCompleted`), instead of executing automatically, show a toast or overlay asking the user "Run pipeline X?" with Accept/Dismiss buttons. This prevents pipelines from silently running on every event. Could be a per-pipeline setting: "Always run" vs "Ask me first".
+- **Quick Actions: full visual canvas editor** — replace the current list-based step editor with a drag-and-drop canvas (like n8n or Zapier): boxes for each step connected by arrows, support for conditional branches (if/else), cycles (loops), and multiple trigger inputs. High effort but the ideal end state for non-technical users building automation workflows.
 - **Themes** — community CSS themes for the shell UI. Since everything is HTML + Tailwind, a theme is just an override CSS file.
 - **Mini mode** — a compact floating mode for the app (like a widget) that shows only the most-used tool, always on top.
 - **Keyboard-first mode** — navigate all tools entirely with keyboard shortcuts, no mouse required.

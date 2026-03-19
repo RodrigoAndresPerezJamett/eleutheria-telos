@@ -137,7 +137,7 @@
       <span class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Eleutheria</span>
     </div>
 
-    <ul class="flex-1 space-y-1 px-2">
+    <ul class="flex-1 overflow-y-auto space-y-1 px-2">
       <li>
         <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
                 :class="{ 'active': activeTool === 'clipboard' }"
@@ -289,7 +289,7 @@
   <!-- ── Icon-only sidebar (tablet 640px–1023px) ───────────────────────── -->
   <nav id="sidebar-tablet"
        class="hidden sm:flex lg:hidden flex-col w-14 shrink-0 bg-gray-900 border-r border-gray-800 py-4 items-center">
-    <ul class="flex-1 space-y-2">
+    <ul class="flex-1 overflow-y-auto space-y-2">
       <li>
         <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
                 title="Clipboard"
@@ -369,6 +369,14 @@
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
                 @click="activeTool = 'video-processor'">🎞️</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Quick Actions"
+                hx-get="/tools/quick-actions"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'quick-actions'">⚡</button>
       </li>
     </ul>
 

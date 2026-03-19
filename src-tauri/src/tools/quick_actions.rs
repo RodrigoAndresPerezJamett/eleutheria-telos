@@ -283,7 +283,7 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
     .iter()
     .map(|(val, label)| {
         let selected = if pipeline.trigger == *val { "selected" } else { "" };
-        format!(r#"<option value="{val}" {selected}>{label}</option>"#)
+        format!(r#"<option value="{}" {}>{}</option>"#, html_escape(val), selected, label)
     })
     .collect::<Vec<_>>()
     .join("");
