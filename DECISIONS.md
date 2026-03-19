@@ -540,3 +540,36 @@ Format:
 **Date:** 2026-03-19
 
 **Revisit if:** Tool calls over SSE show measurable latency (>50ms) from the loopback round-trip — at that point, consider extracting a `call_tool_inner(state, name, args)` function that bypasses HTTP.
+
+---
+
+## D-035 — Captures table deferred pending product decision
+
+**Decision:** Do not build a unified `captures` table yet. OCR results and voice transcriptions remain transient (shown in result cards, discarded on navigation).
+
+**Rejected alternative:** A shared `captures` table joining clipboard, OCR results, and voice transcriptions into a unified timeline. Evaluated during Phase 4.5 sprint review (2026-03-19).
+
+**Reason:** Three blockers:
+1. Persisting tool outputs by default requires a new UI surface (browsing, searching, deleting past captures) that doesn't exist and would be significant scope.
+2. The existing FTS5 search across `notes` + `clipboard` already covers the "find what I captured" use case for persisted content.
+3. This is a product decision ("should tool outputs persist by default?") before it is an architecture decision. Building infrastructure before the product question is answered creates throwaway work.
+
+**Date:** 2026-03-19
+
+**Revisit if:** Beta user feedback consistently shows users want to retrieve past OCR/voice results that they didn't explicitly save. At that point, define the UI surface first, then design the schema.
+
+---
+
+## D-036 — Translation backend: ctranslate2 + Opus-MT replaces argostranslate
+
+**Decision:** Replace argostranslate with ctranslate2 called directly, using Helsinki-NLP/Opus-MT `.ctranslate2` models.
+
+**Rejected alternative:** argostranslate — originally chosen as the offline translation backend (Phase 2). Blocked by two compounding problems discovered on 2026-03-18: (1) Python 3.14 incompatibility via `spacy → thinc → confection → pydantic.v1`; (2) ~3GB dependency footprint from PyTorch + full CUDA stack pulled in transitively.
+
+**Also rejected:** Bundled Python venv with pinned argostranslate — simpler short-term but adds venv lifecycle management (first-run setup, cross-platform activation, path resolution) and still requires ~3GB download. Not worth it when ctranslate2 is a cleaner fix.
+
+**Reason:** ctranslate2 4.7.1 has a confirmed cp314 manylinux wheel. It is what argostranslate uses internally — using it directly eliminates the entire spacy/stanza/pydantic chain. Opus-MT models in `.ctranslate2` format are available from Helsinki-NLP on HuggingFace. The existing `scripts/translate.py`, Axum routes, and UI are all correct — only the Python implementation inside the script changes.
+
+**Date:** 2026-03-19
+
+**Revisit if:** ctranslate2 drops Python 3.14 support or a better offline translation library emerges with a lighter footprint.
