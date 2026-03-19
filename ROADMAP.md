@@ -2,7 +2,7 @@
 
 ---
 
-## Current Phase: Phase 0 — Foundation
+## Phase: Phase 0 — Foundation
 
 **Goal:** A running Tauri app with internal HTTP server, HTMX navigation, SQLite, and plugin loader. No tool functionality yet — only the skeleton that everything else will be built on.
 
