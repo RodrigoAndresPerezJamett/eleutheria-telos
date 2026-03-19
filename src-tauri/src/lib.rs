@@ -38,6 +38,7 @@ pub fn run() {
             let download_states = StdArc::new(Mutex::new(HashMap::new()));
             let voice_recording = StdArc::new(Mutex::new(None));
             let screen_recording = StdArc::new(Mutex::new(None));
+            let audio_recording = StdArc::new(Mutex::new(None));
 
             let state = Arc::new(AppState {
                 db,
@@ -48,6 +49,7 @@ pub fn run() {
                 download_states,
                 voice_recording,
                 screen_recording,
+                audio_recording,
             });
 
             // ── Tauri managed state (for invoke commands) ───────────────────

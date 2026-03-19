@@ -187,6 +187,17 @@
           <span>Screen Rec</span>
         </button>
       </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'audio-recorder' }"
+                hx-get="/tools/audio-recorder"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'audio-recorder'">
+          <span class="text-lg">🎙</span>
+          <span>Audio Rec</span>
+        </button>
+      </li>
     </ul>
 
     <div class="px-2 mt-auto space-y-1">
@@ -270,6 +281,14 @@
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
                 @click="activeTool = 'screen-recorder'">🎬</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Audio Recorder"
+                hx-get="/tools/audio-recorder"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'audio-recorder'">🎙</button>
       </li>
     </ul>
     <div class="mt-auto flex flex-col gap-1">

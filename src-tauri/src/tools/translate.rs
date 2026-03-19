@@ -348,6 +348,7 @@ mod tests {
             std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
         let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
         let screen_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+        let audio_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
         Arc::new(AppState {
             db,
             session_token: "test-token".to_string(),
@@ -357,6 +358,7 @@ mod tests {
             download_states,
             voice_recording,
             screen_recording,
+            audio_recording,
         })
     }
 

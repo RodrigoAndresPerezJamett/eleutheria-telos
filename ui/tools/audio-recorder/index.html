@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<div id="tool-panel" class="flex flex-col h-full p-6">
+
+  <div class="mb-5">
+    <h2 class="text-xl font-semibold text-gray-100">Audio Recorder</h2>
+    <p class="text-sm text-gray-400 mt-1">Record your microphone and save as mp3, wav, ogg, or flac.</p>
+  </div>
+
+  <!-- ── Recording controls ───────────────────────────────────────────────── -->
+  <div class="rounded-lg border border-gray-800 bg-gray-900 p-5 mb-4"
+       x-data="{ recording: false, elapsed: 0, timer: null }"
+       x-init="
+         fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/audio/state', {
+           headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
+         })
+         .then(r => r.json())
+         .then(d => {
+           if (d.recording) {
+             recording = true;
+             elapsed = Math.max(0, Math.floor(Date.now() / 1000) - d.started_at);
+             timer = setInterval(() => elapsed++, 1000);
+           }
+         })
+         .catch(() => {})
+       ">
+
+    <!-- Format selector — shown only when not recording -->
+    <div x-show="!recording" class="flex items-center gap-3 mb-4">
+      <label class="text-xs text-gray-400 w-16 shrink-0">Format:</label>
+      <div class="flex gap-2">
+        <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300 select-none">
+          <input type="radio" name="audio-format" value="mp3" checked
+                 class="accent-blue-500"> mp3
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300 select-none">
+          <input type="radio" name="audio-format" value="wav"
+                 class="accent-blue-500"> wav
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300 select-none">
+          <input type="radio" name="audio-format" value="ogg"
+                 class="accent-blue-500"> ogg
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300 select-none">
+          <input type="radio" name="audio-format" value="flac"
+                 class="accent-blue-500"> flac
+        </label>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+
+      <!-- Start button -->
+      <button x-show="!recording"
+              class="text-sm bg-blue-600 hover:bg-blue-500 text-white rounded px-4 py-2"
+              hx-post="/api/audio/record/start"
+              hx-target="#audio-record-status"
+              hx-swap="innerHTML"
+              hx-vals="js:{format: document.querySelector('input[name=audio-format]:checked').value}"
+              @click="
+                recording = true;
+                elapsed = 0;
+                timer = setInterval(() => elapsed++, 1000);
+              ">
+        Start Recording
+      </button>
+
+      <!-- Stop button -->
+      <button x-show="recording"
+              class="text-sm bg-red-600 hover:bg-red-500 text-white rounded px-4 py-2"
+              hx-post="/api/audio/record/stop"
+              hx-target="#audio-result"
+              hx-swap="innerHTML"
+              hx-indicator="#audio-stop-indicator"
+              @click="
+                recording = false;
+                clearInterval(timer);
+                timer = null;
+                document.getElementById('audio-record-status').innerHTML = '';
+              ">
+        Stop Recording
+      </button>
+
+      <!-- Timer badge -->
+      <span x-show="recording" class="text-xs text-red-400 font-mono">
+        ● <span x-text="String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0')"></span>
+      </span>
+
+      <span id="audio-stop-indicator"
+            class="htmx-indicator text-xs text-gray-400 italic">Saving…</span>
+    </div>
+
+    <div id="audio-record-status" class="mt-3 text-xs"></div>
+  </div>
+
+  <!-- ── Result area ────────────────────────────────────────────────────────── -->
+  <div id="audio-result" class="flex-1 overflow-y-auto mt-2"></div>
+
+</div>

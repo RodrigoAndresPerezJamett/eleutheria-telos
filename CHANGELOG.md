@@ -111,6 +111,42 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 3 Step 2: Audio Recorder
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/audio_recorder.rs` — 4 route handlers:
+  - `GET /api/audio/state` — JSON `{recording, started_at}` for panel state restore
+  - `GET /api/audio/status` — HTML badge (idle / recording)
+  - `POST /api/audio/record/start` — form field `format` (mp3/wav/ogg/flac); spawns `ffmpeg -f pulse -i default -c:a {codec} output.{ext}`; stores child + path + timestamp in AppState
+  - `POST /api/audio/record/stop` — graceful stop via `q\n` to ffmpeg stdin (same pattern as voice.rs); returns result card with file path
+- `src-tauri/src/tools/mod.rs` — registered `audio_recorder` module
+- `src-tauri/src/server.rs` — imported `AudioRecording`, added `audio_recording` field to `AppState`, merged `audio_recorder::router()`
+- `src-tauri/src/lib.rs` — initialized `audio_recording: Arc<Mutex<None>>`
+- `src-tauri/src/tools/{clipboard,notes,search,translate}.rs` — test constructors updated with `audio_recording` field
+
+**Frontend**
+- `ui/tools/audio-recorder/index.html` — radio selector (mp3/wav/ogg/flac), Start/Stop with Alpine timer, state restored on load via `x-init` fetch to `/api/audio/state`
+- `ui/index.html` — added Audio Rec (🎙) to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — 4 audio recorder strings
+
+### Architecture
+- Output saved to `~/Music/Eleutheria/recording-{timestamp}.{ext}` (permanent, not tmpfs)
+- `AudioRecording = Arc<Mutex<Option<(Child, String, u64)>>>` — same pattern as ScreenRecording
+- Stopped via `q\n` to stdin (ffmpeg graceful), not SIGTERM — ensures proper container finalization for all formats
+- Codec mapping: mp3→libmp3lame, wav→pcm_s16le, ogg→libvorbis, flac→flac
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 3 Step 3: Photo Editor + Background Removal.
+
+---
+
 ## [2026-03-18] — Phase 3 Step 1: Screen Recorder
 
 ### Completed

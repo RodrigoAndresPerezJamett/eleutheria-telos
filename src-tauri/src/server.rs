@@ -1,3 +1,4 @@
+use crate::tools::audio_recorder::AudioRecording;
 use crate::tools::models::DownloadMap;
 use crate::tools::screen_recorder::ScreenRecording;
 use crate::tools::voice::VoiceRecording;
@@ -20,7 +21,8 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::event_bus::EventBus;
 use crate::mcp;
 use crate::tools::{
-    clipboard, models as models_tool, notes, ocr, screen_recorder, search, translate, voice,
+    audio_recorder, clipboard, models as models_tool, notes, ocr, screen_recorder, search,
+    translate, voice,
 };
 
 pub const DEFAULT_PORT: u16 = 47821;
@@ -39,6 +41,8 @@ pub struct AppState {
     pub voice_recording: VoiceRecording,
     /// Holds the wf-recorder child process and output path while screen recording.
     pub screen_recording: ScreenRecording,
+    /// Holds the ffmpeg child process and output path while audio recording.
+    pub audio_recording: AudioRecording,
 }
 
 #[derive(Debug, Serialize)]
@@ -211,6 +215,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(notes::router())
         .merge(ocr::router())
         .merge(search::router())
+        .merge(audio_recorder::router())
         .merge(screen_recorder::router())
         .merge(translate::router())
         .merge(voice::router())
