@@ -7,6 +7,19 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.5 planning scaffolding
+
+### Completed
+
+- `ROADMAP.md` — added Phase 4.5 (UI Polish) with mandatory workflow: references → questions → execution → Playwright review → user feedback → iteration
+- `UI_BRIEF.md` (new) — template document that must be filled via Q&A before any UI implementation begins; covers aesthetic direction, references, pain points, palette, typography, density, components, sidebar, empty states, priority order
+
+### Next session should start with
+
+Phase 4.5 — UI Polish. User must open the app and take screenshots of current state, plus gather 1-2 reference apps they find visually inspiring. Then Claude asks all questions to complete `UI_BRIEF.md` before touching any code.
+
+---
+
 ## [2026-03-19] — Phase 4.7: Quick Actions (visual pipeline builder)
 
 ### Completed

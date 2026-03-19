@@ -80,6 +80,39 @@
 
 ---
 
+## Phase 4.5 — UI Polish
+
+**Goal:** Transform the current functional-but-bare UI into something visually polished that a non-technical user would feel proud to use daily.
+
+**Workflow (mandatory — follow this order every session):**
+
+1. **References** — user provides screenshots of the current state + 1-2 apps they find visually inspiring. Claude reads these before asking anything.
+2. **Questions** — Claude asks everything needed: aesthetic direction, component inventory, pain points, priorities, what to keep vs redesign. All answers saved to `UI_BRIEF.md`.
+3. **Execution** — Claude implements based on the brief. Works panel by panel, not all at once.
+4. **Playwright review** — Claude navigates the running app with Playwright MCP, screenshots every panel, adjusts based on what it sees. App must be running before this step.
+5. **User feedback** — Claude signals "ready for review". User opens the app, tests, and gives specific feedback.
+6. **Iteration** — repeat steps 4–5 until the user is satisfied.
+
+**Scope:**
+
+- [ ] **Visual design brief** — `UI_BRIEF.md` capturing aesthetic direction, color palette, typography, spacing, component patterns
+- [ ] **App shell** — sidebar, header, transitions, empty states
+- [ ] **Clipboard History panel** — list density, item preview, search bar
+- [ ] **Notes panel** — editor chrome, tag display, pin indicator
+- [ ] **OCR panel** — capture button affordance, result display
+- [ ] **Voice panel** — recording state feedback, waveform or indicator
+- [ ] **Translation panel** — language selector UX, result layout
+- [ ] **Screen / Audio / Video panels** — control layout, progress feedback
+- [ ] **Photo editor panel** — toolbar, canvas area, export flow
+- [ ] **Quick Actions panel** — pipeline list readability, step editor clarity
+- [ ] **Settings panel** — form layout, section grouping
+- [ ] **Models panel** — download progress, installed vs available states
+- [ ] **Plugin panels** — consistent chrome so plugin UIs feel native
+
+**Phase 4.5 is complete when** every panel has been reviewed with Playwright, the user has signed off after at least one feedback iteration, and `UI_BRIEF.md` documents the final design system.
+
+---
+
 ## Phase 5 — Monetization + Distribution
 
 **Goal:** Make the app distributable to non-technical users.
