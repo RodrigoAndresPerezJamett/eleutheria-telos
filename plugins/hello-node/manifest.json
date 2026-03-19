@@ -1,0 +1,20 @@
+{
+  "id": "hello-node",
+  "name": "Hello Node",
+  "version": "0.1.0",
+  "author": "Eleutheria Telos",
+  "description": "Reference Node.js plugin — demonstrates the plugin API, sidebar entry, and HTMX UI.",
+  "entry": "main.js",
+  "runtime": "node",
+  "min_app_version": "0.1.0",
+  "icon": "🟩",
+  "routes": [
+    "/plugins/hello-node"
+  ],
+  "permissions": [],
+  "sidebar": {
+    "show": true,
+    "label": "Hello Node",
+    "order": 101
+  }
+}

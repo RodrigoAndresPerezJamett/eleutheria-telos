@@ -72,7 +72,7 @@
 - [x] **MCP server — SSE transport** — accessible from web-based agent clients
 - [x] **Plugin system — full implementation** — plugins run, routes proxied, permissions enforced, sidebar entry added
 - [x] **Example plugin (Python)** — reference implementation with full manifest
-- [ ] **Example plugin (Node.js)** — reference implementation
+- [x] **Example plugin (Node.js)** — reference implementation
 - [ ] **Plugin developer documentation** — how to build, manifest schema, available permissions, event bus events
 - [ ] **Quick Actions (basic)** — connect tool events to actions without code (e.g., auto-translate after OCR)
 

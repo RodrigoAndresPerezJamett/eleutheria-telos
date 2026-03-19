@@ -111,6 +111,36 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 4.5: Example plugin (Node.js)
+
+### Completed
+
+**`plugins/hello-node/` (new directory)**
+
+- `manifest.json` — full plugin manifest:
+  - `id`: `hello-node`, `runtime`: `node`, `entry`: `main.js`
+  - `routes`: `["/plugins/hello-node"]`
+  - `sidebar`: `{ show: true, label: "Hello Node", order: 101, icon: "🟩" }`
+
+- `main.js` — Node.js stdlib-only HTTP server (no npm packages):
+  - Uses `node:http`, `node:url`, `node:querystring`
+  - `GET /` or `GET /plugins/hello-node` → HTMX UI fragment
+  - `GET /api/hello` → HTML `<pre>` with JSON info (id, port, node version, host reachability)
+  - `POST /api/echo` → echoes `message` form field back as HTML
+  - Optional host callback via `http.request` with Bearer auth
+  - Graceful shutdown on `SIGTERM`
+
+**Verified smoke test (standalone):**
+- `GET /` → HTMX fragment ✓
+- `GET /api/hello` → JSON with `host_reachable: false`, `node_version: v22.20.0` ✓
+- `POST /api/echo message=Hola+Node` → `<p>Plugin echoes: Hola Node</p>` ✓
+- `GET /unknown` → `{"error":"not found"}` ✓
+
+### Next session should start with
+Phase 4.6: Plugin developer documentation — `plugins/README.md` covering manifest schema, available env vars, routing, permissions, HTMX UI conventions, and how to run plugins in dev.
+
+---
+
 ## [2026-03-19] — Phase 4.4: Example plugin (Python)
 
 ### Completed
