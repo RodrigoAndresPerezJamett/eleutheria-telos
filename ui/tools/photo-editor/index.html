@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<div id="tool-panel" class="flex flex-col h-full p-6"
+     x-data="{
+       tool: 'brush',
+       brushSize: 12,
+       brushColor: '#ffffff',
+       drawing: false,
+       hasImage: false,
+       busy: false,
+       resultMsg: '',
+       resultOk: true,
+
+       get canvas() { return document.getElementById('photo-canvas'); },
+       get ctx()    { return this.canvas.getContext('2d'); },
+
+       loadImage(file) {
+         if (!file) return;
+         const url = URL.createObjectURL(file);
+         const img = new Image();
+         img.onload = () => {
+           this.canvas.width  = img.naturalWidth;
+           this.canvas.height = img.naturalHeight;
+           this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+           this.ctx.drawImage(img, 0, 0);
+           this.hasImage = true;
+           URL.revokeObjectURL(url);
+         };
+         img.src = url;
+       },
+
+       pointerDown(e) {
+         if (!this.hasImage) return;
+         this.drawing = true;
+         this.applyBrush(e);
+       },
+       pointerMove(e) {
+         if (!this.drawing) return;
+         this.applyBrush(e);
+       },
+       pointerUp() { this.drawing = false; },
+
+       applyBrush(e) {
+         const rect = this.canvas.getBoundingClientRect();
+         const scaleX = this.canvas.width  / rect.width;
+         const scaleY = this.canvas.height / rect.height;
+         const x = (e.clientX - rect.left) * scaleX;
+         const y = (e.clientY - rect.top)  * scaleY;
+         const ctx = this.ctx;
+         ctx.save();
+         if (this.tool === 'eraser') {
+           ctx.globalCompositeOperation = 'destination-out';
+           ctx.strokeStyle = 'rgba(0,0,0,1)';
+         } else {
+           ctx.globalCompositeOperation = 'source-over';
+           ctx.strokeStyle = this.brushColor;
+         }
+         ctx.lineWidth   = this.brushSize;
+         ctx.lineCap     = 'round';
+         ctx.lineJoin    = 'round';
+         ctx.beginPath();
+         ctx.arc(x, y, this.brushSize / 2, 0, Math.PI * 2);
+         ctx.fill();
+         ctx.restore();
+       },
+
+       async removeBackground() {
+         if (!this.hasImage || this.busy) return;
+         this.busy = true;
+         this.resultMsg = '';
+         try {
+           const blob = await new Promise(res => this.canvas.toBlob(res, 'image/png'));
+           const fd = new FormData();
+           fd.append('image', blob, 'photo.png');
+           const resp = await fetch(
+             'http://127.0.0.1:' + window.__API_PORT__ + '/api/photo/rembg',
+             {
+               method: 'POST',
+               headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ },
+               body: fd,
+             }
+           );
+           const data = await resp.json();
+           if (data.ok && data.png_b64) {
+             const img = new Image();
+             img.onload = () => {
+               this.canvas.width  = img.naturalWidth;
+               this.canvas.height = img.naturalHeight;
+               this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+               this.ctx.drawImage(img, 0, 0);
+             };
+             img.src = 'data:image/png;base64,' + data.png_b64;
+             this.resultOk  = true;
+             this.resultMsg = 'Background removed.';
+           } else {
+             this.resultOk  = false;
+             this.resultMsg = data.error || 'Background removal failed.';
+           }
+         } catch (err) {
+           this.resultOk  = false;
+           this.resultMsg = err.message || 'Network error.';
+         } finally {
+           this.busy = false;
+         }
+       },
+
+       async exportImage() {
+         if (!this.hasImage || this.busy) return;
+         this.busy = true;
+         this.resultMsg = '';
+         try {
+           const dataUrl = this.canvas.toDataURL('image/png');
+           const resp = await fetch(
+             'http://127.0.0.1:' + window.__API_PORT__ + '/api/photo/export',
+             {
+               method: 'POST',
+               headers: {
+                 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__,
+                 'Content-Type': 'application/json',
+               },
+               body: JSON.stringify({ data: dataUrl }),
+             }
+           );
+           const html = await resp.text();
+           document.getElementById('photo-export-result').innerHTML = html;
+         } catch (err) {
+           this.resultOk  = false;
+           this.resultMsg = err.message || 'Export failed.';
+         } finally {
+           this.busy = false;
+         }
+       },
+     }">
+
+  <div class="mb-4">
+    <h2 class="text-xl font-semibold text-gray-100">Photo Editor</h2>
+    <p class="text-sm text-gray-400 mt-1">Open an image, draw, erase, remove background, then export.</p>
+  </div>
+
+  <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
+  <div class="flex flex-wrap items-center gap-2 mb-3">
+
+    <!-- Open image -->
+    <label class="text-sm bg-gray-700 hover:bg-gray-600 text-gray-100 rounded px-3 py-1.5 cursor-pointer">
+      Open image
+      <input type="file" accept="image/*" class="hidden"
+             @change="loadImage($event.target.files[0])">
+    </label>
+
+    <span class="w-px h-5 bg-gray-700"></span>
+
+    <!-- Tool: brush -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors"
+            :class="tool === 'brush' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+            @click="tool = 'brush'">
+      Brush
+    </button>
+
+    <!-- Tool: eraser -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors"
+            :class="tool === 'eraser' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+            @click="tool = 'eraser'">
+      Eraser
+    </button>
+
+    <!-- Brush color -->
+    <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+      Color
+      <input type="color" x-model="brushColor" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0">
+    </label>
+
+    <!-- Brush size -->
+    <label class="flex items-center gap-1.5 text-xs text-gray-400">
+      Size
+      <input type="range" min="1" max="80" x-model.number="brushSize"
+             class="w-20 accent-blue-500">
+      <span x-text="brushSize" class="text-gray-300 w-5 text-right"></span>
+    </label>
+
+    <span class="w-px h-5 bg-gray-700"></span>
+
+    <!-- Remove background -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors"
+            :class="hasImage && !busy ? 'bg-purple-700 hover:bg-purple-600 text-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'"
+            :disabled="!hasImage || busy"
+            @click="removeBackground()">
+      <span x-show="!busy">Remove BG</span>
+      <span x-show="busy">Working…</span>
+    </button>
+
+    <!-- Export -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors"
+            :class="hasImage && !busy ? 'bg-green-700 hover:bg-green-600 text-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'"
+            :disabled="!hasImage || busy"
+            @click="exportImage()">
+      Export PNG
+    </button>
+  </div>
+
+  <!-- ── Status message ───────────────────────────────────────────────── -->
+  <p x-show="resultMsg"
+     :class="resultOk ? 'text-green-400' : 'text-red-400'"
+     class="text-xs mb-2"
+     x-text="resultMsg"></p>
+
+  <!-- ── Canvas area ──────────────────────────────────────────────────── -->
+  <div class="flex-1 overflow-auto rounded-lg border border-gray-800 bg-gray-950 flex items-center justify-center"
+       style="min-height:200px">
+
+    <!-- Placeholder when no image loaded -->
+    <p x-show="!hasImage" class="text-gray-600 text-sm select-none">
+      Open an image to start editing.
+    </p>
+
+    <!-- Canvas — checkerboard via CSS to show transparency -->
+    <canvas id="photo-canvas"
+            x-show="hasImage"
+            class="max-w-full max-h-full cursor-crosshair"
+            style="background-image: linear-gradient(45deg,#2a2a2a 25%,transparent 25%),
+                   linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),
+                   linear-gradient(45deg,transparent 75%,#2a2a2a 75%),
+                   linear-gradient(-45deg,transparent 75%,#2a2a2a 75%);
+                   background-size:16px 16px;
+                   background-position:0 0,0 8px,8px -8px,-8px 0;"
+            @pointerdown="pointerDown($event); $el.setPointerCapture($event.pointerId)"
+            @pointermove="pointerMove($event)"
+            @pointerup="pointerUp()"
+            @pointercancel="pointerUp()">
+    </canvas>
+  </div>
+
+  <!-- ── Export result ────────────────────────────────────────────────── -->
+  <div id="photo-export-result" class="mt-3"></div>
+
+</div>

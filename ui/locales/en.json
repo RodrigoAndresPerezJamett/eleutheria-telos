@@ -71,5 +71,16 @@
   "palette.hint": "↵ open   Esc close",
   "palette.loading": "Type to search…",
   "settings.title": "Settings",
-  "settings.saved": "Settings saved."
+  "settings.saved": "Settings saved.",
+  "nav.photo_editor": "Photo Edit",
+  "photo_editor.title": "Photo Editor",
+  "photo_editor.open": "Open image",
+  "photo_editor.brush": "Brush",
+  "photo_editor.eraser": "Eraser",
+  "photo_editor.remove_bg": "Remove BG",
+  "photo_editor.export": "Export PNG",
+  "photo_editor.placeholder": "Open an image to start editing.",
+  "photo_editor.working": "Working…",
+  "photo_editor.bg_removed": "Background removed.",
+  "photo_editor.subtitle": "Open an image, draw, erase, remove background, then export."
 }

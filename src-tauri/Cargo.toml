@@ -31,6 +31,7 @@ uuid = { version = "1.0", features = ["v4"] }                     # Used for: un
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync", "fs", "process"] } # Used for: async runtime + watch channels + fs + subprocess | pinned: 2026-03-18
 tower-http = { version = "0.5", features = ["cors"] }              # Used for: CORS headers (Tauri WebView → Axum) | pinned: 2026-03-18
 reqwest    = { version = "0.12", features = ["stream"] }           # Used for: streaming model file downloads | pinned: 2026-03-18
+base64     = "0.22"                                                # Used for: decode canvas PNG dataURL for photo export | pinned: 2026-03-19
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }                    # Used for: ServiceExt::oneshot() in route integration tests | pinned: 2026-03-18
