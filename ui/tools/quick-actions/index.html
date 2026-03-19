@@ -65,10 +65,13 @@
     <!-- Right column: editor + run result -->
     <div style="flex:1;overflow-y:auto;padding:20px 24px;">
 
-      <!-- Editor: loaded here when clicking a pipeline -->
+      <!-- Editor: shows templates by default; replaced when a pipeline is selected -->
       <div id="qa-editor"
+           hx-get="/api/pipeline-templates"
+           hx-trigger="load"
+           hx-swap="outerHTML"
            style="font-size:13px;color:var(--text-muted);font-style:italic;">
-        Select a pipeline on the left to edit it, or create a new one.
+        Loading…
       </div>
 
       <!-- Manual run result (also updated from list ▶ button) -->

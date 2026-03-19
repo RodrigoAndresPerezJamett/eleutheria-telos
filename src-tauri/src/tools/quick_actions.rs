@@ -432,6 +432,187 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
     )
 }
 
+// ── Pipeline templates ────────────────────────────────────────────────────────
+
+struct Template {
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+    trigger: &'static str,
+    steps: &'static [(&'static str, &'static str)], // (tool, config_json)
+}
+
+const TEMPLATES: &[Template] = &[
+    Template {
+        id: "ocr-copy",
+        name: "OCR → Copy",
+        description: "After OCR, copy the extracted text to clipboard automatically.",
+        trigger: r#"{"type":"OcrCompleted"}"#,
+        steps: &[("copy_clipboard", "{}")],
+    },
+    Template {
+        id: "ocr-translate-copy",
+        name: "OCR → Translate → Copy",
+        description: "After OCR, translate the text to English and copy it.",
+        trigger: r#"{"type":"OcrCompleted"}"#,
+        steps: &[
+            ("translate", r#"{"from_lang":"auto","to_lang":"en"}"#),
+            ("copy_clipboard", "{}"),
+        ],
+    },
+    Template {
+        id: "voice-note",
+        name: "Voice → Save as Note",
+        description: "After transcription, save the transcript as a note.",
+        trigger: r#"{"type":"TranscriptionCompleted"}"#,
+        steps: &[("save_note", "{}")],
+    },
+    Template {
+        id: "voice-translate-copy",
+        name: "Voice → Translate → Copy",
+        description: "After transcription, translate to English and copy.",
+        trigger: r#"{"type":"TranscriptionCompleted"}"#,
+        steps: &[
+            ("translate", r#"{"from_lang":"auto","to_lang":"en"}"#),
+            ("copy_clipboard", "{}"),
+        ],
+    },
+    Template {
+        id: "clipboard-translate-copy",
+        name: "Clipboard → Translate → Copy",
+        description: "On clipboard change, translate to English and re-copy.",
+        trigger: r#"{"type":"ClipboardChanged"}"#,
+        steps: &[
+            ("translate", r#"{"from_lang":"auto","to_lang":"en"}"#),
+            ("copy_clipboard", "{}"),
+        ],
+    },
+];
+
+fn render_templates() -> String {
+    let cards: String = TEMPLATES
+        .iter()
+        .map(|t| {
+            let flow: String = std::iter::once(trigger_label(t.trigger))
+                .chain(t.steps.iter().map(|(tool, _)| tool_label(tool)))
+                .collect::<Vec<_>>()
+                .join(" → ");
+
+            format!(
+                r##"<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:14px;">
+  <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0;">{name}</p>
+  <p style="font-size:12px;color:var(--text-muted);margin:0;line-height:1.4;">{desc}</p>
+  <p style="font-size:11px;color:var(--text-muted);margin:0;font-family:monospace;">{flow}</p>
+  <button class="btn btn-secondary btn-sm" style="align-self:flex-start;margin-top:2px;"
+          hx-post="/api/pipeline-templates/use"
+          hx-vals='{{"template_id":"{id}"}}'
+          hx-target="#pipeline-list"
+          hx-swap="outerHTML">
+    Use this
+  </button>
+</div>"##,
+                name = html_escape(t.name),
+                desc = html_escape(t.description),
+                flow = html_escape(&flow),
+                id = t.id,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        r#"<div id="qa-editor">
+  <div style="margin-bottom:16px;">
+    <p style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;">Templates</p>
+    <p style="font-size:12px;color:var(--text-muted);margin:0;">Start from a pre-built pipeline, or create one from scratch on the left.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
+    {cards}
+  </div>
+</div>"#,
+        cards = cards
+    )
+}
+
+async fn templates_handler() -> impl IntoResponse {
+    Html(render_templates())
+}
+
+#[derive(Deserialize)]
+struct UseTemplateParams {
+    template_id: String,
+}
+
+async fn use_template_handler(
+    State(state): State<Arc<AppState>>,
+    Form(params): Form<UseTemplateParams>,
+) -> impl IntoResponse {
+    let Some(tmpl) = TEMPLATES.iter().find(|t| t.id == params.template_id) else {
+        return Html(format!(
+            r#"<ul id="pipeline-list"><li style="font-size:12px;color:var(--destructive);padding:8px;">Unknown template: {}</li></ul>"#,
+            html_escape(&params.template_id)
+        ));
+    };
+
+    let pipeline_id = uuid::Uuid::new_v4().to_string();
+    let now = now_secs();
+    let _ = sqlx::query(
+        "INSERT INTO pipelines (id, name, trigger, enabled, created_at) VALUES (?, ?, ?, 1, ?)",
+    )
+    .bind(&pipeline_id)
+    .bind(tmpl.name)
+    .bind(tmpl.trigger)
+    .bind(now)
+    .execute(&state.db)
+    .await;
+
+    for (order, (tool, config)) in tmpl.steps.iter().enumerate() {
+        let step_id = uuid::Uuid::new_v4().to_string();
+        let _ = sqlx::query(
+            "INSERT INTO pipeline_steps (id, pipeline_id, step_order, tool, config) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&step_id)
+        .bind(&pipeline_id)
+        .bind((order + 1) as i64)
+        .bind(*tool)
+        .bind(*config)
+        .execute(&state.db)
+        .await;
+    }
+
+    // Updated list (main swap target)
+    let pipelines: Vec<PipelineRow> =
+        sqlx::query_as("SELECT id, name, trigger, enabled, created_at FROM pipelines ORDER BY created_at ASC")
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
+    let list_html = render_pipeline_list(&pipelines);
+
+    // Editor for new pipeline (OOB swap into #qa-editor)
+    let steps: Vec<StepRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, step_order, tool, config FROM pipeline_steps WHERE pipeline_id = ? ORDER BY step_order ASC",
+    )
+    .bind(&pipeline_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let pipeline_row = PipelineRow {
+        id: pipeline_id.clone(),
+        name: tmpl.name.to_string(),
+        trigger: tmpl.trigger.to_string(),
+        enabled: 1,
+        created_at: now,
+    };
+    let editor_html = render_editor(&pipeline_row, &steps);
+
+    Html(format!(
+        r#"{list_html}<div id="qa-editor" hx-swap-oob="true">{editor_html}</div>"#,
+        list_html = list_html,
+        editor_html = editor_html,
+    ))
+}
+
 // ── Request structs ───────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -928,6 +1109,8 @@ pub async fn start_pipeline_engine(state: Arc<AppState>) {
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/api/pipeline-templates", get(templates_handler))
+        .route("/api/pipeline-templates/use", post(use_template_handler))
         .route("/api/pipelines", get(list_handler).post(create_handler))
         .route(
             "/api/pipelines/:id",
