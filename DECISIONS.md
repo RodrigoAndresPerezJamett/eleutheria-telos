@@ -453,3 +453,35 @@ Format:
 **Date:** 2026-03-19
 
 **Revisit if:** More than ~5 layers are needed, or layer blending modes are added (at that point a proper render loop with `requestAnimationFrame` and dirty-rect compositing would be worth the complexity).
+
+---
+
+## D-030 — Video processor: file path input instead of file upload
+
+**Decision:** Accept the video file as a filesystem path (text input) rather than uploading the file as multipart form data to the local Axum server.
+
+**Rejected alternatives:**
+- Multipart file upload — uploading a 1–4GB video file to `http://127.0.0.1` would buffer the entire file in memory inside Axum before ffmpeg can read it; unacceptable memory pressure and latency
+- Tauri `dialog.open()` file picker — would require adding `tauri-plugin-dialog` as a dependency with capability configuration; adds complexity for marginal UX gain over a path text field
+
+**Reason:** Since this is a desktop app and ffmpeg reads directly from disk, passing the path is both simpler and more efficient. Power users of a video processing tool are comfortable with file paths. The backend validates path existence before spawning ffmpeg.
+
+**Date:** 2026-03-19
+
+**Revisit if:** A non-technical user workflow is needed (Phase 5 polish), at which point a Tauri dialog plugin can be added cleanly alongside the existing path input.
+
+---
+
+## D-031 — Video processor: separate form field names for compress vs resize resolution
+
+**Decision:** Use `compress_resolution` and `resize_resolution` as distinct form field names instead of a shared `resolution` field.
+
+**Rejected alternatives:**
+- Single `resolution` field with both selects — both `<select name="resolution">` elements are in the DOM simultaneously (HTMX/`x-show` uses `display:none`, not `disabled`), so both values are submitted; serde takes an unpredictable one
+- JavaScript intercept on submit to disable hidden fields — adds JS complexity and is fragile across HTMX versions
+
+**Reason:** Distinct field names make server-side deserialization unambiguous with zero JavaScript. The backend only reads the relevant field for each operation branch.
+
+**Date:** 2026-03-19
+
+**Revisit if:** A form refactor replaces the dual-select pattern with a single shared field driven by Alpine state.
