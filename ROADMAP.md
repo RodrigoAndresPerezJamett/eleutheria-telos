@@ -2,7 +2,7 @@
 
 ---
 
-## Phase: Phase 0 — Foundation
+## Current Phase: Phase 0 — Foundation
 
 **Goal:** A running Tauri app with internal HTTP server, HTMX navigation, SQLite, and plugin loader. No tool functionality yet — only the skeleton that everything else will be built on.
 
@@ -68,8 +68,8 @@
 
 **Goal:** Make the app usable as AI agent infrastructure and open it to community developers.
 
-- [ ] **MCP server — stdio transport** — all built-in tools accessible as MCP tools
-- [ ] **MCP server — SSE transport** — accessible from web-based agent clients
+- [x] **MCP server — stdio transport** — all built-in tools accessible as MCP tools
+- [x] **MCP server — SSE transport** — accessible from web-based agent clients
 - [ ] **Plugin system — full implementation** — plugins run, routes proxied, permissions enforced, sidebar entry added
 - [ ] **Example plugin (Python)** — reference implementation with full manifest
 - [ ] **Example plugin (Node.js)** — reference implementation

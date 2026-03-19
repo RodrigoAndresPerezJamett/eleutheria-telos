@@ -488,6 +488,26 @@ Format:
 
 ---
 
+## D-033 — MCP binary shares [dependencies] with the main Tauri package
+
+**Decision:** The `eleutheria-mcp` stdio binary is a `[[bin]]` target within `src-tauri/` (the same Cargo package as the Tauri app). It shares all `[dependencies]` including `reqwest`, `serde_json`, and `tokio`.
+
+**Rejected alternatives:**
+- Separate workspace member with its own `Cargo.toml` and minimal deps — cleaner dependency graph, but requires setting up a Cargo workspace, changing build scripts, and complicating the Tauri build pipeline.
+- Symlinked or script-based binary — not idiomatic Rust.
+
+**Reason:** Adding a `[[bin]]` entry to the existing `Cargo.toml` is the simplest approach. The binary does NOT `use app_lib::...` anywhere, so the linker only includes what it actually uses (`serde_json`, `tokio`, `reqwest`). Heavy deps like Tauri and Axum are present in `[dependencies]` but not linked into `eleutheria-mcp` because no code in `mcp_stdio.rs` references them.
+
+**Features added to existing deps** (not new crates):
+- `tokio` — added `io-std` for async `stdin()`/`stdout()` in the binary
+- `reqwest` — added `json` for `Response::json::<Value>()` in the HTTP client
+
+**Date:** 2026-03-19
+
+**Revisit if:** The binary grows significantly or needs deps that conflict with Tauri's deps, at which point extracting it to a separate workspace crate becomes justified.
+
+---
+
 ## D-032 — Video processor: libx264 instead of h264_vaapi
 
 **Decision:** Use `libx264 -crf` for compress and resize operations instead of `h264_vaapi -qp`.
@@ -502,3 +522,21 @@ Format:
 **Date:** 2026-03-19
 
 **Revisit if:** A machine with confirmed VAAPI H.264 support is targeted (check `vainfo | grep VAProfileH264` before switching back).
+
+
+---
+
+## D-034 — MCP SSE: loopback HTTP for tool dispatch
+
+**Decision:** The SSE `tools/call` handler dispatches tool calls by making HTTP requests to the same Axum process (`http://127.0.0.1:{port}/api/mcp/...`) using `reqwest`, rather than calling handler functions directly.
+
+**Rejected alternatives:**
+- Call handler functions directly — would require extracting them out of Axum's extractor system, duplicating the AppState parameter passing, and making them callable without an HTTP context. Complex and brittle.
+- Share the tool dispatch logic as a lib function imported by both SSE and stdio handlers — cleaner in theory, but the tool handlers use Axum extractors (`State`, `Form`, etc.) which are tightly coupled to the HTTP request lifecycle.
+- Implement a separate in-process RPC channel — over-engineered for the current scale.
+
+**Reason:** Loopback HTTP reuses the exact same handler code path as external callers. Auth, JSON serialization, error handling, and any future middleware are all exercised consistently. The overhead is negligible (localhost TCP, no serialization mismatch).
+
+**Date:** 2026-03-19
+
+**Revisit if:** Tool calls over SSE show measurable latency (>50ms) from the loopback round-trip — at that point, consider extracting a `call_tool_inner(state, name, args)` function that bypasses HTTP.

@@ -13,9 +13,10 @@ use axum::{
 use serde::Serialize;
 use serde_json::json;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
@@ -26,6 +27,10 @@ use crate::tools::{
 };
 
 pub const DEFAULT_PORT: u16 = 47821;
+
+/// Maps session ID → SSE sender for the MCP SSE transport.
+/// Each `GET /mcp` connection creates one entry; removed when the client disconnects.
+pub type McpSessions = Arc<Mutex<HashMap<String, mpsc::Sender<String>>>>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -43,6 +48,8 @@ pub struct AppState {
     pub screen_recording: ScreenRecording,
     /// Holds the ffmpeg child process and output path while audio recording.
     pub audio_recording: AudioRecording,
+    /// Active MCP SSE sessions: session_id → channel sender.
+    pub mcp_sessions: McpSessions,
 }
 
 #[derive(Debug, Serialize)]
@@ -210,6 +217,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/mcp",
             get(mcp::mcp_sse_handler).post(mcp::mcp_post_handler),
         )
+        .merge(mcp::router())
         .merge(clipboard::router())
         .merge(models_tool::router())
         .merge(notes::router())

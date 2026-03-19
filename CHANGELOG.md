@@ -111,6 +111,109 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 4.2: MCP SSE transport
+
+### Completed
+
+**MCP SSE transport (`GET /mcp`, `POST /mcp?sessionId=...`)**
+- `src-tauri/src/mcp.rs` — replaced 501 stubs with full SSE implementation:
+  - `mcp_sse_handler` (`GET /mcp`): creates a session ID, allocates a buffered mpsc channel (cap 64), pre-fills the `endpoint` event, stores the sender in `AppState::mcp_sessions`, returns an SSE stream via `ReceiverStream`
+  - `mcp_post_handler` (`POST /mcp?sessionId=...`): looks up the session, spawns a background task that calls `process_sse_message()`, returns `202 Accepted` immediately
+  - `process_sse_message()`: handles `initialize`, `initialized` (notification, no response), `ping`, `tools/list`, `tools/call`, and unknown-method errors
+  - `call_tool_sse()`: dispatches all 11 tools via loopback HTTP (`http://127.0.0.1:{port}/api/mcp/...`) using `SseHttpClient` (mirrors `McpClient` in stdio binary)
+  - `SseHttpClient`: struct wrapping `reqwest::Client` with bearer auth; `get_query`, `post_form`, `put_form`, `delete` methods
+  - `mcp_tools()`: shared tool manifest (11 tools with JSON Schema) — also used by `tools/list` in `process_sse_message`
+- `src-tauri/src/server.rs`:
+  - Added `McpSessions = Arc<Mutex<HashMap<String, mpsc::Sender<String>>>>` type alias
+  - Added `mcp_sessions: McpSessions` field to `AppState`
+- `src-tauri/src/lib.rs`: initializes `mcp_sessions: Arc::new(Mutex::new(HashMap::new()))` at startup
+- `src-tauri/Cargo.toml`: added `tokio-stream = { version = "0.1" }` for `ReceiverStream`
+- 4 test `make_test_state()` constructors updated (`clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs`)
+
+**Protocol:**
+- `GET /mcp` → SSE stream; first event is `event: endpoint\ndata: /mcp?sessionId={uuid}`
+- Client POSTs JSON-RPC to `POST /mcp?sessionId={uuid}` (with Bearer token)
+- Responses arrive as `event: message\ndata: {json-rpc-response}` on the SSE stream
+- Notifications (e.g. `initialized`) → no response event sent
+
+### Architecture
+- Session map keyed by UUID; sender cloned from map and moved into background task — receiver lives in the SSE stream
+- Tool calls make loopback HTTP requests to the same Axum process rather than re-implementing handlers inline (single source of truth, same auth path)
+- `SseHttpClient` is defined locally in `mcp.rs` (not shared with stdio binary) to keep binary free of lib dependencies (D-033)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 4.3: Plugin system — full implementation. Plugins run their own process, routes are proxied through Axum, permissions are enforced, and a sidebar entry is added per plugin. Start with `plugin_loader.rs` (extend with process management) and `server.rs` (dynamic route proxying).
+
+---
+
+## [2026-03-19] — Phase 4.1: MCP stdio transport
+
+### Completed
+
+**MCP JSON API (Axum — `/api/mcp/...`)**
+- `src-tauri/src/mcp.rs` — full rewrite (was Phase 0 stubs):
+  - `GET /api/mcp/clipboard` — list/search clipboard history, returns JSON
+  - `POST /api/mcp/clipboard/copy` — write to clipboard (arboard)
+  - `GET /api/mcp/notes` — list notes; FTS5 MATCH search via `?q=`
+  - `POST /api/mcp/notes` — create note (form: title, content, tags)
+  - `PUT /api/mcp/notes/:id` — partial update (dynamic SET, optional fields)
+  - `DELETE /api/mcp/notes/:id` — delete note
+  - `POST /api/mcp/ocr/file` — tesseract OCR from file path
+  - `POST /api/mcp/voice/transcribe` — Whisper transcription from file path
+  - `POST /api/mcp/translate` — translate via scripts/translate.py
+  - `POST /api/mcp/video/process` — ffmpeg (trim/extract_audio/compress/resize)
+  - `POST /api/mcp/photo/rembg` — rembg_remove.py, saves PNG to ~/Pictures/Eleutheria/
+  - SSE stubs `/mcp` (GET/POST) kept as NOT_IMPLEMENTED for Phase 4.2
+  - `pub fn router()` registered in `server.rs`
+- `src-tauri/src/server.rs` — added `.merge(mcp::router())`
+
+**MCP stdio binary**
+- `src-tauri/src/bin/mcp_stdio.rs` — new: implements JSON-RPC 2.0 over stdin/stdout
+  - Reads `~/.local/share/eleutheria-telos/server.json` (port + token written at app startup)
+  - Handles: `initialize`, `initialized`, `tools/list`, `tools/call`, `ping`
+  - 11 tools defined with full JSON Schema `inputSchema`
+  - HTTP client (`McpClient`) proxies all tool calls to Axum via reqwest
+- `src-tauri/src/lib.rs` — writes `server.json` at startup via `write_server_info(port, token)`
+
+**Cargo.toml changes**
+- `[[bin]]` entry for `eleutheria-mcp` (path: `src/bin/mcp_stdio.rs`)
+- `tokio` — added `io-std` feature (async stdin/stdout for MCP binary)
+- `reqwest` — added `json` feature (`Response::json()` for HTTP client in MCP binary)
+
+### Architecture
+- `reqwest` in `[dependencies]` is shared across all targets (lib + both binaries) — no separate deps needed (D-033)
+- MCP binary is standalone: does NOT import `app_lib`. It only needs `serde_json`, `tokio`, `reqwest`
+- JSON API routes are behind the same Bearer auth middleware as all other routes
+- `photo_rembg` MCP route accepts a file path instead of multipart upload — consistent with video_processor (D-030), avoids base64-encoding large files over localhost
+- Tags in MCP routes use comma-separated string input → stored as JSON array in DB
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Usage
+Configure in Claude Desktop / Cursor:
+```json
+{
+  "mcpServers": {
+    "eleutheria": {
+      "command": "/path/to/target/debug/eleutheria-mcp"
+    }
+  }
+}
+```
+
+### Next session should start with
+Phase 4.2: MCP server — SSE transport. Replace the `/mcp` 501 stubs with a real SSE implementation (Server-Sent Events stream for AI agent clients). Then Phase 4.3: Plugin system full implementation.
+
+---
+
 ## [2026-03-19] — Phase 3 bugfix: Video Processor encoder
 
 ### Fixed

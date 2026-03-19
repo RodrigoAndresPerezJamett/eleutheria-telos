@@ -31,6 +31,9 @@ pub fn run() {
             let port = server::find_free_port_sync();
             let session_token = uuid::Uuid::new_v4().to_string();
 
+            // Write server info for the MCP stdio binary to discover.
+            write_server_info(port, &session_token);
+
             // ── Database ────────────────────────────────────────────────────
             let db = tauri::async_runtime::block_on(db::init_db())?;
 
@@ -39,6 +42,7 @@ pub fn run() {
             let voice_recording = StdArc::new(Mutex::new(None));
             let screen_recording = StdArc::new(Mutex::new(None));
             let audio_recording = StdArc::new(Mutex::new(None));
+            let mcp_sessions: server::McpSessions = StdArc::new(Mutex::new(HashMap::new()));
 
             let state = Arc::new(AppState {
                 db,
@@ -50,6 +54,7 @@ pub fn run() {
                 voice_recording,
                 screen_recording,
                 audio_recording,
+                mcp_sessions,
             });
 
             // ── Tauri managed state (for invoke commands) ───────────────────
@@ -139,4 +144,21 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// ── MCP server info ───────────────────────────────────────────────────────────
+
+/// Writes port + session token to ~/.local/share/eleutheria-telos/server.json
+/// so the `eleutheria-mcp` stdio binary can discover the running instance.
+fn write_server_info(port: u16, token: &str) {
+    let base = std::env::var("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            std::path::PathBuf::from(home).join(".local/share")
+        });
+    let dir = base.join("eleutheria-telos");
+    let _ = std::fs::create_dir_all(&dir);
+    let json = serde_json::json!({ "port": port, "token": token });
+    let _ = std::fs::write(dir.join("server.json"), json.to_string());
 }
