@@ -97,7 +97,7 @@ fn render_result(text: &str) -> Html<String> {
   <form id="voice-text-form">
     <textarea name="text" style="display:none;">{escaped}</textarea>
   </form>
-  <div style="display:flex;gap:8px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-primary btn-sm"
             hx-post="/api/voice/copy"
             hx-include="{include_target}"
@@ -108,6 +108,10 @@ fn render_result(text: &str) -> Html<String> {
             hx-include="{include_target}"
             hx-target="{feedback_target}"
             hx-swap="innerHTML">Save as Note</button>
+    <button class="btn btn-ghost btn-sm"
+            onclick="window.__qaPreTrigger='TranscriptionCompleted';htmx.ajax('GET','http://127.0.0.1:'+window.__API_PORT__+'/tools/quick-actions',{{target:'#tool-panel',swap:'innerHTML',headers:{{'Authorization':'Bearer '+window.__SESSION_TOKEN__}}}})">
+      Create pipeline from this
+    </button>
   </div>
   <div id="voice-feedback" style="font-size:12px;"></div>
 </div>"##

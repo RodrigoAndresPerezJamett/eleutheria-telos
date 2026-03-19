@@ -16,7 +16,8 @@
 
       <!-- Create form -->
       <div style="padding:12px;border-bottom:1px solid var(--border);"
-           x-data="{open: false, name: '', trigger: '{&quot;type&quot;:&quot;Manual&quot;}'}">
+           x-data="{open: false, name: '', trigger: '{&quot;type&quot;:&quot;Manual&quot;}'}"
+           x-init="if (window.__qaPreTrigger) { trigger = JSON.stringify({type: window.__qaPreTrigger}); open = true; delete window.__qaPreTrigger; }">
         <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;"
                 @click="open = !open">
           + New Pipeline

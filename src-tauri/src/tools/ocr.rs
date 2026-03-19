@@ -98,6 +98,10 @@ fn render_result(text: &str) -> Html<String> {
             hx-include="{ocr_text_form}"
             hx-target="{ocr_feedback}"
             hx-swap="innerHTML">Save as Note</button>
+    <button class="btn btn-ghost btn-sm"
+            onclick="window.__qaPreTrigger='OcrCompleted';htmx.ajax('GET','http://127.0.0.1:'+window.__API_PORT__+'/tools/quick-actions',{{target:'#tool-panel',swap:'innerHTML',headers:{{'Authorization':'Bearer '+window.__SESSION_TOKEN__}}}})">
+      Create pipeline from this
+    </button>
   </div>
   <div id="ocr-feedback" style="font-size:12px;"></div>
 
