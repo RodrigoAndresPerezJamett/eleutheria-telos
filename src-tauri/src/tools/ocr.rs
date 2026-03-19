@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::event_bus::Event;
 use crate::server::AppState;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ const UPLOAD_TMP_BASE: &str = "/tmp/eleutheria-ocr-upload";
 
 // ── Shared: run tesseract on a file and render the result HTML ────────────────
 
-async fn run_tesseract(image_path: &str, lang: &str) -> Response {
+async fn run_tesseract(image_path: &str, lang: &str, state: &Arc<AppState>) -> Response {
     let out = tokio::process::Command::new("tesseract")
         .arg(image_path)
         .arg("stdout")
@@ -51,6 +52,10 @@ async fn run_tesseract(image_path: &str, lang: &str) -> Response {
                 )
                 .into_response();
             }
+            state.event_bus.publish(Event::OcrCompleted {
+                text: text.to_string(),
+                source: image_path.to_string(),
+            });
             render_result(text).into_response()
         }
         Ok(o) => {
@@ -171,7 +176,7 @@ fn default_lang() -> String {
 /// POST /api/ocr/capture
 /// Runs slurp (interactive region selector) → grim (Wayland screenshot) → tesseract.
 pub async fn capture_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Form(params): Form<CaptureParams>,
 ) -> impl IntoResponse {
     // Step 1: slurp — shows a Wayland-native crosshair/selection overlay.
@@ -228,13 +233,13 @@ pub async fn capture_handler(
     }
 
     // Step 3: tesseract — OCR the captured image.
-    run_tesseract(CAPTURE_TMP, &params.lang).await
+    run_tesseract(CAPTURE_TMP, &params.lang, &state).await
 }
 
 /// POST /api/ocr/file  (multipart/form-data, field name: "image", field name: "lang")
 /// Saves the uploaded image to a temp file, then runs tesseract.
 pub async fn file_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     let mut image_bytes: Option<Vec<u8>> = None;
@@ -297,7 +302,7 @@ pub async fn file_handler(
         .into_response();
     }
 
-    run_tesseract(&tmp_path, lang).await
+    run_tesseract(&tmp_path, lang, &state).await
 }
 
 /// POST /api/ocr/copy  (form-encoded, field: text)

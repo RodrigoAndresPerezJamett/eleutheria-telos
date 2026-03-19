@@ -82,6 +82,12 @@ pub fn run() {
                 tools::clipboard::start_monitor(state_for_monitor).await;
             });
 
+            // ── Quick Actions pipeline engine (background task) ──────────────
+            let state_for_qa = state.clone();
+            tauri::async_runtime::spawn(async move {
+                tools::quick_actions::start_pipeline_engine(state_for_qa).await;
+            });
+
             // ── i18n ────────────────────────────────────────────────────────
             let i18n = i18n::I18n::load();
             log::info!("i18n ready: {}", i18n.t("app.name"));

@@ -248,6 +248,17 @@
           <span>Video</span>
         </button>
       </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'quick-actions' }"
+                hx-get="/tools/quick-actions"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'quick-actions'">
+          <span class="text-lg">⚡</span>
+          <span>Quick Actions</span>
+        </button>
+      </li>
     </ul>
 
     <!-- Plugin sidebar items — populated by initApp() from window.__SIDEBAR_PLUGINS__ -->

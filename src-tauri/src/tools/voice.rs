@@ -10,6 +10,7 @@ use serde::Deserialize;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
+use crate::event_bus::Event;
 use crate::server::AppState;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ fn scripts_dir() -> std::path::PathBuf {
 }
 
 /// Run `scripts/transcribe.py` on an audio file and return the result HTML.
-async fn run_transcription(audio_path: &str, lang: &str) -> Response {
+async fn run_transcription(audio_path: &str, lang: &str, state: &Arc<AppState>) -> Response {
     let script = scripts_dir().join("transcribe.py");
     let mut cmd = tokio::process::Command::new("python3");
     cmd.arg(&script).arg(audio_path);
@@ -63,6 +64,10 @@ async fn run_transcription(audio_path: &str, lang: &str) -> Response {
                 )
                 .into_response();
             }
+            state.event_bus.publish(Event::TranscriptionCompleted {
+                text: text.clone(),
+                language: lang.to_string(),
+            });
             render_result(&text).into_response()
         }
         Ok(o) => {
@@ -226,13 +231,13 @@ pub async fn record_stop_handler(
         }
     }
 
-    run_transcription(RECORDING_TMP, &params.lang).await
+    run_transcription(RECORDING_TMP, &params.lang, &state).await
 }
 
 /// POST /api/voice/file  (multipart/form-data, fields: "audio", "lang")
 /// Saves the uploaded audio to a temp file and runs the Whisper transcription.
 pub async fn file_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     let mut audio_bytes: Option<Vec<u8>> = None;
@@ -301,7 +306,7 @@ pub async fn file_handler(
         .into_response();
     }
 
-    run_transcription(&tmp_path, &lang).await
+    run_transcription(&tmp_path, &lang, &state).await
 }
 
 /// POST /api/voice/copy  (form-encoded, field: text)

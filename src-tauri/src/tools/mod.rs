@@ -4,6 +4,7 @@
 // Phase 3: recorder, photo_editor, video_processor
 
 pub mod audio_recorder;
+pub mod quick_actions;
 pub mod clipboard;
 pub mod models;
 pub mod notes;

@@ -1,0 +1,78 @@
+<div id="tool-panel" class="flex flex-col h-full">
+
+  <!-- Header -->
+  <div class="px-6 pt-6 pb-4 border-b border-gray-800 shrink-0">
+    <h2 class="text-xl font-semibold text-white">⚡ Quick Actions</h2>
+    <p class="text-sm text-gray-400 mt-1">
+      Build pipelines that connect tools visually — no code needed.
+    </p>
+  </div>
+
+  <!-- Body: two-column layout -->
+  <div class="flex flex-1 min-h-0">
+
+    <!-- Left column: pipeline list -->
+    <div class="w-64 shrink-0 border-r border-gray-800 flex flex-col">
+
+      <!-- Create form -->
+      <div class="px-3 py-3 border-b border-gray-800"
+           x-data="{open: false, name: '', trigger: '{&quot;type&quot;:&quot;Manual&quot;}'}">
+        <button class="w-full text-xs bg-blue-700 hover:bg-blue-600 text-white rounded px-3 py-2 transition-colors"
+                @click="open = !open">
+          + New Pipeline
+        </button>
+        <form x-show="open"
+              class="mt-2 flex flex-col gap-2"
+              hx-post="/api/pipelines"
+              hx-target="#pipeline-list"
+              hx-swap="outerHTML"
+              @htmx:after-request="open = false; name = ''">
+          <input x-model="name"
+                 name="name"
+                 type="text"
+                 placeholder="Pipeline name"
+                 required
+                 class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-600" />
+          <select name="trigger"
+                  x-model="trigger"
+                  class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none">
+            <option value='{"type":"Manual"}'>⚡ Manual</option>
+            <option value='{"type":"OcrCompleted"}'>📷 After OCR</option>
+            <option value='{"type":"TranscriptionCompleted"}'>🎙 After Voice</option>
+            <option value='{"type":"ClipboardChanged"}'>📋 On Clipboard Change</option>
+          </select>
+          <button type="submit"
+                  class="w-full text-xs bg-blue-700 hover:bg-blue-600 text-white rounded px-2 py-1.5 transition-colors">
+            Create
+          </button>
+        </form>
+      </div>
+
+      <!-- Pipeline list -->
+      <div class="flex-1 overflow-y-auto px-2 py-2">
+        <div hx-get="/api/pipelines"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+          <ul id="pipeline-list" class="space-y-1.5">
+            <li class="text-xs text-gray-600 px-1 py-2 animate-pulse">Loading…</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: editor + run result -->
+    <div class="flex-1 overflow-y-auto px-6 py-4">
+
+      <!-- Editor: loaded here when clicking a pipeline -->
+      <div id="qa-editor"
+           class="text-sm text-gray-500 italic">
+        Select a pipeline on the left to edit it, or create a new one.
+      </div>
+
+      <!-- Manual run result (also updated from list ▶ button) -->
+      <div id="qa-run-result" class="mt-4 text-xs"></div>
+
+    </div>
+  </div>
+
+</div>
