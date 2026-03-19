@@ -8,6 +8,10 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## UI / UX Ideas
 
+- **OCR: automatic language detection by default** — Tesseract supports `osd` (orientation and script detection) and language packs can be combined (`-l eng+spa`). The current default is hardcoded to `eng`. Better UX: default to `auto` which runs `tesseract --psm 0` first to detect the script, then selects the best installed language pack. Manual override remains available for edge cases. Requires testing across installed language packs. Phase 5.
+
+- **Translation: automatic source language detection by default** — the `from_lang` select currently defaults to English. The `auto` option exists in the select but is not the default. Change the default to `auto` (ctranslate2 supports source language detection via sentencepiece when `from_lang` is omitted or set to `auto`). Both OCR inline translate and the standalone Translate panel should default to `auto`. Phase 5.
+
 - **Keybindings section in Settings** — a dedicated section in the Settings panel where the user can see all keyboard shortcuts (Ctrl+K for command palette, global hotkey, etc.) and remap them. Could extend to Quick Actions triggers: assign a hotkey to run a specific pipeline directly. Natural evolution of the current hardcoded Ctrl+K listener. Phase 5.
 
 - **Draw on screen (Screen Annotation)** — draw, highlight, and annotate directly on top of live screen content. Overlay window using Tauri's transparent always-on-top window. Proposed by user during Phase 4.5 Q&A as a wanted feature.
