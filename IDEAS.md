@@ -61,6 +61,18 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## Python Dependency Management (Phase 5)
 
+- **`argostranslate` is broken on Python 3.14 — hard blocker for translation** — discovered during Phase 2 Step 4 testing. Two compounding problems:
+
+  1. **Python 3.14 incompatibility:** `argostranslate` → `spacy` → `thinc` → `confection` → `pydantic.v1`. Pydantic V1 is not compatible with Python 3.14+. Runtime error: `Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater / unable to infer type for attribute "REGEX"`. Translation fails even after installation.
+
+  2. **Massive dependency footprint:** `pip3 install argostranslate` pulls in ~3 GB of packages: PyTorch 2.10 (915 MB), full CUDA stack (nvidia-cublas, nvidia-cudnn, nvidia-cufft, triton, etc.), spacy, stanza, onnxruntime, and 50+ other packages. Completely disproportionate for a text translation feature.
+
+  **Recommended alternatives to evaluate before Phase 5:**
+  - **`ctranslate2` directly** — argostranslate uses ctranslate2 under the hood. Use it directly with Opus-MT `.ctranslate2` models, bypassing the spacy/stanza/pydantic chain entirely. Much lighter. Already confirmed `ctranslate2==4.7.1` has a cp314 manylinux wheel.
+  - **LibreTranslate (local)** — self-hosted REST API, no Python dependency, translates via HTTP. Heavier to set up but fully offline and Python-version-agnostic.
+  - **pyenv venv pinned to Python 3.12** — run the translation subprocess in a 3.12 venv where argostranslate works. Avoids rewriting the integration but adds venv management complexity.
+  - Current status: translation UI and routes are implemented and working structurally; the Python subprocess fails at runtime on this machine. Feature is non-functional until one of the above paths is chosen.
+
 - **Bundled venv + first-run setup** — instead of requiring `pip install` manually, the app should:
   1. On first launch, detect if `~/.local/share/eleutheria-telos/venv/` exists
   2. If not, show a "Setting up AI tools…" screen with a progress indicator

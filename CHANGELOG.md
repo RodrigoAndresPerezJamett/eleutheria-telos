@@ -111,6 +111,93 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-18] — Phase 2 Step 5: OCR + Translation pipeline
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/ocr.rs` — modificado `render_result`: el card de resultado OCR ahora incluye una sección "Translate…" que se expande con Alpine.js. Al enviar el mini-form, postea a `/api/translate/text` (ya existente) con el texto extraído, `from_lang` y `to_lang`. No se agregaron rutas nuevas.
+
+**Frontend**
+- El pipeline es puramente de frontend: `render_result` emite el HTML con el mini-form inline
+- Alpine.js `x-data="{ showTranslate: false }"` controla visibilidad con `x-show` + `x-cloak`
+- Selectores from/to con los 5 idiomas disponibles (en/es/fr/de/pt)
+- Resultado de traducción aparece en `#ocr-translate-result` dentro del mismo card
+
+### Architecture
+- Cero rutas nuevas — el pipeline reutiliza `POST /api/translate/text` directamente
+- El texto OCR se pasa como `<textarea name="text" class="hidden">` dentro del mini-form (misma técnica que copy/save-note, D-021 compliant)
+- Nota: la traducción falla en runtime hasta que se resuelva el blocker de argostranslate / Python 3.14 (anotado en IDEAS.md y en memoria para Phase 5)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Known issues / blockers
+- **Traducción no funcional en runtime** — argostranslate 1.11.0 es incompatible con Python 3.14+ (`pydantic.v1` en la cadena `confection`). La UI, las rutas y el pipeline OCR→Translate están implementados correctamente; solo falla el subprocess Python. Ver D-027 en DECISIONS.md. Blocker de Phase 5, no de Phase 3.
+
+### Next session should start with
+**Phase 3 — Media Tools.**
+
+Estado de Phase 2 al cierre de sesión:
+- ✅ Models panel (`src-tauri/src/tools/models.rs`)
+- ✅ OCR capture + file upload (`src-tauri/src/tools/ocr.rs`)
+- ✅ Voice-to-text Whisper (`src-tauri/src/tools/voice.rs`)
+- ✅ Translation UI + routes (`src-tauri/src/tools/translate.rs`) — backend Python bloqueado por Python 3.14, ver D-027
+- ✅ OCR + Translation pipeline (botón "Translate…" en el card de resultado OCR)
+
+**Para arrancar Phase 3, leer ROADMAP.md Phase 3 y comenzar con el primer ítem: Screen Recorder.**
+
+Contexto relevante para Phase 3:
+- ffmpeg ya está disponible como subprocess (`scripts_dir()` pattern en `voice.rs` y `ocr.rs`)
+- El sistema usa Wayland + Hyprland — para screen recording usar `wf-recorder` o `ffmpeg -f pipewire` (no `x11grab`)
+- `grim` + `slurp` ya están instalados y funcionando (usados por OCR)
+- El patrón de tool completo está establecido: `src-tauri/src/tools/{tool}.rs` + `ui/tools/{tool}/index.html` + registrar en `mod.rs` + mergear router en `server.rs`
+- AppState no necesita campos nuevos para screen recorder (el child process del recorder seguirá el mismo patrón que `VoiceRecording = Arc<Mutex<Option<Child>>>`)
+- Antes de implementar: verificar con `which wf-recorder` o `ffmpeg -f pipewire -list_devices true` qué capturadores de pantalla están disponibles en Wayland
+
+---
+
+## [2026-03-18] — Phase 2 Step 4: Translation tool
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/translate.rs` — 3 route handlers:
+  - `GET /api/translate/langs` — queries DB for installed Argos language packs (downloaded=1, tool='translate'); returns language selector form HTML; if none installed returns "no models" prompt with link to Models panel
+  - `POST /api/translate/text` — accepts `text`, `from_lang`, `to_lang` (form-encoded); spawns `python3 scripts/translate.py` in `tokio::spawn`; returns result card HTML with translated text and Copy button
+  - `POST /api/translate/copy` — copies translated text to clipboard via arboard (`spawn_blocking`)
+- `src-tauri/src/tools/mod.rs` — registered `translate` module
+- `src-tauri/src/server.rs` — imported `translate`, merged `translate::router()`
+
+**Python scripts**
+- `scripts/translate.py` — translates text via `argostranslate.translate`; discovers installed language packs at runtime; exits 1 with stderr message if pack not installed
+
+**Frontend**
+- `ui/tools/translate/index.html` — full translate panel:
+  - `hx-trigger="load"` → `GET /api/translate/langs` loads language pair form dynamically
+  - Alpine.js `x-data` with `pairs` JSON map for reactive from→to filtering
+  - Textarea for input, Translate button, loading indicator
+  - Result card: translated text + Copy to Clipboard
+- `ui/locales/en.json` — added 7 translate strings
+
+### Architecture
+- `parse_lang_pair` helper extracts `(from, to)` from `argos-{from}-{to}` model IDs
+- Handler is `Form<T>` compliant (D-021)
+- `tokio::spawn` wraps subprocess so handler thread is never blocked
+- No new Cargo.toml dependencies
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures — 5 new translate tests)
+
+### Next session should start with
+Phase 2 Step 5: OCR + Translation pipeline — after OCR, offer one-click "Translate" button that sends the extracted text to the translate tool.
+
+---
+
 ## [2026-03-18] — Phase 2 Step 3: Voice tool
 
 ### Completed

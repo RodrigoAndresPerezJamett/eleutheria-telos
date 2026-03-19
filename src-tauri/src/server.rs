@@ -18,7 +18,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
-use crate::tools::{clipboard, models as models_tool, notes, ocr, search, voice};
+use crate::tools::{clipboard, models as models_tool, notes, ocr, search, translate, voice};
 
 pub const DEFAULT_PORT: u16 = 47821;
 
@@ -206,6 +206,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(notes::router())
         .merge(ocr::router())
         .merge(search::router())
+        .merge(translate::router())
         .merge(voice::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

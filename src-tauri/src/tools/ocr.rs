@@ -72,26 +72,80 @@ async fn run_tesseract(image_path: &str, lang: &str) -> Response {
 /// Uses r##"..."## to allow `"#` inside (e.g. hx-include="#ocr-text-form"). (D-023)
 fn render_result(text: &str) -> Html<String> {
     let escaped = html_escape(text);
+    // Pre-compute ID refs to avoid "# terminating r##"..."## (D-023).
+    let ocr_text_form = "#ocr-text-form";
+    let ocr_feedback = "#ocr-feedback";
+    let ocr_translate_result = "#ocr-translate-result";
     Html(format!(
         r##"<div class="mt-4 flex flex-col gap-3">
   <pre class="text-sm text-gray-200 bg-gray-800 rounded-lg p-4 whitespace-pre-wrap break-words max-h-64 overflow-y-auto font-sans leading-relaxed">{escaped}</pre>
   <form id="ocr-text-form">
     <textarea name="text" class="hidden">{escaped}</textarea>
   </form>
-  <div class="flex gap-2">
+  <div class="flex gap-2 flex-wrap">
     <button class="text-xs text-blue-400 hover:text-blue-300 border border-blue-700 rounded px-3 py-1.5"
             hx-post="/api/ocr/copy"
-            hx-include="#ocr-text-form"
-            hx-target="#ocr-feedback"
+            hx-include="{ocr_text_form}"
+            hx-target="{ocr_feedback}"
             hx-swap="innerHTML">Copy to Clipboard</button>
     <button class="text-xs text-green-400 hover:text-green-300 border border-green-700 rounded px-3 py-1.5"
             hx-post="/api/ocr/save-note"
-            hx-include="#ocr-text-form"
-            hx-target="#ocr-feedback"
+            hx-include="{ocr_text_form}"
+            hx-target="{ocr_feedback}"
             hx-swap="innerHTML">Save as Note</button>
   </div>
   <div id="ocr-feedback" class="text-xs"></div>
-</div>"##
+
+  <!-- ── OCR → Translate pipeline ───────────────────────────────────────── -->
+  <div class="border-t border-gray-700 pt-3" x-data="{{ showTranslate: false }}">
+    <button class="text-xs text-purple-400 hover:text-purple-300 border border-purple-800 rounded px-3 py-1.5"
+            @click="showTranslate = !showTranslate">
+      Translate…
+    </button>
+    <div x-show="showTranslate" x-cloak class="mt-3 flex flex-col gap-2">
+      <form hx-post="/api/translate/text"
+            hx-target="{ocr_translate_result}"
+            hx-swap="innerHTML"
+            hx-indicator="#ocr-translate-spinner"
+            class="flex items-end gap-2 flex-wrap">
+        <textarea name="text" class="hidden">{escaped}</textarea>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">From</label>
+          <select name="from_lang"
+                  class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200">
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="pt">Portuguese</option>
+          </select>
+        </div>
+        <span class="text-gray-500 pb-1">→</span>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">To</label>
+          <select name="to_lang"
+                  class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200">
+            <option value="es">Spanish</option>
+            <option value="en">English</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="pt">Portuguese</option>
+          </select>
+        </div>
+        <button type="submit"
+                class="text-xs bg-purple-700 hover:bg-purple-600 text-white rounded px-3 py-1.5">
+          Translate
+        </button>
+        <span id="ocr-translate-spinner" class="htmx-indicator text-xs text-gray-400 italic">Translating…</span>
+      </form>
+      <div id="ocr-translate-result" class="text-sm"></div>
+    </div>
+  </div>
+</div>"##,
+        escaped = escaped,
+        ocr_text_form = ocr_text_form,
+        ocr_feedback = ocr_feedback,
+        ocr_translate_result = ocr_translate_result,
     ))
 }
 

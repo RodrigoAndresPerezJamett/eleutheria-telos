@@ -8,4 +8,5 @@ pub mod models;
 pub mod notes;
 pub mod ocr;
 pub mod search;
+pub mod translate;
 pub mod voice;

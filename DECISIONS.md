@@ -386,6 +386,27 @@ Format:
 
 ---
 
+## D-027 — argostranslate descartado como backend de traducción en producción
+
+**Decision:** `argostranslate` se usa como backend en Phase 2 (implementado, rutas y scripts en su lugar) pero **no puede ser el backend final** para producción. Será reemplazado en Phase 5.
+
+**Motivo del descarte — dos problemas comprobados en 2026-03-18:**
+1. **Incompatibilidad con Python 3.14:** la cadena de dependencias `argostranslate → spacy → thinc → confection → pydantic.v1` falla en runtime. Pydantic V1 no soporta Python 3.14+. Error: `"Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater / unable to infer type for attribute 'REGEX'"`.
+2. **Footprint desproporcionado:** `pip3 install argostranslate` descarga ~3 GB (PyTorch 915 MB, CUDA stack completo, spacy, stanza, onnxruntime, 50+ paquetes). Inaceptable para un usuario final.
+
+**Alternativas evaluadas para Phase 5:**
+- **`ctranslate2` directo + modelos Opus-MT** — ctranslate2 4.7.1 ya tiene wheel cp314 y es lo que argostranslate usa internamente. Sin la cadena spacy/stanza/pydantic. **Primera opción a evaluar.**
+- **LibreTranslate local** — REST API self-hosted, sin dependencias Python, agnóstico a la versión. Requiere que el usuario tenga el servidor corriendo.
+- **venv pinned a Python 3.12** — workaround de compatibilidad usando pyenv. Evita reescribir la integración pero añade complejidad de gestión del venv.
+
+**Estado actual:** la UI de traducción, las rutas Axum y `scripts/translate.py` están implementados correctamente. El pipeline OCR→Translate también. Solo falla el subprocess Python en runtime. En cuanto se sustituya el backend Python, todo lo demás funciona sin cambios.
+
+**Date:** 2026-03-18
+
+**Revisit:** Phase 5 — elegir entre ctranslate2 directo o LibreTranslate antes de la release pública.
+
+---
+
 ## D-022 — arboard requires `wayland-data-control` feature on Linux
 
 **Decision:** `arboard` is specified as `{ version = "3", features = ["wayland-data-control"] }` in Cargo.toml.
