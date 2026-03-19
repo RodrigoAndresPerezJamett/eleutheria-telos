@@ -20,3 +20,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Playwright review (generated artifacts)
+playwright-review/node_modules/
+playwright-review/screenshots/
+playwright-review/test-results/
+playwright-review/playwright-report/

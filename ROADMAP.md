@@ -95,21 +95,21 @@
 
 **Scope:**
 
-- [ ] **Visual design brief** — `UI_BRIEF.md` capturing aesthetic direction, color palette, typography, spacing, component patterns
-- [ ] **App shell** — sidebar, header, transitions, empty states
-- [ ] **Clipboard History panel** — list density, item preview, search bar
-- [ ] **Notes panel** — editor chrome, tag display, pin indicator
-- [ ] **OCR panel** — capture button affordance, result display
-- [ ] **Voice panel** — recording state feedback, waveform or indicator
-- [ ] **Translation panel** — language selector UX, result layout
-- [ ] **Screen / Audio / Video panels** — control layout, progress feedback
-- [ ] **Photo editor panel** — toolbar, canvas area, export flow
-- [ ] **Quick Actions panel** — pipeline list readability, step editor clarity
-- [ ] **Settings panel** — form layout, section grouping
-- [ ] **Models panel** — download progress, installed vs available states
-- [ ] **Plugin panels** — consistent chrome so plugin UIs feel native
+- [x] **Visual design brief** — `UI_BRIEF.md` capturing aesthetic direction, color palette, typography, spacing, component patterns
+- [x] **App shell** — sidebar, header, transitions, empty states
+- [x] **Clipboard History panel** — list density, item preview, search bar
+- [x] **Notes panel** — editor chrome, tag display, pin indicator
+- [x] **OCR panel** — capture button affordance, result display; card wrapper added
+- [x] **Voice panel** — recording state feedback, waveform or indicator
+- [x] **Translation panel** — language selector UX, result layout; empty state redesigned
+- [x] **Screen / Audio / Video panels** — control layout, progress feedback
+- [x] **Photo editor panel** — toolbar, canvas area, export flow
+- [x] **Quick Actions panel** — pipeline list readability, step editor clarity
+- [x] **Settings panel** — form layout, section grouping
+- [x] **Models panel** — download progress, installed vs available states
+- [x] **Plugin panels** — consistent chrome so plugin UIs feel native
 
-**Phase 4.5 is complete when** every panel has been reviewed with Playwright, the user has signed off after at least one feedback iteration, and `UI_BRIEF.md` documents the final design system.
+**Phase 4.5 is complete.** Playwright review done 2026-03-19. Every panel screenshotted and signed off. Design system in `UI_BRIEF.md`. Next: Phase 4.6 — Cohesion.
 
 ---
 

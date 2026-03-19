@@ -7,60 +7,61 @@
     </div>
   </div>
 
-  <!-- ── Language selector ──────────────────────────────────────────────── -->
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-shrink:0;">
-    <label style="font-size:12px;color:var(--text-muted);">Language:</label>
-    <select id="ocr-lang" class="input" style="width:auto;font-size:12px;padding:5px 8px;">
-      <option value="eng">English</option>
-      <option value="spa">Spanish</option>
-    </select>
-  </div>
+  <!-- ── Controls card ─────────────────────────────────────────────────── -->
+  <div class="card" style="margin-bottom:16px;flex-shrink:0;">
 
-  <!-- ── Actions ────────────────────────────────────────────────────────── -->
-  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <label style="font-size:12px;color:var(--text-muted);">Language:</label>
+      <select id="ocr-lang" class="input" style="width:auto;font-size:12px;padding:5px 8px;">
+        <option value="eng">English</option>
+        <option value="spa">Spanish</option>
+      </select>
+    </div>
 
-    <button id="capture-btn"
-            class="btn btn-primary"
-            hx-post="/api/ocr/capture"
-            hx-target="#ocr-result"
-            hx-swap="innerHTML"
-            hx-disabled-elt="#capture-btn"
-            hx-indicator="#capture-indicator"
-            hx-include="#ocr-capture-form"
-            onclick="document.getElementById('ocr-capture-lang').value = document.getElementById('ocr-lang').value">
-      Capture Screen Area
-    </button>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
 
-    <span id="capture-indicator"
-          class="htmx-indicator"
-          style="font-size:12px;color:var(--text-muted);font-style:italic;">
-      Move this window aside, then drag to select a region…
-    </span>
+      <button id="capture-btn"
+              class="btn btn-primary"
+              hx-post="/api/ocr/capture"
+              hx-target="#ocr-result"
+              hx-swap="innerHTML"
+              hx-disabled-elt="#capture-btn"
+              hx-indicator="#capture-indicator"
+              hx-include="#ocr-capture-form"
+              onclick="document.getElementById('ocr-capture-lang').value = document.getElementById('ocr-lang').value">
+        Capture Screen Area
+      </button>
 
-    <form id="ocr-file-form" hx-encoding="multipart/form-data">
-      <input type="hidden" name="lang" id="ocr-file-lang" value="eng">
-      <label class="btn btn-secondary"
-             style="cursor:pointer;"
-             onclick="document.getElementById('ocr-file-lang').value = document.getElementById('ocr-lang').value">
-        Open Image File
-        <input type="file"
-               name="image"
-               accept="image/png,image/jpeg,image/bmp,image/gif,image/tiff"
-               style="display:none;"
-               hx-post="/api/ocr/file"
-               hx-target="#ocr-result"
-               hx-swap="innerHTML"
-               hx-encoding="multipart/form-data"
-               hx-trigger="change"
-               hx-include="#ocr-file-form"
-               hx-indicator="#file-indicator">
-      </label>
-    </form>
+      <form id="ocr-file-form" hx-encoding="multipart/form-data">
+        <input type="hidden" name="lang" id="ocr-file-lang" value="eng">
+        <label class="btn btn-secondary"
+               style="cursor:pointer;"
+               onclick="document.getElementById('ocr-file-lang').value = document.getElementById('ocr-lang').value">
+          Open Image File
+          <input type="file"
+                 name="image"
+                 accept="image/png,image/jpeg,image/bmp,image/gif,image/tiff"
+                 style="display:none;"
+                 hx-post="/api/ocr/file"
+                 hx-target="#ocr-result"
+                 hx-swap="innerHTML"
+                 hx-encoding="multipart/form-data"
+                 hx-trigger="change"
+                 hx-include="#ocr-file-form"
+                 hx-indicator="#file-indicator">
+        </label>
+      </form>
 
-    <span id="file-indicator"
-          class="htmx-indicator"
-          style="font-size:12px;color:var(--text-muted);font-style:italic;">Processing…</span>
+      <span id="capture-indicator"
+            class="htmx-indicator"
+            style="font-size:12px;color:var(--text-muted);font-style:italic;">
+        Move this window aside, then drag to select a region…
+      </span>
+      <span id="file-indicator"
+            class="htmx-indicator"
+            style="font-size:12px;color:var(--text-muted);font-style:italic;">Processing…</span>
 
+    </div>
   </div>
 
   <!-- Hidden form that carries the lang field for the capture button -->

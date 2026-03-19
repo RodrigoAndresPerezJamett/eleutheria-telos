@@ -7,6 +7,34 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.5 Complete: Playwright Review + OCR card fix
+
+### Completed
+
+**Playwright visual review infrastructure (`playwright-review/`)**
+- `playwright-review/package.json` + `playwright.config.js` — Playwright 1.58 setup; serves `ui/` via Python HTTP server on port 9191; injects real session token from `~/.local/share/eleutheria-telos/server.json` via `addInitScript` before page scripts run
+- `playwright-review/tests/visual.spec.js` — screenshots all 13 panels + command palette + sidebar states
+- `.gitignore` — added Playwright node_modules, screenshots, test-results, playwright-report exclusions
+
+**Review findings — all panels signed off:**
+- Clipboard, Notes, Voice, Translate, Search, Screen Recorder, Audio Recorder, Photo Editor, Video Processor, Quick Actions, Models, Settings, Command Palette — all pass ✓
+
+**Fix: OCR panel controls wrapped in `.card`**
+- `ui/tools/ocr/index.html` — language select + action buttons now inside a `.card` div (consistent with Voice, Screen Recorder, Audio Recorder which all use `.card` for their control areas)
+- Also moved indicators inside the card for a cleaner layout
+
+### Phase 4.5 status
+**COMPLETE.** Every panel reviewed and signed off. Moving to Phase 4.6 — Cohesion.
+
+### Deferred to Phase 4.6
+- Notes "Select a note to edit" → problem-first empty state
+- Models section heading still says "TRANSLATION (ARGOS)" → update when ctranslate2 lands (D-036)
+
+### Next
+Phase 4.6 — Cohesion, starting with **translation backend fix**: replace argostranslate with ctranslate2 + Opus-MT models (D-036)
+
+---
+
 ## [2026-03-19] — Phase 4.5 Step 2: Panel Polish, Emoji Removal, Drag-to-Resize
 
 ### Completed
