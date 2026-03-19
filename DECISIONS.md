@@ -357,16 +357,16 @@ Format:
 
 ---
 
-## D-025 — Argos Translate models managed via Python subprocess
+## D-025 — Translation models managed via Python subprocess
 
-**Decision:** Use `python3 scripts/install_argos_package.py {from} {to}` to install Argos language packs. Python handles package index fetching and installation. Rust only tracks `downloaded` status in the DB.
+**Decision:** Use `python3 scripts/install_argos_package.py {from} {to}` to install translation language packs. Python handles index fetching, download, and extraction. Rust only tracks `downloaded` status in the DB.
 
 **Rejected alternatives:**
-- Direct `.argosmodel` file download from Rust — Argos package URLs are managed by their own index (JSON at GitHub); duplicating that logic in Rust is fragile
+- Direct download from Rust — Argos package URLs are managed by their own index (JSON at GitHub); duplicating that logic in Rust adds fragile coupling
 
-**Reason:** argostranslate's Python API handles package discovery, download, and installation. Python 3.14 compatible: argostranslate 1.11.0 (pure Python), ctranslate2 4.7.1 (cp314 manylinux wheel), sentencepiece 0.2.1 (cp314 manylinux wheel) — all verified.
+**Reason:** Python subprocess isolates failures (a crash doesn't crash the app) and keeps install/uninstall logic out of Rust. Scripts use `urllib` + `zipfile` — no argostranslate import. Downloads `.argosmodel` ZIP from the Argos model index, extracts CT2 files (`model.bin`, `source.spm`, `target.spm`, `config.json`) to `~/.local/share/eleutheria-telos/models/translate/{from}-{to}/`.
 
-**Date:** 2026-03-18
+**Date:** 2026-03-18 (updated 2026-03-19 — argostranslate replaced by ctranslate2 direct; see D-036)
 
 ---
 
@@ -570,6 +570,14 @@ Format:
 
 **Reason:** ctranslate2 4.7.1 has a confirmed cp314 manylinux wheel. It is what argostranslate uses internally — using it directly eliminates the entire spacy/stanza/pydantic chain. Opus-MT models in `.ctranslate2` format are available from Helsinki-NLP on HuggingFace. The existing `scripts/translate.py`, Axum routes, and UI are all correct — only the Python implementation inside the script changes.
 
-**Date:** 2026-03-19
+**Date:** 2026-03-19 — **Implemented 2026-03-19.**
+
+Scripts rewritten:
+- `scripts/translate.py` — loads `ctranslate2.Translator` + `SentencePieceProcessor` from local model dir, tokenizes with `source.spm`, translates, detokenizes with `target.spm`
+- `scripts/install_argos_package.py` — fetches Argos model index JSON via `urllib`, downloads `.argosmodel` ZIP, extracts CT2 files; zero argostranslate import
+- `scripts/uninstall_argos_package.py` — `shutil.rmtree` on the model directory
+- `scripts/requirements.txt` — `argostranslate>=1.11.0` replaced with `ctranslate2>=4.7.1` + `sentencepiece>=0.2.1`
+
+Axum routes and UI unchanged — same CLI interface.
 
 **Revisit if:** ctranslate2 drops Python 3.14 support or a better offline translation library emerges with a lighter footprint.

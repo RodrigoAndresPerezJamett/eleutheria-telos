@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 """
-Uninstall an Argos Translate language package.
+Uninstall a translation language package.
+
+Removes the model directory at:
+    ~/.local/share/eleutheria-telos/models/translate/<from>-<to>/
+
 Usage: python3 uninstall_argos_package.py <from_code> <to_code>
-Exit 0 on success or if package was not installed.
+Exit 0 on success or if package was not installed. Exit 1 on error.
 """
 import sys
+import os
+import shutil
+
+
+MODEL_BASE = os.path.join(
+    os.path.expanduser("~"),
+    ".local", "share", "eleutheria-telos", "models", "translate",
+)
 
 
 def main():
@@ -15,27 +27,17 @@ def main():
     from_code = sys.argv[1]
     to_code = sys.argv[2]
 
-    try:
-        import argostranslate.package
+    model_dir = os.path.join(MODEL_BASE, f"{from_code}-{to_code}")
 
-        installed = argostranslate.package.get_installed_packages()
-        pkg = next(
-            (p for p in installed if p.from_code == from_code and p.to_code == to_code),
-            None,
-        )
-
-        if pkg is None:
-            print(f"Package {from_code} → {to_code} not installed, nothing to do.")
-            sys.exit(0)
-
-        pkg.remove()
-        print(f"Uninstalled {from_code} → {to_code}")
-
-    except ImportError:
-        # If argostranslate is not installed, there's nothing to uninstall
+    if not os.path.isdir(model_dir):
+        print(f"Package {from_code} → {to_code} not installed, nothing to do.")
         sys.exit(0)
+
+    try:
+        shutil.rmtree(model_dir)
+        print(f"Uninstalled {from_code} → {to_code}")
     except Exception as e:
-        print(str(e), file=sys.stderr)
+        print(f"Failed to remove {model_dir}: {e}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -7,6 +7,28 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.6 Item 1: Translation backend — argostranslate → ctranslate2
+
+### Completed
+
+**Translation backend rewrite (D-036)**
+- `scripts/translate.py` — rewritten: loads `ctranslate2.Translator` + two `SentencePieceProcessor`s from `~/.local/share/eleutheria-telos/models/translate/{from}-{to}/`; tokenizes with `source.spm`, translates, detokenizes with `target.spm`; zero argostranslate import
+- `scripts/install_argos_package.py` — rewritten: fetches Argos model index JSON from GitHub via `urllib`, finds matching package, downloads `.argosmodel` ZIP (which is a standard ZIP containing CT2 model files), extracts `model.bin`, `source.spm`, `target.spm`, `config.json` to the local models dir; zero argostranslate import
+- `scripts/uninstall_argos_package.py` — rewritten: `shutil.rmtree` on the model directory; ~30 lines down from the argostranslate version
+- `scripts/requirements.txt` — `argostranslate>=1.11.0` replaced with `ctranslate2>=4.7.1` + `sentencepiece>=0.2.1`
+- Axum routes, UI, and Rust subprocess invocation unchanged — same CLI interface, same model storage path
+
+**DECISIONS.md**
+- D-036 updated: marked implemented, documents the three rewritten scripts
+- D-025 updated: no longer references argostranslate's Python API; describes current urllib/zipfile approach
+
+**ROADMAP.md** — Phase 4.6 translation checkbox marked `[x]`
+
+### Next
+Phase 4.6 item 2: **Contextual pipeline CTA** — "Create pipeline from this" button on OCR and Voice result cards, pre-filling the Quick Actions builder with the correct trigger
+
+---
+
 ## [2026-03-19] — Phase 4.5 Complete: Playwright Review + OCR card fix
 
 ### Completed
