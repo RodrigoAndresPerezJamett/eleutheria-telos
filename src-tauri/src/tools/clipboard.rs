@@ -55,7 +55,10 @@ fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
 
 fn render_list(entries: &[(String, String, i64)]) -> String {
     if entries.is_empty() {
-        return r#"<p style="font-size:13px;color:var(--text-muted);">Nothing copied yet.</p>"#.to_string();
+        return r#"<div style="padding:32px 0;text-align:center;">
+  <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 6px;">Lost something you copied?</p>
+  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.5;">Everything you copy appears here automatically.<br>Start copying and it will show up.</p>
+</div>"#.to_string();
     }
     entries
         .iter()

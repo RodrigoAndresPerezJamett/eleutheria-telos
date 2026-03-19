@@ -192,7 +192,7 @@ fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
         .join("\n");
 
     let empty = if pipelines.is_empty() {
-        r#"<p style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No pipelines yet. Create one above.</p>"#
+        r#"<p style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No pipelines yet — pick a template on the right or create one above.</p>"#
     } else {
         ""
     };

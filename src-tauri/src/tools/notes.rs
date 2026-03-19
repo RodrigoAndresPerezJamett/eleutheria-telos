@@ -70,7 +70,10 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
 
 fn render_note_list(entries: &[(String, String, String, i64, i64)]) -> String {
     if entries.is_empty() {
-        return r#"<p style="font-size:13px;color:var(--text-muted);">No notes yet.</p>"#.to_string();
+        return r#"<div style="padding:24px 8px;text-align:center;">
+  <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 6px;">Got something worth keeping?</p>
+  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.5;">Write your first note — it stays local, searchable, and yours.</p>
+</div>"#.to_string();
     }
     entries
         .iter()

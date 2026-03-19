@@ -89,8 +89,8 @@ pub async fn langs_handler(State(state): State<Arc<AppState>>) -> impl IntoRespo
         return Html(
             r#"<div class="empty-state card">
   <i data-lucide="languages" style="width:36px;height:36px;color:var(--text-muted);opacity:0.4;margin-bottom:8px;"></i>
-  <p class="empty-state-title">No language packs installed.</p>
-  <p class="empty-state-desc">Go to <strong style="color:var(--text-primary);">Models</strong> to download a language pair.</p>
+  <p class="empty-state-title">Need to translate something?</p>
+  <p class="empty-state-desc">Download a language pair from <strong style="color:var(--text-primary);">Models</strong> — fully offline, no API key needed.</p>
 </div>"#
                 .to_string(),
         )
