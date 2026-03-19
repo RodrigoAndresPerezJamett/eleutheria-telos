@@ -8,6 +8,8 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## UI / UX Ideas
 
+- **Keybindings section in Settings** — a dedicated section in the Settings panel where the user can see all keyboard shortcuts (Ctrl+K for command palette, global hotkey, etc.) and remap them. Could extend to Quick Actions triggers: assign a hotkey to run a specific pipeline directly. Natural evolution of the current hardcoded Ctrl+K listener. Phase 5.
+
 - **Draw on screen (Screen Annotation)** — draw, highlight, and annotate directly on top of live screen content. Overlay window using Tauri's transparent always-on-top window. Proposed by user during Phase 4.5 Q&A as a wanted feature.
 
 - **Dynamic color adaptation from wallpaper** — inspired by Caelestia Shell: the app UI palette adapts in real time when the desktop background changes color or a new app is opened. Optional feature the user can activate. Requires reading the dominant color from the wallpaper or sampling the screen behind the window. Architecturally complex (OS-level color sampling). Phase 6+.
