@@ -111,6 +111,36 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 4.4: Example plugin (Python)
+
+### Completed
+
+**`plugins/hello-python/` (new directory)**
+
+- `manifest.json` — full plugin manifest:
+  - `id`: `hello-python`, `runtime`: `python`, `entry`: `main.py`
+  - `routes`: `["/plugins/hello-python"]` (permission declaration for proxy)
+  - `sidebar`: `{ show: true, label: "Hello Python", order: 100, icon: "🐍" }`
+
+- `main.py` — pure stdlib HTTP server (no third-party packages):
+  - Reads `ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT` from env
+  - `GET /` or `GET /plugins/hello-python` → HTMX UI fragment (echo form + info panel)
+  - `GET /api/hello` or `GET /plugins/hello-python/api/hello` → JSON plugin info (id, port, python version, host reachability)
+  - `POST /api/echo` or `POST /plugins/hello-python/api/echo` → echoes `message` form field back as HTML
+  - Optional host callback: calls `GET /api/clipboard?limit=1` via Bearer auth to verify host connectivity
+  - Graceful shutdown on `KeyboardInterrupt`
+
+**Verified smoke test (standalone, no host running):**
+- `GET /` → correct HTMX fragment ✓
+- `GET /api/hello` → JSON with `host_reachable: false` (expected — host not running) ✓
+- `POST /api/echo message=Hola+mundo` → `<p>Plugin echoes: Hola mundo</p>` ✓
+- `GET /unknown` → `{"error": "not found"}` ✓
+
+### Next session should start with
+Phase 4.5: Example plugin (Node.js) — same structure as hello-python but Node runtime, using only Node stdlib (`http` module).
+
+---
+
 ## [2026-03-19] — Phase 4.3: Plugin system — full implementation
 
 ### Completed
