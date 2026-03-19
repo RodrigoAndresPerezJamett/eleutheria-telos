@@ -13,6 +13,7 @@ Claude Code: do not implement anything from this file unless it has been explici
 - **Themes** — community CSS themes for the shell UI. Since everything is HTML + Tailwind, a theme is just an override CSS file.
 - **Mini mode** — a compact floating mode for the app (like a widget) that shows only the most-used tool, always on top.
 - **Keyboard-first mode** — navigate all tools entirely with keyboard shortcuts, no mouse required.
+- **Global hotkey for show/hide (Phase 5)** — configurable keybind to show/hide the app window without relying on the system tray. The tray is invisible in some shell environments (e.g. Hyprland + Noctalia). A global hotkey via `tauri-plugin-global-shortcut` makes the app accessible everywhere regardless of tray support. Should be user-configurable in Settings, default e.g. `Super+E`.
 
 ---
 
@@ -21,14 +22,10 @@ Claude Code: do not implement anything from this file unless it has been explici
 - **Smart Copy** — previously considered and descoped. An OCR overlay that lets the user screenshot any part of the screen and extracts text, links, and media URLs from it. Useful for copying text from videos or images on web pages.
 - **Quick File Converter** — convert image to PDF, PDF to text, video to audio, etc. ffmpeg already handles most of this — just needs a UI. Low implementation cost.
 - **Reader Mode / Article Saver** — save a URL as clean readable text locally (like Pocket but offline). Useful with translation tool.
-- **Password Generator** — simple offline password generator and local encrypted store. No sync, no cloud. SQLite + encryption.
 - **Quick Timer / Stopwatch** — minimal but surprisingly often-needed. Trivial to implement. High MCP value: "set a 25-minute timer".
 - **Pomodoro** — extends the timer with work/break cycles. Community plugin candidate.
 - **Color Picker** — pick any color from anywhere on screen, copy hex/rgb/hsl. Common in developer toolkits.
-- **Hash Calculator** — calculate MD5/SHA256/etc of files or text. Common developer utility.
-- **JSON / YAML Formatter** — paste JSON, get it formatted. Community plugin candidate.
 - **Regex Tester** — test regular expressions with live matching. Community plugin candidate.
-- **Base64 Encoder/Decoder** — small utility, high daily use for developers.
 - **Diff Tool** — compare two pieces of text. Community plugin candidate.
 
 ---
@@ -36,10 +33,16 @@ Claude Code: do not implement anything from this file unless it has been explici
 ## Media Tools (Phase 3+)
 
 - **Video Timeline Editor** — a visual NLE with multiple tracks. Explicitly a major community plugin project, not a core feature. Estimated effort: months. Would use the Video Processor as its ffmpeg backend.
+- **Video Processor UX improvements (Phase 5 polish):**
+  - **Drag-and-drop file input** — drag a video file onto the panel to populate the path field automatically, avoiding manual copy-paste of filesystem paths.
+  - **Click-to-browse file picker** — a "Browse…" button that opens the system file manager via `tauri-plugin-dialog` (`dialog.open()` with video file filters). Requires adding `tauri-plugin-dialog` as a dependency with capability configuration.
+  - **Video preview / thumbnail** — show a static thumbnail or short preview of the loaded video before processing, so the user can confirm they selected the right file.
+  - **Visual timeline** — a minimal waveform + keyframe strip showing the video duration, with draggable in/out handles for the Trim operation. Eliminates manual `HH:MM:SS` typing. Could use `ffprobe` for duration metadata and `ffmpeg -vf thumbnail` for frame extraction.
 - **Audio Editor** — trim, fade, normalize audio. ffmpeg-based. Smaller scope than video editor.
 - **Batch Image Processing** — resize, convert, compress multiple images at once. rembg for batch background removal.
 - **Screen Annotation** — draw, highlight, and annotate on top of live screen content. Overlay window using Tauri's transparent window capabilities.
 - **GIF Recorder** — record a short screen region as a GIF. ffmpeg can do this. High demand for sharing demos.
+- **MKV output format for Screen Recorder** — wf-recorder supports `-f output.mkv` natively. MKV is a recoverable container (mp4 is not — a crash loses the file). Add a format selector (mp4 / mkv) to the Screen Recorder panel. Low effort, high value for long recordings.
 
 ---
 

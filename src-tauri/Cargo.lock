@@ -87,6 +87,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "axum",
+ "base64 0.22.1",
  "http-body-util",
  "log",
  "reqwest 0.12.28",
@@ -97,6 +98,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-log",
  "tokio",
+ "tokio-stream",
  "tower 0.4.13",
  "tower-http 0.5.2",
  "tracing",

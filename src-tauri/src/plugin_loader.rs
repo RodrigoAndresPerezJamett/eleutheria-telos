@@ -1,8 +1,9 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,
@@ -18,12 +19,95 @@ pub struct PluginManifest {
     pub sidebar: Option<SidebarConfig>,
 }
 
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SidebarConfig {
     pub show: bool,
     pub label: String,
     pub order: Option<u32>,
+}
+
+/// Runtime state for a running plugin: manifest + assigned port.
+#[derive(Clone)]
+pub struct PluginInfo {
+    pub manifest: PluginManifest,
+    pub port: u16,
+}
+
+/// Maps plugin ID → running plugin info. Guarded by a std Mutex since
+/// all operations are brief (no lock held across await points).
+pub type PluginRegistry = Arc<std::sync::Mutex<HashMap<String, PluginInfo>>>;
+
+/// Spawns a subprocess for each manifest and returns the populated registry
+/// plus the child process handles (kept alive for the duration of the app).
+///
+/// Each plugin receives these environment variables:
+/// - `ELEUTHERIA_APP_PORT`  — Axum server port (for API callbacks)
+/// - `ELEUTHERIA_TOKEN`     — session token (for API callbacks)
+/// - `ELEUTHERIA_PLUGIN_ID` — this plugin's unique ID
+/// - `ELEUTHERIA_PLUGIN_PORT` — port the plugin must listen on
+pub fn start_plugins(
+    manifests: Vec<PluginManifest>,
+    app_port: u16,
+    token: &str,
+) -> (PluginRegistry, Vec<std::process::Child>) {
+    let mut registry = HashMap::new();
+    let mut children = Vec::new();
+    // Start scanning from app_port + 1 so plugins never receive the app port,
+    // and increment after each allocation so consecutive plugins get distinct ports.
+    let mut next_port = app_port + 1;
+
+    for manifest in manifests {
+        let plugin_port = crate::server::find_free_port_from(next_port);
+        next_port = plugin_port + 1;
+        let plugin_dir = Path::new("../plugins").join(&manifest.id);
+
+        let mut cmd = match manifest.runtime.as_str() {
+            "python" => {
+                let mut c = std::process::Command::new("python3");
+                c.arg(&manifest.entry);
+                c
+            }
+            "node" => {
+                let mut c = std::process::Command::new("node");
+                c.arg(&manifest.entry);
+                c
+            }
+            "binary" => std::process::Command::new(plugin_dir.join(&manifest.entry)),
+            other => {
+                log::warn!("Plugin '{}': unknown runtime '{other}'", manifest.id);
+                continue;
+            }
+        };
+
+        cmd.current_dir(&plugin_dir)
+            .env("ELEUTHERIA_APP_PORT", app_port.to_string())
+            .env("ELEUTHERIA_TOKEN", token)
+            .env("ELEUTHERIA_PLUGIN_ID", &manifest.id)
+            .env("ELEUTHERIA_PLUGIN_PORT", plugin_port.to_string());
+
+        match cmd.spawn() {
+            Ok(child) => {
+                log::info!(
+                    "Plugin '{}' v{} started on port {plugin_port}",
+                    manifest.name,
+                    manifest.version
+                );
+                registry.insert(
+                    manifest.id.clone(),
+                    PluginInfo {
+                        manifest,
+                        port: plugin_port,
+                    },
+                );
+                children.push(child);
+            }
+            Err(e) => {
+                log::warn!("Plugin '{}': failed to start — {e}", manifest.id);
+            }
+        }
+    }
+
+    (Arc::new(std::sync::Mutex::new(registry)), children)
 }
 
 /// Scans `../plugins/*/manifest.json` and returns validated manifests.

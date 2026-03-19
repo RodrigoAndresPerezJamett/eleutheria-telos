@@ -1,0 +1,20 @@
+{
+  "id": "hello-python",
+  "name": "Hello Python",
+  "version": "0.1.0",
+  "author": "Eleutheria Telos",
+  "description": "Reference Python plugin — demonstrates the plugin API, sidebar entry, and HTMX UI.",
+  "entry": "main.py",
+  "runtime": "python",
+  "min_app_version": "0.1.0",
+  "icon": "🐍",
+  "routes": [
+    "/plugins/hello-python"
+  ],
+  "permissions": [],
+  "sidebar": {
+    "show": true,
+    "label": "Hello Python",
+    "order": 100
+  }
+}

@@ -1,4 +1,6 @@
+use crate::tools::audio_recorder::AudioRecording;
 use crate::tools::models::DownloadMap;
+use crate::tools::screen_recorder::ScreenRecording;
 use crate::tools::voice::VoiceRecording;
 use axum::{
     extract::{Path, Request, State},
@@ -11,16 +13,26 @@ use axum::{
 use serde::Serialize;
 use serde_json::json;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::event_bus::EventBus;
 use crate::mcp;
-use crate::tools::{clipboard, models as models_tool, notes, ocr, search, translate, voice};
+use crate::plugin_loader::PluginRegistry;
+use crate::plugins;
+use crate::tools::{
+    audio_recorder, clipboard, models as models_tool, notes, ocr, photo_editor, screen_recorder,
+    search, translate, video_processor, voice,
+};
 
 pub const DEFAULT_PORT: u16 = 47821;
+
+/// Maps session ID → SSE sender for the MCP SSE transport.
+/// Each `GET /mcp` connection creates one entry; removed when the client disconnects.
+pub type McpSessions = Arc<Mutex<HashMap<String, mpsc::Sender<String>>>>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,6 +46,16 @@ pub struct AppState {
     pub download_states: DownloadMap,
     /// Holds the ffmpeg child process while a voice recording is in progress.
     pub voice_recording: VoiceRecording,
+    /// Holds the wf-recorder child process and output path while screen recording.
+    pub screen_recording: ScreenRecording,
+    /// Holds the ffmpeg child process and output path while audio recording.
+    pub audio_recording: AudioRecording,
+    /// Active MCP SSE sessions: session_id → channel sender.
+    pub mcp_sessions: McpSessions,
+    /// Running plugins: plugin_id → port + manifest.
+    pub plugin_registry: PluginRegistry,
+    /// Child process handles for all running plugins (kept alive to avoid orphaning).
+    pub plugin_processes: Arc<std::sync::Mutex<Vec<std::process::Child>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -201,13 +223,19 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/mcp",
             get(mcp::mcp_sse_handler).post(mcp::mcp_post_handler),
         )
+        .merge(mcp::router())
         .merge(clipboard::router())
         .merge(models_tool::router())
         .merge(notes::router())
         .merge(ocr::router())
         .merge(search::router())
+        .merge(audio_recorder::router())
+        .merge(photo_editor::router())
+        .merge(screen_recorder::router())
+        .merge(video_processor::router())
         .merge(translate::router())
         .merge(voice::router())
+        .merge(plugins::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -233,7 +261,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
 /// Synchronous port detection for use inside Tauri's setup hook.
 pub fn find_free_port_sync() -> u16 {
-    let mut port = DEFAULT_PORT;
+    find_free_port_from(DEFAULT_PORT)
+}
+
+/// Like `find_free_port_sync` but starts scanning from `start`.
+/// Use this when allocating plugin ports to avoid returning the same port
+/// that was already reserved for the app or for a previous plugin.
+pub fn find_free_port_from(start: u16) -> u16 {
+    let mut port = start;
     loop {
         if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
             return port;

@@ -54,11 +54,11 @@
 
 **Goal:** Screen recording and basic photo editing.
 
-- [ ] **Screen recorder** — record full screen or selected window, optional mic audio overlay, save as mp4
-- [ ] **Audio recorder** — record microphone to mp3/wav
-- [ ] **Photo editor** — open image, paint/erase (for manual background removal), layer a second image on top, export
-- [ ] **Background removal** — remove image background with rembg (AI, offline), or manually with eraser brush
-- [ ] **Video processor** — cut/trim video, extract audio, compress, change resolution — all via ffmpeg, no visual timeline
+- [x] **Screen recorder** — record full screen or selected window, optional mic audio overlay, save as mp4
+- [x] **Audio recorder** — record microphone to mp3/wav
+- [x] **Photo editor** — open image, paint/erase (for manual background removal), layer a second image on top, export
+- [x] **Background removal** — remove image background with rembg (AI, offline), or manually with eraser brush
+- [x] **Video processor** — cut/trim video, extract audio, compress, change resolution — all via ffmpeg, no visual timeline
 
 **Phase 3 is complete when** a user can record their screen, do basic photo compositing, and process videos without a third-party app.
 
@@ -68,11 +68,11 @@
 
 **Goal:** Make the app usable as AI agent infrastructure and open it to community developers.
 
-- [ ] **MCP server — stdio transport** — all built-in tools accessible as MCP tools
-- [ ] **MCP server — SSE transport** — accessible from web-based agent clients
-- [ ] **Plugin system — full implementation** — plugins run, routes proxied, permissions enforced, sidebar entry added
-- [ ] **Example plugin (Python)** — reference implementation with full manifest
-- [ ] **Example plugin (Node.js)** — reference implementation
+- [x] **MCP server — stdio transport** — all built-in tools accessible as MCP tools
+- [x] **MCP server — SSE transport** — accessible from web-based agent clients
+- [x] **Plugin system — full implementation** — plugins run, routes proxied, permissions enforced, sidebar entry added
+- [x] **Example plugin (Python)** — reference implementation with full manifest
+- [x] **Example plugin (Node.js)** — reference implementation
 - [ ] **Plugin developer documentation** — how to build, manifest schema, available permissions, event bus events
 - [ ] **Quick Actions (basic)** — connect tool events to actions without code (e.g., auto-translate after OCR)
 
@@ -102,7 +102,7 @@
 - [ ] Phone layout (<640px): bottom nav with 4 tools: Voice-to-Text, OCR (camera input), Notes, Clipboard
 - [ ] Tablet layout (640px–1023px): icon-only sidebar with same 4 tools
 - [ ] Background Foreground Service for clipboard monitoring on Android
-- [ ] OCR uses device camera as capture source (not screen area)
+- [ ] OCR uses device camera as capture source (it also can use screen area, it has to be available on all platforms)
 - [ ] APK available for sideloading, eventually submitted to F-Droid
 
 **iOS / iPhone / iPad:** Not scheduled. Blocked on Tauri iOS reaching stable. The responsive layouts (mobile + tablet breakpoints) are already designed to work on iOS screen sizes — no architecture changes needed when Tauri iOS is ready.

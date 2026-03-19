@@ -308,6 +308,13 @@ mod tests {
         let download_states =
             std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
         let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+        let screen_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+        let audio_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+        let mcp_sessions =
+            std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+        let plugin_registry =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        let plugin_processes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         Arc::new(AppState {
             db,
             session_token: "test-token".to_string(),
@@ -316,6 +323,11 @@ mod tests {
             clipboard_suppress_tx,
             download_states,
             voice_recording,
+            screen_recording,
+            audio_recording,
+            mcp_sessions,
+            plugin_registry,
+            plugin_processes,
         })
     }
 

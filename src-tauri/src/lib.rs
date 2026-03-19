@@ -4,6 +4,7 @@ mod event_bus;
 mod i18n;
 mod mcp;
 mod plugin_loader;
+mod plugins;
 mod server;
 pub mod tools;
 
@@ -31,12 +32,25 @@ pub fn run() {
             let port = server::find_free_port_sync();
             let session_token = uuid::Uuid::new_v4().to_string();
 
+            // Write server info for the MCP stdio binary to discover.
+            write_server_info(port, &session_token);
+
             // ── Database ────────────────────────────────────────────────────
             let db = tauri::async_runtime::block_on(db::init_db())?;
 
             let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
             let download_states = StdArc::new(Mutex::new(HashMap::new()));
             let voice_recording = StdArc::new(Mutex::new(None));
+            let screen_recording = StdArc::new(Mutex::new(None));
+            let audio_recording = StdArc::new(Mutex::new(None));
+            let mcp_sessions: server::McpSessions = StdArc::new(Mutex::new(HashMap::new()));
+
+            // ── Plugin loader ───────────────────────────────────────────────
+            let manifests = plugin_loader::scan_plugins();
+            log::info!("{} plugin(s) detected at startup", manifests.len());
+            let (plugin_registry, plugin_children) =
+                plugin_loader::start_plugins(manifests, port, &session_token);
+            let plugin_processes = StdArc::new(std::sync::Mutex::new(plugin_children));
 
             let state = Arc::new(AppState {
                 db,
@@ -46,6 +60,11 @@ pub fn run() {
                 clipboard_suppress_tx,
                 download_states,
                 voice_recording,
+                screen_recording,
+                audio_recording,
+                mcp_sessions,
+                plugin_registry,
+                plugin_processes,
             });
 
             // ── Tauri managed state (for invoke commands) ───────────────────
@@ -66,10 +85,6 @@ pub fn run() {
             // ── i18n ────────────────────────────────────────────────────────
             let i18n = i18n::I18n::load();
             log::info!("i18n ready: {}", i18n.t("app.name"));
-
-            // ── Plugin loader ───────────────────────────────────────────────
-            let plugins = plugin_loader::scan_plugins();
-            log::info!("{} plugin(s) detected at startup", plugins.len());
 
             // ── System tray ─────────────────────────────────────────────────
             let show_item = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
@@ -100,10 +115,36 @@ pub fn run() {
                 .build(app)?;
 
             // ── Main window ──────────────────────────────────────────────────
-            // Inject session token and port into the WebView before any script runs.
+            // Build the sidebar plugin list for injection into the WebView.
+            let sidebar_plugins: Vec<_> = state
+                .plugin_registry
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|p| p.manifest.sidebar.as_ref().map(|s| s.show).unwrap_or(false))
+                .map(|p| {
+                    serde_json::json!({
+                        "id": p.manifest.id,
+                        "name": p.manifest.name,
+                        "icon": p.manifest.icon,
+                        "label": p.manifest.sidebar.as_ref()
+                            .map(|s| s.label.clone())
+                            .unwrap_or_default(),
+                        "order": p.manifest.sidebar.as_ref()
+                            .and_then(|s| s.order)
+                            .unwrap_or(u32::MAX),
+                    })
+                })
+                .collect();
+            let mut sidebar_plugins = sidebar_plugins;
+            sidebar_plugins.sort_by_key(|p| p["order"].as_u64().unwrap_or(u64::MAX));
+            let plugins_json =
+                serde_json::to_string(&sidebar_plugins).unwrap_or_else(|_| "[]".to_string());
+
+            // Inject session token, port, and plugin list before any page script runs.
             let init_script = format!(
-                "window.__SESSION_TOKEN__ = '{}'; window.__API_PORT__ = {};",
-                session_token, port
+                "window.__SESSION_TOKEN__ = '{}'; window.__API_PORT__ = {}; window.__SIDEBAR_PLUGINS__ = {};",
+                session_token, port, plugins_json
             );
 
             WebviewWindowBuilder::new(
@@ -125,6 +166,7 @@ pub fn run() {
             api::get_api_port,
             api::health_check,
             api::get_config,
+            api::list_sidebar_plugins,
         ])
         .on_window_event(|window, event| {
             // Closing the window hides it instead of quitting (tray-resident app).
@@ -135,4 +177,21 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// ── MCP server info ───────────────────────────────────────────────────────────
+
+/// Writes port + session token to ~/.local/share/eleutheria-telos/server.json
+/// so the `eleutheria-mcp` stdio binary can discover the running instance.
+fn write_server_info(port: u16, token: &str) {
+    let base = std::env::var("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            std::path::PathBuf::from(home).join(".local/share")
+        });
+    let dir = base.join("eleutheria-telos");
+    let _ = std::fs::create_dir_all(&dir);
+    let json = serde_json::json!({ "port": port, "token": token });
+    let _ = std::fs::write(dir.join("server.json"), json.to_string());
 }

@@ -80,6 +80,34 @@
         swap:    'innerHTML',
         headers: { 'Authorization': 'Bearer ' + token }
       });
+
+      // Plugin sidebar entries — injected by Tauri initialization_script before page load.
+      var plugins = window.__SIDEBAR_PLUGINS__;
+      if (plugins && plugins.length) {
+        var desktop = document.getElementById('plugin-sidebar-desktop');
+        var tablet  = document.getElementById('plugin-sidebar-tablet');
+        plugins.forEach(function (p) {
+          var icon  = p.icon  || '🔌';
+          var label = p.label || p.name;
+          var id    = p.id;
+
+          var li1 = document.createElement('li');
+          li1.innerHTML =
+            '<button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"' +
+            ' hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+            '<span class="text-lg">' + icon + '</span><span>' + label + '</span></button>';
+          desktop.appendChild(li1);
+          htmx.process(li1);
+
+          var li2 = document.createElement('li');
+          li2.innerHTML =
+            '<button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"' +
+            ' title="' + label + '" hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+            icon + '</button>';
+          tablet.appendChild(li2);
+          htmx.process(li2);
+        });
+      }
     }
 
     document.addEventListener('DOMContentLoaded', initApp);
@@ -176,7 +204,54 @@
           <span>Search</span>
         </button>
       </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'screen-recorder' }"
+                hx-get="/tools/screen-recorder"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'screen-recorder'">
+          <span class="text-lg">🎬</span>
+          <span>Screen Rec</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'audio-recorder' }"
+                hx-get="/tools/audio-recorder"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'audio-recorder'">
+          <span class="text-lg">🎙</span>
+          <span>Audio Rec</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'photo-editor' }"
+                hx-get="/tools/photo-editor"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'photo-editor'">
+          <span class="text-lg">🖼️</span>
+          <span>Photo Edit</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'video-processor' }"
+                hx-get="/tools/video-processor"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'video-processor'">
+          <span class="text-lg">🎞️</span>
+          <span>Video</span>
+        </button>
+      </li>
     </ul>
+
+    <!-- Plugin sidebar items — populated by initApp() from window.__SIDEBAR_PLUGINS__ -->
+    <ul id="plugin-sidebar-desktop" class="space-y-1 px-2 mt-2"></ul>
 
     <div class="px-2 mt-auto space-y-1">
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
@@ -252,7 +327,43 @@
                 hx-swap="innerHTML"
                 @click="activeTool = 'search'">🔍</button>
       </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Screen Recorder"
+                hx-get="/tools/screen-recorder"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'screen-recorder'">🎬</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Audio Recorder"
+                hx-get="/tools/audio-recorder"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'audio-recorder'">🎙</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Photo Editor"
+                hx-get="/tools/photo-editor"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'photo-editor'">🖼️</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Video Processor"
+                hx-get="/tools/video-processor"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'video-processor'">🎞️</button>
+      </li>
     </ul>
+
+    <!-- Plugin sidebar items (icon-only) — populated by initApp() -->
+    <ul id="plugin-sidebar-tablet" class="space-y-2 mt-2"></ul>
+
     <div class="mt-auto flex flex-col gap-1">
       <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
               title="Models"

@@ -7,6 +7,61 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4 complete: Plugin system + sidebar + bug fixes
+
+### Completed
+
+**Phase 4.3 – Plugin system bug fixes (this session)**
+
+- `src-tauri/src/plugins.rs` — fixed raw string literals: `r#"..."#` → `r##"..."##` (the `"#` in `hx-target="#tool-panel"` was terminating the raw string causing a parse error); removed `axum::extract::Path` extractor from `plugin_proxy_handler`, now extracts `plugin_id` from `req.uri().path()` directly (fixes "Wrong number of path arguments" 500 on `/plugins/:id/*path`); fixed permission check logic (was checking declared routes against the URL prefix; now checks request path against each declared route)
+- `src-tauri/src/server.rs` — added `find_free_port_from(start: u16) -> u16`; `find_free_port_sync()` now delegates to it; fixed plugin port collision (all plugins were allocated the same port because each call to `find_free_port_sync()` scanned from `DEFAULT_PORT` before the server had bound)
+- `src-tauri/src/plugin_loader.rs` — fixed port allocation: tracks `next_port = app_port + 1`, increments `next_port = plugin_port + 1` after each allocation via `find_free_port_from(next_port)`
+- `src-tauri/Cargo.toml` — added `default-run = "app"` to `[package]` (fixes "could not determine which binary to run" when two `[[bin]]` entries exist)
+- `src-tauri/src/api.rs` — added `list_sidebar_plugins` Tauri command (returns sorted list of plugins with sidebar entries)
+- `src-tauri/src/lib.rs` — `initialization_script` now injects `window.__SIDEBAR_PLUGINS__` (sorted JSON array of plugin sidebar entries) before any page script runs
+
+**Plugin sidebar in UI**
+
+- `ui/index.html` — added plugin sidebar loading to `initApp()` (reads `window.__SIDEBAR_PLUGINS__`, creates `<li>` elements via `document.createElement`, calls `htmx.process()` on each); added `<ul id="plugin-sidebar-desktop">` after the main tool list; added `<ul id="plugin-sidebar-tablet">` in the tablet icon sidebar — both populated at startup from the injected plugin list
+
+**Note:** `ui/shell.html` is NOT loaded by the app (Tauri loads `ui/index.html` via `WebviewUrl::App("index.html")`). Shell.html is kept as a standalone browser-preview artifact only.
+
+### Verified working (end-to-end)
+- 🐍 Hello Python and 🟩 Hello Node appear in the sidebar below the main tools
+- Echo form works: typing a message and clicking "Echo" returns the message (both plugins)
+- "Fetch plugin info" shows `host_reachable: true` and correct plugin metadata (both plugins)
+- Plugins run on separate ports (47854, 47863 in latest run) — no port collision
+- Plugin proxy correctly routes `/plugins/hello-python/api/echo` → Python process → response back to WebView
+
+### Bug fixes summary
+| Bug | Root cause | Fix |
+|-----|-----------|-----|
+| All plugins same port | `find_free_port_sync()` rescans from DEFAULT_PORT each call | `find_free_port_from(next_port)` with counter |
+| Proxy 500 on subpaths | `Path<String>` extractor doesn't work with 2-segment routes | Extract from `req.uri().path()` directly |
+| Permission check never 403 | Logic inverted (routes checked against request prefix) | Check request path against each declared route |
+| `host_reachable: false` | Plugins called `/api/clipboard` (returns HTML, not JSON) | Call `/health` (returns JSON) |
+| Sidebar plugins not visible | All edits were applied to `shell.html`; app loads `index.html` | Apply changes to `index.html` |
+| `cargo tauri dev` binary error | Two `[[bin]]` entries, no `default-run` | Added `default-run = "app"` to `Cargo.toml` |
+
+### Files changed this session
+- `src-tauri/Cargo.toml` — `default-run = "app"`
+- `src-tauri/src/api.rs` — `list_sidebar_plugins` command
+- `src-tauri/src/lib.rs` — `__SIDEBAR_PLUGINS__` injection + `list_sidebar_plugins` in invoke_handler
+- `src-tauri/src/server.rs` — `find_free_port_from(start)`
+- `src-tauri/src/plugin_loader.rs` — port counter fix
+- `src-tauri/src/plugins.rs` — proxy handler fix + permission check fix + raw string fix
+- `ui/index.html` — plugin sidebar loading in `initApp()` + sidebar `<ul>` containers
+- `ui/shell.html` — same changes (for browser-preview parity, but not loaded by app)
+
+### CI status
+- Tests pass locally (all prior tests still green)
+- `cargo fmt --check` ✓ (no new formatting issues)
+
+### Next session should start with
+Phase 4.6: Plugin developer documentation — `plugins/README.md` covering manifest schema, env vars, routing/permissions, HTMX UI conventions, and local dev workflow.
+
+---
+
 ## [2026-03-18] — Project foundation
 
 ### Completed
@@ -108,6 +163,393 @@ Removed `devUrl` from `tauri.conf.json`. Tauri now serves the shell as a static 
 
 ### Next session should start with
 Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
+
+---
+
+## [2026-03-19] — Phase 4.5: Example plugin (Node.js)
+
+### Completed
+
+**`plugins/hello-node/` (new directory)**
+
+- `manifest.json` — full plugin manifest:
+  - `id`: `hello-node`, `runtime`: `node`, `entry`: `main.js`
+  - `routes`: `["/plugins/hello-node"]`
+  - `sidebar`: `{ show: true, label: "Hello Node", order: 101, icon: "🟩" }`
+
+- `main.js` — Node.js stdlib-only HTTP server (no npm packages):
+  - Uses `node:http`, `node:url`, `node:querystring`
+  - `GET /` or `GET /plugins/hello-node` → HTMX UI fragment
+  - `GET /api/hello` → HTML `<pre>` with JSON info (id, port, node version, host reachability)
+  - `POST /api/echo` → echoes `message` form field back as HTML
+  - Optional host callback via `http.request` with Bearer auth
+  - Graceful shutdown on `SIGTERM`
+
+**Verified smoke test (standalone):**
+- `GET /` → HTMX fragment ✓
+- `GET /api/hello` → JSON with `host_reachable: false`, `node_version: v22.20.0` ✓
+- `POST /api/echo message=Hola+Node` → `<p>Plugin echoes: Hola Node</p>` ✓
+- `GET /unknown` → `{"error":"not found"}` ✓
+
+### Next session should start with
+Phase 4.6: Plugin developer documentation — `plugins/README.md` covering manifest schema, available env vars, routing, permissions, HTMX UI conventions, and how to run plugins in dev.
+
+---
+
+## [2026-03-19] — Phase 4.4: Example plugin (Python)
+
+### Completed
+
+**`plugins/hello-python/` (new directory)**
+
+- `manifest.json` — full plugin manifest:
+  - `id`: `hello-python`, `runtime`: `python`, `entry`: `main.py`
+  - `routes`: `["/plugins/hello-python"]` (permission declaration for proxy)
+  - `sidebar`: `{ show: true, label: "Hello Python", order: 100, icon: "🐍" }`
+
+- `main.py` — pure stdlib HTTP server (no third-party packages):
+  - Reads `ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT` from env
+  - `GET /` or `GET /plugins/hello-python` → HTMX UI fragment (echo form + info panel)
+  - `GET /api/hello` or `GET /plugins/hello-python/api/hello` → JSON plugin info (id, port, python version, host reachability)
+  - `POST /api/echo` or `POST /plugins/hello-python/api/echo` → echoes `message` form field back as HTML
+  - Optional host callback: calls `GET /api/clipboard?limit=1` via Bearer auth to verify host connectivity
+  - Graceful shutdown on `KeyboardInterrupt`
+
+**Verified smoke test (standalone, no host running):**
+- `GET /` → correct HTMX fragment ✓
+- `GET /api/hello` → JSON with `host_reachable: false` (expected — host not running) ✓
+- `POST /api/echo message=Hola+mundo` → `<p>Plugin echoes: Hola mundo</p>` ✓
+- `GET /unknown` → `{"error": "not found"}` ✓
+
+### Next session should start with
+Phase 4.5: Example plugin (Node.js) — same structure as hello-python but Node runtime, using only Node stdlib (`http` module).
+
+---
+
+## [2026-03-19] — Phase 4.3: Plugin system — full implementation
+
+### Completed
+
+**Plugin process management (`plugin_loader.rs`)**
+- Added `#[derive(Clone)]` to `PluginManifest` and `SidebarConfig`
+- Added `PluginInfo { manifest: PluginManifest, port: u16 }` struct (Clone)
+- Added `PluginRegistry = Arc<std::sync::Mutex<HashMap<String, PluginInfo>>>` type alias
+- Added `start_plugins(manifests, app_port, token) -> (PluginRegistry, Vec<std::process::Child>)`:
+  - Allocates a free port per plugin via `find_free_port_sync()`
+  - Spawns each plugin as a subprocess via `std::process::Command` (python3/node/binary runtimes)
+  - Injects env vars: `ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT`
+  - Returns populated registry + child handles (held alive to avoid orphaning)
+
+**Plugin proxy + sidebar (`src-tauri/src/plugins.rs` — new file)**
+- `GET /api/plugins` — JSON list of all running plugins
+- `GET /api/plugins/sidebar[?layout=tablet]` — HTMX `<li>` fragments sorted by `sidebar.order`, icon-only when `layout=tablet`
+- `* /plugins/:plugin_id` and `* /plugins/:plugin_id/*path` — full reverse proxy:
+  1. 404 if plugin not in registry
+  2. 403 if route not declared in `manifest.routes`
+  3. Strips `/plugins/{id}` prefix, builds `http://127.0.0.1:{port}/{subpath}` target
+  4. Forwards all non-hop-by-hop headers + `x-session-token` + `x-plugin-id`
+  5. Returns plugin response (status + headers + body) or 502 if unreachable
+
+**AppState extended (`server.rs`, `lib.rs`)**
+- Added `plugin_registry: PluginRegistry` and `plugin_processes: Arc<std::sync::Mutex<Vec<std::process::Child>>>` to `AppState`
+- `lib.rs`: calls `plugin_loader::start_plugins()` at startup, stores registry and child handles in state
+- `server.rs`: registers `plugins::router()` in `build_router()`
+
+**Test constructors updated**
+- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs` — added `plugin_registry` and `plugin_processes` fields to all `make_test_state()` functions
+
+**Shell HTMX plugin sidebar (`ui/shell.html`)**
+- Desktop sidebar: added `<ul id="plugin-sidebar-desktop">` after the main `<ul>`, loads via `hx-get="/api/plugins/sidebar"` on `load`
+- Tablet sidebar: added `<ul id="plugin-sidebar-tablet">`, loads via `hx-get="/api/plugins/sidebar?layout=tablet"` on `load`
+- Plugin entries appear below built-in tools, sorted by `sidebar.order` from manifest
+
+**Bug fix**
+- `plugins.rs`: raw string literals for HTML with `hx-target="#tool-panel"` changed from `r#"..."#` to `r##"..."##` — the `"#` sequence inside the HTML terminated the raw string early causing a parse error
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 4.4: Example plugin (Python) — a reference plugin implementation with `manifest.json`, HTTP server on assigned port, and at least one sidebar entry and one API route.
+
+---
+
+## [2026-03-19] — Phase 4.2: MCP SSE transport
+
+### Completed
+
+**MCP SSE transport (`GET /mcp`, `POST /mcp?sessionId=...`)**
+- `src-tauri/src/mcp.rs` — replaced 501 stubs with full SSE implementation:
+  - `mcp_sse_handler` (`GET /mcp`): creates a session ID, allocates a buffered mpsc channel (cap 64), pre-fills the `endpoint` event, stores the sender in `AppState::mcp_sessions`, returns an SSE stream via `ReceiverStream`
+  - `mcp_post_handler` (`POST /mcp?sessionId=...`): looks up the session, spawns a background task that calls `process_sse_message()`, returns `202 Accepted` immediately
+  - `process_sse_message()`: handles `initialize`, `initialized` (notification, no response), `ping`, `tools/list`, `tools/call`, and unknown-method errors
+  - `call_tool_sse()`: dispatches all 11 tools via loopback HTTP (`http://127.0.0.1:{port}/api/mcp/...`) using `SseHttpClient` (mirrors `McpClient` in stdio binary)
+  - `SseHttpClient`: struct wrapping `reqwest::Client` with bearer auth; `get_query`, `post_form`, `put_form`, `delete` methods
+  - `mcp_tools()`: shared tool manifest (11 tools with JSON Schema) — also used by `tools/list` in `process_sse_message`
+- `src-tauri/src/server.rs`:
+  - Added `McpSessions = Arc<Mutex<HashMap<String, mpsc::Sender<String>>>>` type alias
+  - Added `mcp_sessions: McpSessions` field to `AppState`
+- `src-tauri/src/lib.rs`: initializes `mcp_sessions: Arc::new(Mutex::new(HashMap::new()))` at startup
+- `src-tauri/Cargo.toml`: added `tokio-stream = { version = "0.1" }` for `ReceiverStream`
+- 4 test `make_test_state()` constructors updated (`clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs`)
+
+**Protocol:**
+- `GET /mcp` → SSE stream; first event is `event: endpoint\ndata: /mcp?sessionId={uuid}`
+- Client POSTs JSON-RPC to `POST /mcp?sessionId={uuid}` (with Bearer token)
+- Responses arrive as `event: message\ndata: {json-rpc-response}` on the SSE stream
+- Notifications (e.g. `initialized`) → no response event sent
+
+### Architecture
+- Session map keyed by UUID; sender cloned from map and moved into background task — receiver lives in the SSE stream
+- Tool calls make loopback HTTP requests to the same Axum process rather than re-implementing handlers inline (single source of truth, same auth path)
+- `SseHttpClient` is defined locally in `mcp.rs` (not shared with stdio binary) to keep binary free of lib dependencies (D-033)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 4.3: Plugin system — full implementation. Plugins run their own process, routes are proxied through Axum, permissions are enforced, and a sidebar entry is added per plugin. Start with `plugin_loader.rs` (extend with process management) and `server.rs` (dynamic route proxying).
+
+---
+
+## [2026-03-19] — Phase 4.1: MCP stdio transport
+
+### Completed
+
+**MCP JSON API (Axum — `/api/mcp/...`)**
+- `src-tauri/src/mcp.rs` — full rewrite (was Phase 0 stubs):
+  - `GET /api/mcp/clipboard` — list/search clipboard history, returns JSON
+  - `POST /api/mcp/clipboard/copy` — write to clipboard (arboard)
+  - `GET /api/mcp/notes` — list notes; FTS5 MATCH search via `?q=`
+  - `POST /api/mcp/notes` — create note (form: title, content, tags)
+  - `PUT /api/mcp/notes/:id` — partial update (dynamic SET, optional fields)
+  - `DELETE /api/mcp/notes/:id` — delete note
+  - `POST /api/mcp/ocr/file` — tesseract OCR from file path
+  - `POST /api/mcp/voice/transcribe` — Whisper transcription from file path
+  - `POST /api/mcp/translate` — translate via scripts/translate.py
+  - `POST /api/mcp/video/process` — ffmpeg (trim/extract_audio/compress/resize)
+  - `POST /api/mcp/photo/rembg` — rembg_remove.py, saves PNG to ~/Pictures/Eleutheria/
+  - SSE stubs `/mcp` (GET/POST) kept as NOT_IMPLEMENTED for Phase 4.2
+  - `pub fn router()` registered in `server.rs`
+- `src-tauri/src/server.rs` — added `.merge(mcp::router())`
+
+**MCP stdio binary**
+- `src-tauri/src/bin/mcp_stdio.rs` — new: implements JSON-RPC 2.0 over stdin/stdout
+  - Reads `~/.local/share/eleutheria-telos/server.json` (port + token written at app startup)
+  - Handles: `initialize`, `initialized`, `tools/list`, `tools/call`, `ping`
+  - 11 tools defined with full JSON Schema `inputSchema`
+  - HTTP client (`McpClient`) proxies all tool calls to Axum via reqwest
+- `src-tauri/src/lib.rs` — writes `server.json` at startup via `write_server_info(port, token)`
+
+**Cargo.toml changes**
+- `[[bin]]` entry for `eleutheria-mcp` (path: `src/bin/mcp_stdio.rs`)
+- `tokio` — added `io-std` feature (async stdin/stdout for MCP binary)
+- `reqwest` — added `json` feature (`Response::json()` for HTTP client in MCP binary)
+
+### Architecture
+- `reqwest` in `[dependencies]` is shared across all targets (lib + both binaries) — no separate deps needed (D-033)
+- MCP binary is standalone: does NOT import `app_lib`. It only needs `serde_json`, `tokio`, `reqwest`
+- JSON API routes are behind the same Bearer auth middleware as all other routes
+- `photo_rembg` MCP route accepts a file path instead of multipart upload — consistent with video_processor (D-030), avoids base64-encoding large files over localhost
+- Tags in MCP routes use comma-separated string input → stored as JSON array in DB
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Usage
+Configure in Claude Desktop / Cursor:
+```json
+{
+  "mcpServers": {
+    "eleutheria": {
+      "command": "/path/to/target/debug/eleutheria-mcp"
+    }
+  }
+}
+```
+
+### Next session should start with
+Phase 4.2: MCP server — SSE transport. Replace the `/mcp` 501 stubs with a real SSE implementation (Server-Sent Events stream for AI agent clients). Then Phase 4.3: Plugin system full implementation.
+
+---
+
+## [2026-03-19] — Phase 3 bugfix: Video Processor encoder
+
+### Fixed
+- **compress + resize failing** — `h264_vaapi` unavailable at runtime: AMD GPU open-source mesa driver has no H.264 VAAPI entrypoints (`vainfo` empty; error: `No usable encoding entrypoint found for profile VAProfileH264High`).
+- Switched both operations to `libx264 -crf {value} -preset fast` (confirmed available via `ffmpeg -encoders` on Nobara's build). CRF range 18–40 matches the existing QP slider — no UX change needed beyond relabeling.
+- UI label updated: "QP" → "CRF", description updated from h264_vaapi to libx264.
+- D-032 added to DECISIONS.md documenting the switch and the vaapi failure root cause.
+
+### CI status
+- `cargo fmt --check` ✓ · `cargo clippy -- -D warnings` ✓ · `cargo test` ✓ (19 tests)
+
+---
+
+## [2026-03-19] — Phase 3 Step 4: Video Processor (Phase 3 complete)
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/video_processor.rs` — 1 route handler:
+  - `POST /api/video/process` — form-urlencoded body; dispatches to ffmpeg based on `operation` field
+  - **Trim**: `ffmpeg -i input -ss start -to end -c copy output.mp4` (stream copy, lossless, near-instant)
+  - **Extract audio**: `ffmpeg -i input -vn -c:a {libmp3lame|pcm_s16le|flac} output.{mp3|wav|flac}`
+  - **Compress**: `ffmpeg -vaapi_device /dev/dri/renderD128 -i input -vf 'format=nv12,hwupload' -c:v h264_vaapi -qp {18–40} output.mp4` (optional downscale)
+  - **Resize**: same pipeline with `scale=-2:{height},format=nv12,hwupload`; preserves aspect ratio
+- `src-tauri/src/tools/mod.rs` — registered `video_processor` module
+- `src-tauri/src/server.rs` — imported `video_processor`, merged `video_processor::router()`
+
+**Frontend**
+- `ui/tools/video-processor/index.html` — operation tab selector (Trim/Extract Audio/Compress/Resize), conditional field panels per operation, Alpine QP slider with quality label, `hx-indicator` for long-running ffmpeg jobs
+- `ui/index.html` — added Video (🎞️) to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — 12 video processor strings
+
+### Architecture
+- No new AppState fields — stateless handler (ffmpeg runs and completes within the HTTP request)
+- Input: file path text field (avoids uploading GB-sized video files to localhost)
+- Output: `~/Videos/Eleutheria/video-{op}-{timestamp}.mp4` or `~/Music/Eleutheria/audio-{timestamp}.{ext}`
+- Codec choice: h264_vaapi for encode (confirmed available in ffmpeg-free on Nobara); trim uses `-c copy` (codec-agnostic); audio uses libmp3lame/pcm_s16le/flac
+- Duplicate `resolution` field problem avoided by using `compress_resolution` and `resize_resolution` as separate form field names
+- ffmpeg stderr truncated to last 25 lines in error responses (avoids overwhelming the UI)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Phase 3 complete
+All four media tools implemented: Screen Recorder, Audio Recorder, Photo Editor + Background Removal, Video Processor.
+
+### Next session should start with
+Phase 4 — MCP server (expose tools to AI agents) + Plugin system.
+
+---
+
+## [2026-03-19] — Phase 3 Step 3: Photo Editor + Background Removal
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/photo_editor.rs` — 2 route handlers:
+  - `POST /api/photo/export` — JSON body `{data: "data:image/png;base64,..."}`, strips dataURL prefix, base64-decodes, saves to `~/Pictures/Eleutheria/photo-{timestamp}.png`
+  - `POST /api/photo/rembg` — multipart `image` field, writes to `/tmp/eleutheria-photo-rembg-input.{ext}`, spawns `python3 scripts/rembg_remove.py {path}`, returns JSON `{ok, png_b64}`
+- `src-tauri/Cargo.toml` — added `base64 = "0.22"` for canvas PNG dataURL decoding
+- `src-tauri/src/tools/mod.rs` — registered `photo_editor` module
+- `src-tauri/src/server.rs` — imported `photo_editor`, merged `photo_editor::router()`
+
+**Python script**
+- `scripts/rembg_remove.py` — reads input image, runs `rembg.remove()`, outputs base64 PNG on stdout; exit 0 on success, 1 with stderr on error
+
+**Frontend**
+- `ui/tools/photo-editor/index.html` — canvas editor:
+  - Off-screen canvas per layer (`window.__peLayers[]`), "Open image" resets all layers, "+ Layer" adds overlay image (scaled to contain)
+  - Layer chip strip to switch active layer; brush/eraser/Remove BG act on active layer only
+  - Brush interpolation: `moveTo(lastPt) + lineTo(currentPt)` with `lineCap:round` — no more disconnected dots
+  - Canvas CSS-sized to fit container (`flex-1 min-h-0 overflow-hidden` + explicit `style.width/height` after load); internal resolution stays at full image size
+  - Export composites all layers onto a temp canvas, sends dataURL to `/api/photo/export`
+  - Checkerboard background via CSS gradient to visualize transparency
+- `ui/index.html` — added Photo Edit (🖼️) to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — 10 photo editor strings
+
+### Bugs fixed during session
+- **Canvas overflow on large images** — `max-width/max-height: 100%` on a canvas inside a flex container without `min-h-0` has no effect; the container expands to content size. Fix: `flex-1 min-h-0 overflow-hidden` on wrap + compute CSS scale explicitly after image load.
+- **Brush dots instead of strokes** — original code drew an `arc` circle per pointer event; rapid movement left disconnected dots. Fix: track `window.__peLastPt`, draw `moveTo → lineTo` between consecutive events; `lineCap:round` gives smooth strokes and a correct single-click dot.
+- **No layer support** — added multi-layer architecture using off-screen `HTMLCanvasElement` per layer stored outside Alpine (`window.__peLayers`) to avoid proxy issues; compositing on every redraw.
+
+### Architecture
+- No new AppState fields — photo editor is stateless on the server (no recording process to track)
+- Output saved to `~/Pictures/Eleutheria/photo-{timestamp}.png`
+- Layer system: off-screen canvases composited onto display canvas on every stroke; export uses a separate temp canvas at full resolution
+- rembg subprocess: Python 3.14 compatible (rembg 2.0.73 is py3-none-any; pillow, onnxruntime have cp314 wheels)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 3 Step 4: Video Processor (ffmpeg — trim, extract audio, compress, resize).
+
+---
+
+## [2026-03-19] — Phase 3 Step 2: Audio Recorder
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/audio_recorder.rs` — 4 route handlers:
+  - `GET /api/audio/state` — JSON `{recording, started_at}` for panel state restore
+  - `GET /api/audio/status` — HTML badge (idle / recording)
+  - `POST /api/audio/record/start` — form field `format` (mp3/wav/ogg/flac); spawns `ffmpeg -f pulse -i default -c:a {codec} output.{ext}`; stores child + path + timestamp in AppState
+  - `POST /api/audio/record/stop` — graceful stop via `q\n` to ffmpeg stdin (same pattern as voice.rs); returns result card with file path
+- `src-tauri/src/tools/mod.rs` — registered `audio_recorder` module
+- `src-tauri/src/server.rs` — imported `AudioRecording`, added `audio_recording` field to `AppState`, merged `audio_recorder::router()`
+- `src-tauri/src/lib.rs` — initialized `audio_recording: Arc<Mutex<None>>`
+- `src-tauri/src/tools/{clipboard,notes,search,translate}.rs` — test constructors updated with `audio_recording` field
+
+**Frontend**
+- `ui/tools/audio-recorder/index.html` — radio selector (mp3/wav/ogg/flac), Start/Stop with Alpine timer, state restored on load via `x-init` fetch to `/api/audio/state`
+- `ui/index.html` — added Audio Rec (🎙) to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — 4 audio recorder strings
+
+### Architecture
+- Output saved to `~/Music/Eleutheria/recording-{timestamp}.{ext}` (permanent, not tmpfs)
+- `AudioRecording = Arc<Mutex<Option<(Child, String, u64)>>>` — same pattern as ScreenRecording
+- Stopped via `q\n` to stdin (ffmpeg graceful), not SIGTERM — ensures proper container finalization for all formats
+- Codec mapping: mp3→libmp3lame, wav→pcm_s16le, ogg→libvorbis, flac→flac
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Next session should start with
+Phase 3 Step 3: Photo Editor + Background Removal.
+
+---
+
+## [2026-03-18] — Phase 3 Step 1: Screen Recorder
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/screen_recorder.rs` — 3 route handlers:
+  - `GET /api/screen/status` — returns recording/idle badge HTML
+  - `POST /api/screen/start` — spawns `wf-recorder -f /tmp/eleutheria-screen-{timestamp}.mp4 [-a]`; stores child + path in `AppState.screen_recording`
+  - `POST /api/screen/stop` — sends SIGTERM via `kill -TERM {pid}`, waits for exit, returns result card with file path
+- `src-tauri/src/tools/mod.rs` — registered `screen_recorder` module
+- `src-tauri/src/server.rs` — imported `ScreenRecording`, added `screen_recording` field to `AppState`, merged `screen_recorder::router()`
+- `src-tauri/src/lib.rs` — initialized `screen_recording: Arc<Mutex<None>>`
+- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs` — test `AppState` constructors updated with `screen_recording` field
+
+**Frontend**
+- `ui/tools/screen-recorder/index.html` — recording controls with Alpine.js mm:ss timer, audio toggle checkbox, Start/Stop buttons, tip about minimizing window
+- `ui/index.html` — added "Screen Rec" (🎬) entry to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — added 7 screen recorder strings
+
+### Architecture
+- `ScreenRecording = Arc<Mutex<Option<(Child, String)>>>` — holds wf-recorder child + output path
+- Timestamped output paths (`/tmp/eleutheria-screen-{unix_ts}.mp4`) avoid collisions between recordings
+- SIGTERM via `kill -TERM {pid}` subprocess instead of tokio `child.kill()` (SIGKILL) — ensures mp4 container is properly finalized (D-028)
+- Audio toggle: HTML checkbox sends `audio=on` when checked, field absent when unchecked; Rust deserializes as `String` and checks `!params.audio.is_empty()` (D-021 compliant)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Decisions made
+- **D-028:** `wf-recorder` as screen recording backend — see DECISIONS.md
+
+### Next session should start with
+Phase 3 Step 2: Audio Recorder (`ffmpeg -f pulse` → mp3/wav, no transcription, save to file).
 
 ---
 

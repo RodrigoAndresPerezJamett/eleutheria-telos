@@ -419,3 +419,124 @@ Format:
 **Date:** 2026-03-18
 
 **Revisit if:** The project adds Windows or macOS support (those platforms don't need this feature; it is Linux-only and Cargo conditionally compiles it).
+
+---
+
+## D-028 — `wf-recorder` as screen recording backend on Wayland/Hyprland
+
+**Decision:** Use `wf-recorder` as a subprocess to capture the screen on Wayland. Stop via `kill -TERM {pid}` so it writes the mp4 trailer cleanly before exiting.
+
+**Rejected alternatives:**
+- `ffmpeg -f pipewire` — not compiled in the system's ffmpeg-free build (pipewire input device unavailable)
+- `ffmpeg -f kmsgrab` — requires `CAP_SYS_ADMIN` or root; not viable for a user-space app
+- `ffmpeg -f x11grab` — X11 only; the machine runs Wayland + Hyprland with no XWayland for screen content
+
+**Reason:** `wf-recorder` uses the wlroots `wlr-screencopy-v1` protocol, which Hyprland implements natively. It is the standard screen recorder for wlroots-based compositors. Available in the Nobara/Fedora repo (`dnf install wf-recorder`). Stopping with SIGTERM (not SIGKILL) ensures the mp4 container is properly finalized.
+
+**Date:** 2026-03-18
+
+**Revisit if:** Adding Windows/macOS support (use `ffmpeg -f gdigrab` on Windows, `ffmpeg -f avfoundation` on macOS — platform-conditional logic in start handler).
+
+---
+
+## D-029 — Photo editor layer system using off-screen canvases outside Alpine
+
+**Decision:** Store each layer as a plain `HTMLCanvasElement` in `window.__peLayers[]` (outside Alpine's reactive proxy) and composite them onto a single visible display canvas on every stroke/redraw.
+
+**Rejected alternatives:**
+- Single canvas for all operations — no layer isolation; erasing on one image would destroy pixels from another
+- Multiple stacked `<canvas>` elements in the DOM — requires CSS absolute positioning, z-index management, and per-layer pointer-event routing; complex to implement in an HTMX fragment
+- Storing canvases inside Alpine `x-data` — Alpine wraps objects in a Proxy on assignment; canvas elements proxied this way lose their `getContext()` method (returns null), breaking all drawing operations
+
+**Reason:** Off-screen canvases in `window.__peLayers[]` bypass Alpine proxying completely while keeping the UI state (layer names, active index) reactive in Alpine. Compositing on every stroke is fast enough for typical photo sizes since we only redraw the display canvas (~microseconds for 2 layers at 4K).
+
+**Date:** 2026-03-19
+
+**Revisit if:** More than ~5 layers are needed, or layer blending modes are added (at that point a proper render loop with `requestAnimationFrame` and dirty-rect compositing would be worth the complexity).
+
+---
+
+## D-030 — Video processor: file path input instead of file upload
+
+**Decision:** Accept the video file as a filesystem path (text input) rather than uploading the file as multipart form data to the local Axum server.
+
+**Rejected alternatives:**
+- Multipart file upload — uploading a 1–4GB video file to `http://127.0.0.1` would buffer the entire file in memory inside Axum before ffmpeg can read it; unacceptable memory pressure and latency
+- Tauri `dialog.open()` file picker — would require adding `tauri-plugin-dialog` as a dependency with capability configuration; adds complexity for marginal UX gain over a path text field
+
+**Reason:** Since this is a desktop app and ffmpeg reads directly from disk, passing the path is both simpler and more efficient. Power users of a video processing tool are comfortable with file paths. The backend validates path existence before spawning ffmpeg.
+
+**Date:** 2026-03-19
+
+**Revisit if:** A non-technical user workflow is needed (Phase 5 polish), at which point a Tauri dialog plugin can be added cleanly alongside the existing path input.
+
+---
+
+## D-031 — Video processor: separate form field names for compress vs resize resolution
+
+**Decision:** Use `compress_resolution` and `resize_resolution` as distinct form field names instead of a shared `resolution` field.
+
+**Rejected alternatives:**
+- Single `resolution` field with both selects — both `<select name="resolution">` elements are in the DOM simultaneously (HTMX/`x-show` uses `display:none`, not `disabled`), so both values are submitted; serde takes an unpredictable one
+- JavaScript intercept on submit to disable hidden fields — adds JS complexity and is fragile across HTMX versions
+
+**Reason:** Distinct field names make server-side deserialization unambiguous with zero JavaScript. The backend only reads the relevant field for each operation branch.
+
+**Date:** 2026-03-19
+
+**Revisit if:** A form refactor replaces the dual-select pattern with a single shared field driven by Alpine state.
+
+---
+
+## D-033 — MCP binary shares [dependencies] with the main Tauri package
+
+**Decision:** The `eleutheria-mcp` stdio binary is a `[[bin]]` target within `src-tauri/` (the same Cargo package as the Tauri app). It shares all `[dependencies]` including `reqwest`, `serde_json`, and `tokio`.
+
+**Rejected alternatives:**
+- Separate workspace member with its own `Cargo.toml` and minimal deps — cleaner dependency graph, but requires setting up a Cargo workspace, changing build scripts, and complicating the Tauri build pipeline.
+- Symlinked or script-based binary — not idiomatic Rust.
+
+**Reason:** Adding a `[[bin]]` entry to the existing `Cargo.toml` is the simplest approach. The binary does NOT `use app_lib::...` anywhere, so the linker only includes what it actually uses (`serde_json`, `tokio`, `reqwest`). Heavy deps like Tauri and Axum are present in `[dependencies]` but not linked into `eleutheria-mcp` because no code in `mcp_stdio.rs` references them.
+
+**Features added to existing deps** (not new crates):
+- `tokio` — added `io-std` for async `stdin()`/`stdout()` in the binary
+- `reqwest` — added `json` for `Response::json::<Value>()` in the HTTP client
+
+**Date:** 2026-03-19
+
+**Revisit if:** The binary grows significantly or needs deps that conflict with Tauri's deps, at which point extracting it to a separate workspace crate becomes justified.
+
+---
+
+## D-032 — Video processor: libx264 instead of h264_vaapi
+
+**Decision:** Use `libx264 -crf` for compress and resize operations instead of `h264_vaapi -qp`.
+
+**Rejected alternatives:**
+- h264_vaapi — initial choice based on CLAUDE.md note ("h264_vaapi encoder available"), but `vainfo` returned empty output on this machine (AMD GPU with open-source mesa driver has no H.264 VAAPI entrypoints); runtime error: `No usable encoding entrypoint found for profile VAProfileH264High`.
+- vp9_vaapi — same VAAPI availability issue.
+- libvpx-vp9 (software) — available but very slow (10–30× slower than libx264 for HD video).
+
+**Reason:** libx264 is present in Nobara's ffmpeg build (confirmed via `ffmpeg -encoders`), widely compatible, fast with `-preset fast`, and produces MP4 output natively. CRF 18–40 maps to the same quality range as the QP slider already in the UI — no UX change needed.
+
+**Date:** 2026-03-19
+
+**Revisit if:** A machine with confirmed VAAPI H.264 support is targeted (check `vainfo | grep VAProfileH264` before switching back).
+
+
+---
+
+## D-034 — MCP SSE: loopback HTTP for tool dispatch
+
+**Decision:** The SSE `tools/call` handler dispatches tool calls by making HTTP requests to the same Axum process (`http://127.0.0.1:{port}/api/mcp/...`) using `reqwest`, rather than calling handler functions directly.
+
+**Rejected alternatives:**
+- Call handler functions directly — would require extracting them out of Axum's extractor system, duplicating the AppState parameter passing, and making them callable without an HTTP context. Complex and brittle.
+- Share the tool dispatch logic as a lib function imported by both SSE and stdio handlers — cleaner in theory, but the tool handlers use Axum extractors (`State`, `Form`, etc.) which are tightly coupled to the HTTP request lifecycle.
+- Implement a separate in-process RPC channel — over-engineered for the current scale.
+
+**Reason:** Loopback HTTP reuses the exact same handler code path as external callers. Auth, JSON serialization, error handling, and any future middleware are all exercised consistently. The overhead is negligible (localhost TCP, no serialization mismatch).
+
+**Date:** 2026-03-19
+
+**Revisit if:** Tool calls over SSE show measurable latency (>50ms) from the loopback round-trip — at that point, consider extracting a `call_tool_inner(state, name, args)` function that bypasses HTTP.

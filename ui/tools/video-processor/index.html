@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<div id="tool-panel" class="flex flex-col h-full p-4"
+     x-data="{
+       operation: 'trim',
+       qp: 28,
+     }">
+
+  <!-- ── Header ────────────────────────────────────────────────────────── -->
+  <div class="mb-3 shrink-0">
+    <h2 class="text-xl font-semibold text-gray-100">Video Processor</h2>
+    <p class="text-sm text-gray-400 mt-1">Trim, extract audio, compress, or resize — powered by ffmpeg.</p>
+  </div>
+
+  <!-- ── Form ──────────────────────────────────────────────────────────── -->
+  <form class="flex flex-col gap-4 flex-1 min-h-0"
+        hx-post="/api/video/process"
+        hx-target="#video-result"
+        hx-swap="innerHTML"
+        hx-indicator="#video-indicator">
+
+    <!-- Input file path -->
+    <div class="flex flex-col gap-1.5 shrink-0">
+      <label class="text-xs text-gray-400 font-medium">Input video path</label>
+      <input type="text" name="path"
+             placeholder="/home/you/Videos/myvideo.mp4"
+             class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm
+                    text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500">
+      <p class="text-xs text-gray-600">
+        Tip: right-click in your file manager → Copy path, or drag the file into a terminal.
+      </p>
+    </div>
+
+    <!-- Operation tabs -->
+    <div class="flex flex-wrap gap-2 shrink-0">
+      <button type="button"
+              class="text-sm rounded px-3 py-1.5 transition-colors"
+              :class="operation==='trim'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+              @click="operation='trim'">✂ Trim</button>
+
+      <button type="button"
+              class="text-sm rounded px-3 py-1.5 transition-colors"
+              :class="operation==='extract_audio'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+              @click="operation='extract_audio'">🎵 Extract Audio</button>
+
+      <button type="button"
+              class="text-sm rounded px-3 py-1.5 transition-colors"
+              :class="operation==='compress'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+              @click="operation='compress'">📦 Compress</button>
+
+      <button type="button"
+              class="text-sm rounded px-3 py-1.5 transition-colors"
+              :class="operation==='resize'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+              @click="operation='resize'">📐 Resize</button>
+    </div>
+
+    <!-- Hidden field: operation -->
+    <input type="hidden" name="operation" :value="operation">
+
+    <!-- ── Trim ──────────────────────────────────────────────────────────── -->
+    <div x-show="operation==='trim'"
+         class="rounded-lg border border-gray-800 bg-gray-900 p-4 flex flex-col gap-3 shrink-0">
+      <p class="text-xs text-gray-500">
+        Cuts between two timestamps using stream copy — no re-encoding, near-instant.
+      </p>
+      <div class="flex flex-wrap gap-4">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-400">Start (HH:MM:SS)</label>
+          <input type="text" name="start" placeholder="00:00:10"
+                 class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm
+                        text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-32">
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-400">End (HH:MM:SS)</label>
+          <input type="text" name="end" placeholder="00:01:30"
+                 class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm
+                        text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-32">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Extract audio ──────────────────────────────────────────────────── -->
+    <div x-show="operation==='extract_audio'"
+         class="rounded-lg border border-gray-800 bg-gray-900 p-4 flex flex-col gap-3 shrink-0">
+      <p class="text-xs text-gray-500">Strips the video track and saves audio only.</p>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-400 shrink-0">Format</label>
+        <div class="flex gap-3">
+          <label class="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer select-none">
+            <input type="radio" name="audio_format" value="mp3" checked class="accent-blue-500"> mp3
+          </label>
+          <label class="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer select-none">
+            <input type="radio" name="audio_format" value="wav" class="accent-blue-500"> wav
+          </label>
+          <label class="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer select-none">
+            <input type="radio" name="audio_format" value="flac" class="accent-blue-500"> flac
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Compress ───────────────────────────────────────────────────────── -->
+    <div x-show="operation==='compress'"
+         class="rounded-lg border border-gray-800 bg-gray-900 p-4 flex flex-col gap-3 shrink-0">
+      <p class="text-xs text-gray-500">
+        Re-encodes with libx264. Lower CRF = higher quality / larger file.
+      </p>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-400 w-20 shrink-0">Quality (CRF)</label>
+        <input type="range" min="18" max="40" name="qp"
+               x-model.number="qp" class="w-32 accent-blue-500">
+        <span x-text="qp" class="text-sm text-gray-300 font-mono w-6 text-right"></span>
+        <span class="text-xs text-gray-600"
+              x-text="qp <= 22 ? '(high)' : qp <= 30 ? '(medium)' : '(low)'"></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-400 w-20 shrink-0">Max height</label>
+        <select name="compress_resolution"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm
+                       text-gray-100 focus:outline-none focus:border-blue-500">
+          <option value="original">Keep original</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Resize ─────────────────────────────────────────────────────────── -->
+    <div x-show="operation==='resize'"
+         class="rounded-lg border border-gray-800 bg-gray-900 p-4 flex flex-col gap-3 shrink-0">
+      <p class="text-xs text-gray-500">
+        Changes resolution with libx264. Aspect ratio preserved (scale=-2:height).
+      </p>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-400 w-20 shrink-0">Target height</label>
+        <select name="resize_resolution"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm
+                       text-gray-100 focus:outline-none focus:border-blue-500">
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+          <option value="240">240p</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Submit ─────────────────────────────────────────────────────────── -->
+    <div class="flex items-center gap-3 shrink-0">
+      <button type="submit"
+              class="text-sm bg-blue-600 hover:bg-blue-500 text-white rounded px-4 py-2">
+        Process
+      </button>
+      <span id="video-indicator"
+            class="htmx-indicator text-xs text-gray-400 italic">
+        Processing… (this may take a while for large files)
+      </span>
+    </div>
+
+  </form>
+
+  <!-- ── Result ────────────────────────────────────────────────────────── -->
+  <div id="video-result" class="mt-3 shrink-0"></div>
+
+</div>

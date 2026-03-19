@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<div id="tool-panel" class="flex flex-col h-full p-4"
+     x-data="{
+       tool: 'brush',
+       brushSize: 12,
+       brushColor: '#ffffff',
+       drawing: false,
+       hasImage: false,
+       busy: false,
+       resultMsg: '',
+       resultOk: true,
+       layerNames: [],
+       activeLayerIdx: 0,
+
+       init() {
+         // Off-screen canvases: window.__peLayers[i] is an HTMLCanvasElement.
+         // Kept outside Alpine to avoid reactive proxying of canvas objects.
+         window.__peLayers  = [];
+         window.__peLastPt  = null;
+       },
+
+       // ── Image / layer loading ──────────────────────────────────────────
+
+       loadBaseImage(file) {
+         if (!file) return;
+         const url = URL.createObjectURL(file);
+         const img = new Image();
+         img.onload = () => {
+           // Reset layers
+           window.__peLayers = [];
+           // Create first off-screen canvas at natural image size
+           const off = document.createElement('canvas');
+           off.width  = img.naturalWidth;
+           off.height = img.naturalHeight;
+           off.getContext('2d').drawImage(img, 0, 0);
+           window.__peLayers.push(off);
+           // Size the display canvas
+           const display = document.getElementById('photo-canvas');
+           display.width  = img.naturalWidth;
+           display.height = img.naturalHeight;
+           // Reflect in Alpine state
+           this.layerNames    = [file.name || 'Layer 1'];
+           this.activeLayerIdx = 0;
+           this.hasImage      = true;
+           // Wait one tick for the canvas to be visible before measuring container
+           this.$nextTick(() => { this.sizeCanvas(); this.redraw(); });
+           URL.revokeObjectURL(url);
+         };
+         img.src = url;
+       },
+
+       addLayer(file) {
+         if (!file || !this.hasImage) return;
+         const url = URL.createObjectURL(file);
+         const img = new Image();
+         img.onload = () => {
+           const display = document.getElementById('photo-canvas');
+           // New layer matches display canvas dimensions; image is scaled to contain
+           const off = document.createElement('canvas');
+           off.width  = display.width;
+           off.height = display.height;
+           const ctx = off.getContext('2d');
+           const scale = Math.min(display.width / img.naturalWidth, display.height / img.naturalHeight);
+           const dx = (display.width  - img.naturalWidth  * scale) / 2;
+           const dy = (display.height - img.naturalHeight * scale) / 2;
+           ctx.drawImage(img, dx, dy, img.naturalWidth * scale, img.naturalHeight * scale);
+           window.__peLayers.push(off);
+           this.layerNames     = [...this.layerNames, file.name || ('Layer ' + window.__peLayers.length)];
+           this.activeLayerIdx = window.__peLayers.length - 1;
+           this.redraw();
+           URL.revokeObjectURL(url);
+         };
+         img.src = url;
+       },
+
+       // ── Canvas sizing ──────────────────────────────────────────────────
+
+       // Scale the display canvas CSS size to fit within its container,
+       // preserving aspect ratio. The internal resolution stays at full image size.
+       sizeCanvas() {
+         const wrap    = document.getElementById('photo-canvas-wrap');
+         const display = document.getElementById('photo-canvas');
+         const cw = wrap.clientWidth;
+         const ch = wrap.clientHeight;
+         if (!cw || !ch || !display.width || !display.height) return;
+         const scale = Math.min(cw / display.width, ch / display.height, 1);
+         display.style.width  = Math.round(display.width  * scale) + 'px';
+         display.style.height = Math.round(display.height * scale) + 'px';
+       },
+
+       // ── Compositing ────────────────────────────────────────────────────
+
+       redraw() {
+         const display = document.getElementById('photo-canvas');
+         const ctx = display.getContext('2d');
+         ctx.clearRect(0, 0, display.width, display.height);
+         for (const layer of window.__peLayers) {
+           ctx.drawImage(layer, 0, 0);
+         }
+       },
+
+       // ── Brush input ────────────────────────────────────────────────────
+
+       getCanvasPoint(e) {
+         const display = document.getElementById('photo-canvas');
+         const rect    = display.getBoundingClientRect();
+         return {
+           x: (e.clientX - rect.left) * (display.width  / rect.width),
+           y: (e.clientY - rect.top)  * (display.height / rect.height),
+         };
+       },
+
+       // Draw a stroke segment from `from` to `to` on the active layer.
+       // When from === to (single click) this still produces a round dot thanks to lineCap:'round'.
+       strokeSegment(from, to) {
+         const layer = window.__peLayers[this.activeLayerIdx];
+         if (!layer) return;
+         const ctx = layer.getContext('2d');
+         ctx.save();
+         ctx.lineCap  = 'round';
+         ctx.lineJoin = 'round';
+         ctx.lineWidth = this.brushSize;
+         if (this.tool === 'eraser') {
+           ctx.globalCompositeOperation = 'destination-out';
+           ctx.strokeStyle = 'rgba(0,0,0,1)';
+         } else {
+           ctx.globalCompositeOperation = 'source-over';
+           ctx.strokeStyle = this.brushColor;
+         }
+         ctx.beginPath();
+         ctx.moveTo(from.x, from.y);
+         ctx.lineTo(to.x,   to.y);
+         ctx.stroke();
+         ctx.restore();
+       },
+
+       pointerDown(e) {
+         if (!this.hasImage) return;
+         this.drawing = true;
+         const pt = this.getCanvasPoint(e);
+         window.__peLastPt = pt;
+         this.strokeSegment(pt, pt);   // initial dot
+         this.redraw();
+       },
+
+       pointerMove(e) {
+         if (!this.drawing) return;
+         const pt = this.getCanvasPoint(e);
+         this.strokeSegment(window.__peLastPt, pt);
+         window.__peLastPt = pt;
+         this.redraw();
+       },
+
+       pointerUp() {
+         this.drawing     = false;
+         window.__peLastPt = null;
+       },
+
+       // ── API actions ────────────────────────────────────────────────────
+
+       async removeBackground() {
+         if (!this.hasImage || this.busy) return;
+         const layer = window.__peLayers[this.activeLayerIdx];
+         if (!layer) return;
+         this.busy      = true;
+         this.resultMsg = '';
+         try {
+           const blob = await new Promise(res => layer.toBlob(res, 'image/png'));
+           const fd   = new FormData();
+           fd.append('image', blob, 'photo.png');
+           const resp = await fetch(
+             'http://127.0.0.1:' + window.__API_PORT__ + '/api/photo/rembg',
+             { method: 'POST', headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }, body: fd }
+           );
+           const data = await resp.json();
+           if (data.ok && data.png_b64) {
+             const img = new Image();
+             img.onload = () => {
+               layer.width  = img.naturalWidth;
+               layer.height = img.naturalHeight;
+               layer.getContext('2d').drawImage(img, 0, 0);
+               this.redraw();
+             };
+             img.src = 'data:image/png;base64,' + data.png_b64;
+             this.resultOk  = true;
+             this.resultMsg = 'Background removed from layer ' + (this.activeLayerIdx + 1) + '.';
+           } else {
+             this.resultOk  = false;
+             this.resultMsg = data.error || 'Background removal failed.';
+           }
+         } catch (err) {
+           this.resultOk  = false;
+           this.resultMsg = err.message || 'Network error.';
+         } finally {
+           this.busy = false;
+         }
+       },
+
+       async exportImage() {
+         if (!this.hasImage || this.busy) return;
+         this.busy      = true;
+         this.resultMsg = '';
+         document.getElementById('photo-export-result').innerHTML = '';
+         try {
+           // Composite all layers onto a temporary canvas at full resolution
+           const display = document.getElementById('photo-canvas');
+           const tmp     = document.createElement('canvas');
+           tmp.width  = display.width;
+           tmp.height = display.height;
+           const ctx = tmp.getContext('2d');
+           for (const layer of window.__peLayers) {
+             ctx.drawImage(layer, 0, 0, tmp.width, tmp.height);
+           }
+           const dataUrl = tmp.toDataURL('image/png');
+           const resp = await fetch(
+             'http://127.0.0.1:' + window.__API_PORT__ + '/api/photo/export',
+             {
+               method: 'POST',
+               headers: {
+                 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__,
+                 'Content-Type': 'application/json',
+               },
+               body: JSON.stringify({ data: dataUrl }),
+             }
+           );
+           document.getElementById('photo-export-result').innerHTML = await resp.text();
+         } catch (err) {
+           this.resultOk  = false;
+           this.resultMsg = err.message || 'Export failed.';
+         } finally {
+           this.busy = false;
+         }
+       },
+     }">
+
+  <!-- ── Header ────────────────────────────────────────────────────────── -->
+  <div class="mb-3 shrink-0">
+    <h2 class="text-xl font-semibold text-gray-100">Photo Editor</h2>
+  </div>
+
+  <!-- ── Toolbar ───────────────────────────────────────────────────────── -->
+  <div class="flex flex-wrap items-center gap-2 mb-2 shrink-0">
+
+    <!-- Open base image (always resets all layers) -->
+    <label class="text-sm bg-gray-700 hover:bg-gray-600 text-gray-100 rounded px-3 py-1.5 cursor-pointer select-none">
+      Open image
+      <input type="file" accept="image/*" class="hidden"
+             @change="loadBaseImage($event.target.files[0]); $event.target.value=''">
+    </label>
+
+    <!-- Add layer (only when base image is loaded) -->
+    <label x-show="hasImage"
+           class="text-sm bg-gray-700 hover:bg-gray-600 text-gray-100 rounded px-3 py-1.5 cursor-pointer select-none">
+      + Layer
+      <input type="file" accept="image/*" class="hidden"
+             @change="addLayer($event.target.files[0]); $event.target.value=''">
+    </label>
+
+    <span class="w-px h-5 bg-gray-700 shrink-0"></span>
+
+    <!-- Brush -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors select-none"
+            :class="tool==='brush' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+            @click="tool='brush'">Brush</button>
+
+    <!-- Eraser -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors select-none"
+            :class="tool==='eraser' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+            @click="tool='eraser'">Eraser</button>
+
+    <!-- Color -->
+    <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+      Color
+      <input type="color" x-model="brushColor"
+             class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0">
+    </label>
+
+    <!-- Size -->
+    <label class="flex items-center gap-1.5 text-xs text-gray-400 select-none">
+      Size
+      <input type="range" min="1" max="80" x-model.number="brushSize" class="w-20 accent-blue-500">
+      <span x-text="brushSize" class="text-gray-300 w-5 text-right font-mono"></span>
+    </label>
+
+    <span class="w-px h-5 bg-gray-700 shrink-0"></span>
+
+    <!-- Remove background (active layer) -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors select-none"
+            :class="hasImage && !busy ? 'bg-purple-700 hover:bg-purple-600 text-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'"
+            :disabled="!hasImage || busy"
+            @click="removeBackground()">
+      <span x-show="!busy">Remove BG</span>
+      <span x-show="busy">Working…</span>
+    </button>
+
+    <!-- Export (composites all layers) -->
+    <button class="text-sm rounded px-3 py-1.5 transition-colors select-none"
+            :class="hasImage && !busy ? 'bg-green-700 hover:bg-green-600 text-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'"
+            :disabled="!hasImage || busy"
+            @click="exportImage()">Export PNG</button>
+  </div>
+
+  <!-- ── Layer strip ────────────────────────────────────────────────────── -->
+  <div x-show="layerNames.length > 0"
+       class="flex items-center gap-1.5 mb-2 shrink-0 overflow-x-auto">
+    <span class="text-xs text-gray-500 shrink-0">Layers:</span>
+    <template x-for="(name, idx) in layerNames" :key="idx">
+      <button class="text-xs rounded px-2 py-1 shrink-0 max-w-32 truncate transition-colors"
+              :class="idx === activeLayerIdx
+                        ? 'bg-blue-700 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
+              :title="name"
+              @click="activeLayerIdx = idx"
+              x-text="name">
+      </button>
+    </template>
+  </div>
+
+  <!-- ── Status message ────────────────────────────────────────────────── -->
+  <p x-show="resultMsg"
+     :class="resultOk ? 'text-green-400' : 'text-red-400'"
+     class="text-xs mb-1 shrink-0"
+     x-text="resultMsg"></p>
+
+  <!-- ── Canvas wrap — takes all remaining height ──────────────────────── -->
+  <!--
+    min-h-0 is required: without it a flex child's min-height defaults to
+    'auto' (content size), allowing a large canvas to overflow the viewport.
+  -->
+  <div id="photo-canvas-wrap"
+       class="flex-1 min-h-0 overflow-hidden rounded-lg border border-gray-800 bg-gray-950
+              flex items-center justify-center">
+
+    <p x-show="!hasImage" class="text-gray-600 text-sm select-none">
+      Open an image to start editing.
+    </p>
+
+    <!-- Canvas: internal resolution = full image; CSS size = scaled to fit wrap -->
+    <canvas id="photo-canvas"
+            x-show="hasImage"
+            class="cursor-crosshair block"
+            style="background-image:
+                     linear-gradient(45deg,#2a2a2a 25%,transparent 25%),
+                     linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),
+                     linear-gradient(45deg,transparent 75%,#2a2a2a 75%),
+                     linear-gradient(-45deg,transparent 75%,#2a2a2a 75%);
+                   background-size:16px 16px;
+                   background-position:0 0,0 8px,8px -8px,-8px 0;"
+            @pointerdown.prevent="pointerDown($event); $el.setPointerCapture($event.pointerId)"
+            @pointermove="pointerMove($event)"
+            @pointerup="pointerUp()"
+            @pointercancel="pointerUp()">
+    </canvas>
+  </div>
+
+  <!-- ── Export result ─────────────────────────────────────────────────── -->
+  <div id="photo-export-result" class="mt-2 shrink-0"></div>
+
+</div>

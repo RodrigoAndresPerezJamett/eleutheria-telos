@@ -7,12 +7,17 @@ license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.92.0"
+default-run = "app"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "eleutheria-mcp"
+path = "src/bin/mcp_stdio.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.5.6", features = [] }
@@ -28,9 +33,11 @@ tauri = { version = "2.10.3", features = ["tray-icon"] }           # Used for: d
 tauri-plugin-log = "2"                                             # Used for: logging plugin | pinned: 2026-03-18
 tracing = "0.1"                                                    # Used for: observability | pinned: 2026-03-18
 uuid = { version = "1.0", features = ["v4"] }                     # Used for: unique IDs | pinned: 2026-03-18
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync", "fs", "process"] } # Used for: async runtime + watch channels + fs + subprocess | pinned: 2026-03-18
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync", "fs", "process", "io-std"] } # Used for: async runtime + watch channels + fs + subprocess + MCP binary stdio | pinned: 2026-03-18
 tower-http = { version = "0.5", features = ["cors"] }              # Used for: CORS headers (Tauri WebView → Axum) | pinned: 2026-03-18
-reqwest    = { version = "0.12", features = ["stream"] }           # Used for: streaming model file downloads | pinned: 2026-03-18
+reqwest    = { version = "0.12", features = ["stream", "json"] }   # Used for: streaming model downloads + JSON response parsing (MCP binary) | pinned: 2026-03-18
+base64     = "0.22"                                                # Used for: decode canvas PNG dataURL for photo export | pinned: 2026-03-19
+tokio-stream = { version = "0.1" }                                 # Used for: ReceiverStream wrapping mpsc channel for MCP SSE transport | pinned: 2026-03-19
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }                    # Used for: ServiceExt::oneshot() in route integration tests | pinned: 2026-03-18
