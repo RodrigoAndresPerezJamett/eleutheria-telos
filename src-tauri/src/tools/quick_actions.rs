@@ -49,22 +49,22 @@ fn scripts_dir() -> std::path::PathBuf {
 
 fn trigger_label(trigger_json: &str) -> &'static str {
     if trigger_json.contains("OcrCompleted") {
-        "📷 After OCR"
+        "After OCR"
     } else if trigger_json.contains("TranscriptionCompleted") {
-        "🎙 After Voice"
+        "After Voice"
     } else if trigger_json.contains("ClipboardChanged") {
-        "📋 On Copy"
+        "On Copy"
     } else {
-        "⚡ Manual"
+        "Manual"
     }
 }
 
 fn tool_icon(tool: &str) -> &'static str {
     match tool {
-        "translate" => "🌐",
-        "copy_clipboard" => "📋",
-        "save_note" => "📝",
-        _ => "⚙️",
+        "translate" => r#"<i data-lucide="languages" style="width:14px;height:14px;"></i>"#,
+        "copy_clipboard" => r#"<i data-lucide="clipboard" style="width:14px;height:14px;"></i>"#,
+        "save_note" => r#"<i data-lucide="notebook-pen" style="width:14px;height:14px;"></i>"#,
+        _ => r#"<i data-lucide="settings-2" style="width:14px;height:14px;"></i>"#,
     }
 }
 
@@ -144,34 +144,38 @@ fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
             let name = html_escape(&p.name);
             let tlabel = trigger_label(&p.trigger);
             let enabled_dot = if p.enabled != 0 {
-                r#"<span class="w-2 h-2 rounded-full bg-green-500 shrink-0" title="Enabled"></span>"#
+                r#"<span style="width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0;" title="Enabled"></span>"#
             } else {
-                r#"<span class="w-2 h-2 rounded-full bg-gray-600 shrink-0" title="Disabled"></span>"#
+                r#"<span style="width:7px;height:7px;border-radius:50%;background:var(--border);flex-shrink:0;" title="Disabled"></span>"#
             };
             let is_manual = p.trigger.contains("Manual");
             let run_btn = if is_manual {
                 format!(
-                    r##"<button class="text-xs text-green-400 hover:text-green-300 border border-green-800 rounded px-2 py-1 transition-colors"
+                    r##"<button class="btn btn-ghost btn-sm"
                              hx-post="/api/pipelines/{id}/run"
                              hx-target="#qa-run-result"
-                             hx-swap="innerHTML">▶</button>"##,
+                             hx-swap="innerHTML"
+                             title="Run pipeline">
+                      <i data-lucide="play" style="width:12px;height:12px;"></i>
+                    </button>"##,
                     id = p.id
                 )
             } else {
                 String::new()
             };
             format!(
-                r##"<li class="flex items-center gap-2 p-3 bg-gray-800 hover:bg-gray-750 rounded-lg group">
+                r##"<li style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-elevated);border-radius:var(--radius-md);margin-bottom:4px;cursor:pointer;" class="group">
   {enabled_dot}
-  <div class="flex-1 min-w-0 cursor-pointer"
+  <div style="flex:1;min-width:0;"
        hx-get="/api/pipelines/{id}/editor"
        hx-target="#qa-editor"
        hx-swap="innerHTML">
-    <p class="text-sm font-medium text-gray-200 truncate">{name}</p>
-    <p class="text-xs text-gray-500">{tlabel}</p>
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:2px 0 0;">{tlabel}</p>
   </div>
   {run_btn}
-  <button class="text-xs text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity px-1"
+  <button class="btn btn-danger btn-sm"
+          style="opacity:0;transition:opacity 150ms;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0"
           hx-delete="/api/pipelines/{id}"
           hx-target="#pipeline-list"
           hx-swap="outerHTML"
@@ -188,13 +192,13 @@ fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
         .join("\n");
 
     let empty = if pipelines.is_empty() {
-        r#"<p class="text-xs text-gray-600 px-1 py-2">No pipelines yet. Create one above.</p>"#
+        r#"<p style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No pipelines yet. Create one above.</p>"#
     } else {
         ""
     };
 
     format!(
-        r#"<ul id="pipeline-list" class="space-y-1.5">{items}{empty}</ul>"#,
+        r#"<ul id="pipeline-list" style="list-style:none;margin:0;padding:0;">{items}{empty}</ul>"#,
         items = items,
         empty = empty
     )
@@ -203,7 +207,7 @@ fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
 fn render_steps(pipeline_id: &str, steps: &[StepRow]) -> String {
     if steps.is_empty() {
         return format!(
-            r#"<div id="steps-{pid}" class="text-xs text-gray-600 italic py-2">No steps yet. Add one below.</div>"#,
+            r#"<div id="steps-{pid}" style="font-size:12px;color:var(--text-muted);font-style:italic;padding:8px 0;">No steps yet. Add one below.</div>"#,
             pid = pipeline_id
         );
     }
@@ -217,34 +221,34 @@ fn render_steps(pipeline_id: &str, steps: &[StepRow]) -> String {
             String::new()
         } else {
             format!(
-                r#"<p class="text-xs text-gray-500 mt-0.5">{}</p>"#,
+                r#"<p style="font-size:11px;color:var(--text-muted);margin:2px 0 0;">{}</p>"#,
                 summary
             )
         };
 
-        let up_disabled = if i == 0 { "opacity-30 cursor-not-allowed" } else { "hover:text-gray-200" };
-        let down_disabled = if i == steps.len() - 1 { "opacity-30 cursor-not-allowed" } else { "hover:text-gray-200" };
+        let up_disabled = if i == 0 { "disabled" } else { "" };
+        let down_disabled = if i == steps.len() - 1 { "disabled" } else { "" };
 
         parts.push(format!(
-            r##"<div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
-  <span class="text-xl shrink-0 mt-0.5">{icon}</span>
-  <div class="flex-1 min-w-0">
-    <p class="text-sm font-medium text-gray-200">{label}</p>
+            r##"<div class="card" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;">
+  <span style="display:flex;align-items:center;flex-shrink:0;margin-top:2px;color:var(--text-muted);">{icon}</span>
+  <div style="flex:1;min-width:0;">
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0;">{label}</p>
     {summary_html}
   </div>
-  <div class="flex flex-col gap-0.5 shrink-0">
-    <button class="text-gray-500 text-xs leading-none {up_disabled}"
+  <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+    <button class="btn btn-ghost btn-sm {up_disabled}"
             hx-post="/api/pipelines/{pid}/steps/{sid}/move"
             hx-vals='{{"direction":"up"}}'
             hx-target="#steps-{pid}"
             hx-swap="outerHTML">▲</button>
-    <button class="text-gray-500 text-xs leading-none {down_disabled}"
+    <button class="btn btn-ghost btn-sm {down_disabled}"
             hx-post="/api/pipelines/{pid}/steps/{sid}/move"
             hx-vals='{{"direction":"down"}}'
             hx-target="#steps-{pid}"
             hx-swap="outerHTML">▼</button>
   </div>
-  <button class="text-gray-600 hover:text-red-400 text-sm shrink-0 transition-colors"
+  <button class="btn btn-danger btn-sm"
           hx-delete="/api/pipelines/{pid}/steps/{sid}"
           hx-target="#steps-{pid}"
           hx-swap="outerHTML">✕</button>
@@ -275,10 +279,10 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
     let steps_html = render_steps(&pipeline.id, steps);
     let enabled_checked = if pipeline.enabled != 0 { "checked" } else { "" };
     let trigger_opts = [
-        (r#"{"type":"Manual"}"#, "⚡ Manual"),
-        (r#"{"type":"OcrCompleted"}"#, "📷 After OCR"),
-        (r#"{"type":"TranscriptionCompleted"}"#, "🎙 After Voice"),
-        (r#"{"type":"ClipboardChanged"}"#, "📋 On Clipboard Change"),
+        (r#"{"type":"Manual"}"#, "Manual"),
+        (r#"{"type":"OcrCompleted"}"#, "After OCR"),
+        (r#"{"type":"TranscriptionCompleted"}"#, "After Voice"),
+        (r#"{"type":"ClipboardChanged"}"#, "On Clipboard Change"),
     ]
     .iter()
     .map(|(val, label)| {
@@ -305,16 +309,19 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
     let is_manual = pipeline.trigger.contains("Manual");
     let run_section = if is_manual {
         format!(
-            r##"<div class="border-t border-gray-700 pt-4"
+            r##"<div style="border-top:1px solid var(--border);padding-top:16px;"
                   x-data="{{showRun: false, runText: ''}}">
-  <button class="text-xs text-green-400 hover:text-green-300 border border-green-800 rounded px-3 py-1.5 transition-colors"
-          @click="showRun = !showRun">▶ Run Now</button>
-  <div x-show="showRun" class="mt-2 flex gap-2">
+  <button class="btn btn-secondary btn-sm"
+          @click="showRun = !showRun">
+    <i data-lucide="play" style="width:12px;height:12px;"></i> Run Now
+  </button>
+  <div x-show="showRun" style="margin-top:8px;display:flex;gap:8px;">
     <input x-model="runText"
            type="text"
            placeholder="Initial text (optional)"
-           class="flex-1 bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-600" />
-    <button class="text-xs bg-green-700 hover:bg-green-600 text-white rounded px-3 py-1.5 transition-colors"
+           class="input flex-1"
+           style="font-size:12px;padding:5px 8px;" />
+    <button class="btn btn-primary btn-sm"
             :hx-vals="JSON.stringify({{initial_text: runText}})"
             hx-post="/api/pipelines/{id}/run"
             hx-target="#qa-run-result"
@@ -339,22 +346,18 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
         hx-swap="outerHTML">
     <div class="flex items-center gap-3">
       <input name="name" value="{name}"
-             class="flex-1 bg-gray-700 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+             class="input flex-1"
+             style="width:auto;font-size:13px;padding:6px 10px;"
              required />
-      <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
-        <input type="checkbox" name="enabled" value="1" {enabled_checked}
-               class="accent-blue-500" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" name="enabled" value="1" {enabled_checked} />
         Enabled
       </label>
-      <button type="submit"
-              class="text-xs bg-blue-700 hover:bg-blue-600 text-white rounded px-3 py-1.5 transition-colors">
-        Save
-      </button>
+      <button type="submit" class="btn btn-primary btn-sm">Save</button>
     </div>
-    <div class="flex items-center gap-2">
-      <span class="text-xs text-gray-500">Trigger:</span>
-      <select name="trigger"
-              class="bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">Trigger:</span>
+      <select name="trigger" class="input" style="width:auto;font-size:12px;padding:5px 8px;">
         {trigger_opts}
       </select>
     </div>
@@ -362,7 +365,7 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
 
   <!-- Steps -->
   <div>
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Steps</p>
+    <p style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Steps</p>
     {steps_html}
   </div>
 
@@ -372,38 +375,36 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
     from_lang: 'auto',
     to_lang: 'en',
     note_title: ''
-  }}" class="border border-gray-700 rounded-lg p-3 flex flex-col gap-3">
-    <p class="text-xs font-semibold text-gray-400">Add step</p>
+  }}" class="card flex flex-col gap-3">
+    <p style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin:0;">Add step</p>
 
-    <select x-model="tool"
-            class="bg-gray-700 text-white text-xs rounded px-2 py-1.5 w-full focus:outline-none">
-      <option value="translate">🌐 Translate</option>
-      <option value="copy_clipboard">📋 Copy to Clipboard</option>
-      <option value="save_note">📝 Save as Note</option>
+    <select x-model="tool" class="input" style="font-size:12px;padding:5px 8px;">
+      <option value="translate">Translate</option>
+      <option value="copy_clipboard">Copy to Clipboard</option>
+      <option value="save_note">Save as Note</option>
     </select>
 
     <div x-show="tool === 'translate'" class="flex gap-2">
       <div class="flex-1">
-        <label class="text-xs text-gray-500 block mb-1">From</label>
-        <select x-model="from_lang" class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none">
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">From</label>
+        <select x-model="from_lang" class="input" style="font-size:12px;padding:5px 8px;">
           {lang_opts}
         </select>
       </div>
       <div class="flex-1">
-        <label class="text-xs text-gray-500 block mb-1">To</label>
-        <select x-model="to_lang" class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none">
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">To</label>
+        <select x-model="to_lang" class="input" style="font-size:12px;padding:5px 8px;">
           {lang_opts}
         </select>
       </div>
     </div>
 
     <div x-show="tool === 'save_note'">
-      <label class="text-xs text-gray-500 block mb-1">Note title (blank = first line of text)</label>
-      <input x-model="note_title" type="text" placeholder="Optional title"
-             class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none" />
+      <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Note title (blank = first line of text)</label>
+      <input x-model="note_title" type="text" placeholder="Optional title" class="input" style="font-size:12px;padding:5px 8px;" />
     </div>
 
-    <button class="text-xs bg-gray-700 hover:bg-gray-600 text-white rounded px-3 py-1.5 transition-colors self-start"
+    <button class="btn btn-secondary btn-sm" style="align-self:flex-start;"
             :hx-vals="JSON.stringify({{
               tool: tool,
               config: JSON.stringify(

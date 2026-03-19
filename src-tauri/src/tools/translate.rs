@@ -87,10 +87,10 @@ pub async fn langs_handler(State(state): State<Arc<AppState>>) -> impl IntoRespo
 
     if rows.is_empty() {
         return Html(
-            r#"<div class="rounded-lg border border-gray-700 bg-gray-900 p-6 text-center text-gray-400">
-  <p class="text-2xl mb-2">📦</p>
-  <p class="font-medium">No language packs installed.</p>
-  <p class="text-sm mt-1">Go to <strong class="text-gray-300">Models</strong> to download a language pair.</p>
+            r#"<div class="empty-state card">
+  <i data-lucide="languages" style="width:36px;height:36px;color:var(--text-muted);opacity:0.4;margin-bottom:8px;"></i>
+  <p class="empty-state-title">No language packs installed.</p>
+  <p class="empty-state-desc">Go to <strong style="color:var(--text-primary);">Models</strong> to download a language pair.</p>
 </div>"#
                 .to_string(),
         )

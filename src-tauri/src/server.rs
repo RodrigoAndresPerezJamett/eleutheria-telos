@@ -177,6 +177,56 @@ async fn tool_panel_handler(Path(tool_name): Path<String>) -> impl IntoResponse 
     }
 }
 
+/// GET /api/settings/ui — returns theme, glass, and font preferences as flat JSON.
+/// Used by initApp() to apply the saved theme on startup.
+async fn settings_ui_get_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT key, value FROM settings WHERE key IN ('theme','glass','font','pinned','sidebar_collapsed')",
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut out = serde_json::Map::new();
+    for (k, v) in rows {
+        // Values are stored as JSON strings (e.g. `"dark"`, `true`).
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&v) {
+            out.insert(k, val);
+        }
+    }
+    // Defaults when no row exists yet
+    out.entry("theme").or_insert_with(|| json!("dark"));
+    out.entry("glass").or_insert_with(|| json!(true));
+    out.entry("font").or_insert_with(|| json!("Inter"));
+    out.entry("pinned").or_insert_with(|| json!([]));
+    out.entry("sidebar_collapsed").or_insert_with(|| json!(false));
+
+    Json(serde_json::Value::Object(out))
+}
+
+/// POST /api/settings/ui — accepts JSON `{theme?, glass?, font?}` and upserts each key.
+async fn settings_ui_post_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let allowed = ["theme", "glass", "font", "pinned", "sidebar_collapsed"];
+    if let Some(obj) = body.as_object() {
+        for key in &allowed {
+            if let Some(value) = obj.get(*key) {
+                let _ = sqlx::query(
+                    "INSERT INTO settings (key, value) VALUES (?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                )
+                .bind(key)
+                .bind(value.to_string())
+                .execute(&state.db)
+                .await;
+            }
+        }
+    }
+    Json(json!({ "ok": true }))
+}
+
 async fn settings_get_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let rows: Vec<(String, String)> =
         sqlx::query_as("SELECT key, value FROM settings ORDER BY key")
@@ -218,6 +268,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/api/settings",
             get(settings_get_handler).post(settings_post_handler),
+        )
+        .route(
+            "/api/settings/ui",
+            get(settings_ui_get_handler).post(settings_ui_post_handler),
         )
         .route(
             "/mcp",

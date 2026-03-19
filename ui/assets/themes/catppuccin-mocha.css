@@ -1,0 +1,30 @@
+/* Eleutheria Telos — Catppuccin Mocha */
+:root {
+  --bg-base:        #1e1e2e;
+  --bg-surface:     #181825;
+  --bg-elevated:    #313244;
+  --bg-overlay:     rgba(49, 50, 68, 0.7);
+  --text-primary:   #cdd6f4;
+  --text-secondary: #a6adc8;
+  --text-muted:     #6c7086;
+  --accent:         #cba6f7;
+  --accent-subtle:  rgba(203, 166, 247, 0.14);
+  --accent-hover:   rgba(203, 166, 247, 0.22);
+  --border:         rgba(205, 214, 244, 0.08);
+  --border-focus:   rgba(203, 166, 247, 0.5);
+  --shadow:         rgba(0, 0, 0, 0.45);
+  --shadow-lg:      rgba(0, 0, 0, 0.65);
+  --glass-bg:       rgba(24, 24, 37, 0.68);
+  --glass-blur:     blur(20px);
+  --glass-border:   rgba(205, 214, 244, 0.08);
+  --destructive:    #f38ba8;
+  --destructive-subtle: rgba(243, 139, 168, 0.14);
+  --success:        #a6e3a1;
+  --success-subtle: rgba(166, 227, 161, 0.14);
+  --warning:        #f9e2af;
+  --warning-subtle: rgba(249, 226, 175, 0.14);
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      14px;
+  --radius-xl:      18px;
+}

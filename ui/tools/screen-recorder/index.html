@@ -1,37 +1,39 @@
-<!DOCTYPE html>
-<div id="tool-panel" class="flex flex-col h-full p-6">
+<div class="panel"
+     x-data="{ recording: false, elapsed: 0, timer: null }"
+     x-init="
+       fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/screen/state', {
+         headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
+       })
+       .then(r => r.json())
+       .then(d => {
+         if (d.recording) {
+           recording = true;
+           elapsed = Math.max(0, Math.floor(Date.now() / 1000) - d.started_at);
+           timer = setInterval(() => elapsed++, 1000);
+         }
+       })
+       .catch(() => {})
+     ">
 
-  <div class="mb-5">
-    <h2 class="text-xl font-semibold text-gray-100">Screen Recorder</h2>
-    <p class="text-sm text-gray-400 mt-1">Records to ~/Videos/Eleutheria/ as mp4.</p>
+  <div class="panel-header">
+    <div>
+      <h1 class="panel-title">Screen Recorder</h1>
+      <p class="panel-subtitle">Records to ~/Videos/Eleutheria/ as mp4.</p>
+    </div>
   </div>
 
   <!-- ── Recording controls ───────────────────────────────────────────────── -->
-  <div class="rounded-lg border border-gray-800 bg-gray-900 p-5 mb-4"
-       x-data="{ recording: false, elapsed: 0, timer: null }"
-       x-init="
-         fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/screen/state', {
-           headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
-         })
-         .then(r => r.json())
-         .then(d => {
-           if (d.recording) {
-             recording = true;
-             elapsed = Math.max(0, Math.floor(Date.now() / 1000) - d.started_at);
-             timer = setInterval(() => elapsed++, 1000);
-           }
-         })
-         .catch(() => {})
-       ">
+  <div class="card" style="margin-bottom:16px;">
 
     <!-- Options — shown only when not recording -->
-    <div x-show="!recording" class="flex flex-col gap-3 mb-4">
+    <div x-show="!recording" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
 
-      <div class="flex items-center gap-3">
-        <label class="text-xs text-gray-400 w-16 shrink-0">Output:</label>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <label style="font-size:12px;color:var(--text-muted);width:52px;flex-shrink:0;">Output:</label>
         <select id="screen-output-select"
                 name="output"
-                class="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-200 flex-1"
+                class="input"
+                style="flex:1;font-size:12px;padding:5px 8px;"
                 hx-get="/api/screen/outputs"
                 hx-trigger="load"
                 hx-swap="innerHTML">
@@ -39,19 +41,19 @@
         </select>
       </div>
 
-      <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300 select-none">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-primary);">
         <input type="checkbox"
                id="screen-audio-toggle"
-               class="w-4 h-4 rounded accent-blue-500">
+               style="width:14px;height:14px;">
         Include microphone audio
       </label>
 
     </div>
 
-    <div class="flex flex-wrap items-center gap-3">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
 
       <button x-show="!recording"
-              class="text-sm bg-blue-600 hover:bg-blue-500 text-white rounded px-4 py-2"
+              class="btn btn-primary"
               hx-post="/api/screen/start"
               hx-target="#screen-record-status"
               hx-swap="innerHTML"
@@ -68,7 +70,7 @@
       </button>
 
       <button x-show="recording"
-              class="text-sm bg-red-600 hover:bg-red-500 text-white rounded px-4 py-2"
+              class="btn btn-danger"
               hx-post="/api/screen/stop"
               hx-target="#screen-result"
               hx-swap="innerHTML"
@@ -82,26 +84,27 @@
         Stop Recording
       </button>
 
-      <span x-show="recording" class="text-xs text-red-400 font-mono">
+      <span x-show="recording" style="font-size:12px;color:var(--destructive);font-family:monospace;">
         ● <span x-text="String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0')"></span>
       </span>
 
       <span id="screen-stop-indicator"
-            class="htmx-indicator text-xs text-gray-400 italic">Finalizing…</span>
+            class="htmx-indicator"
+            style="font-size:12px;color:var(--text-muted);font-style:italic;">Finalizing…</span>
     </div>
 
-    <div id="screen-record-status" class="mt-3 text-xs"></div>
+    <div id="screen-record-status" style="margin-top:10px;font-size:12px;"></div>
   </div>
 
   <!-- ── Hint ──────────────────────────────────────────────────────────────── -->
-  <div class="rounded-lg border border-gray-800 bg-gray-900/50 p-4 mb-4">
-    <p class="text-xs text-gray-500 leading-relaxed">
-      <span class="text-gray-400 font-medium">To stop:</span>
+  <div class="card">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.6;margin:0;">
+      <span style="color:var(--text-secondary);font-weight:500;">To stop:</span>
       Switch back with Alt+Tab or your window switcher, navigate here, press Stop.
       The panel restores recording state automatically.
     </p>
   </div>
 
-  <div id="screen-result" class="flex-1 overflow-y-auto mt-2"></div>
+  <div id="screen-result" style="margin-top:12px;"></div>
 
 </div>

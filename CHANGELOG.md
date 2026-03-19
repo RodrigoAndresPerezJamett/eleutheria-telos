@@ -7,6 +7,98 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.5 Step 2: Panel Polish, Emoji Removal, Drag-to-Resize
+
+### Completed
+
+**Sidebar improvements:**
+- `ui/assets/base.css` — pinned icon height reduced from 36px to 28px; sidebar-scroll gets `overflow-x: hidden` to prevent horizontal scroll on pinned 3×3 grid
+- `ui/index.html` — drag-to-resize: now shows live width during `mousemove` (disables CSS transition while dragging) then snaps to 56px or 200px on `mouseup` (threshold: finalWidth < 128px = collapse)
+- `src-tauri/src/server.rs` — `GET /api/settings/ui` SQL query fixed to include `pinned` and `sidebar_collapsed` keys (bug: were always returning defaults because query only fetched `theme/glass/font`)
+
+**Emoji removal (all panels):**
+- `ui/tools/translate/index.html` — removed 🌐 from header, replaced with `panel-title/panel-subtitle`
+- `ui/tools/quick-actions/index.html` — removed ⚡ from header, full redesign with design system
+- `src-tauri/src/tools/quick_actions.rs` — removed ⚡/📷/🎙/📋 from `trigger_label()`; removed 🌐/📋/📝/⚙️ from `tool_icon()` (replaced with Lucide HTML icon strings); removed emojis from trigger select options and step select options in `render_editor()`
+- `src-tauri/src/tools/translate.rs` — removed 📦 from empty-state "No language packs installed" (now uses `empty-state` CSS class + Lucide icon)
+
+**Button redesign (Quick Actions):**
+- `src-tauri/src/tools/quick_actions.rs` — all Tailwind `bg-blue-700/bg-gray-700/bg-gray-800` replaced with `btn btn-primary/secondary/ghost/danger btn-sm` design system classes; inputs use `.input` class; pipeline list items and step cards use CSS custom properties for color
+- `ui/tools/quick-actions/index.html` — rewritten: New Pipeline / Create buttons use `btn btn-primary`; select options use `.input`; two-column layout uses inline CSS vars
+
+**Panel redesigns (header + button polish):**
+- `ui/tools/screen-recorder/index.html` — rewritten: `panel-title/panel-subtitle`, `.card` wrapper, Start/Stop use `btn btn-primary/btn-danger`, select uses `.input`, Tailwind color classes replaced with CSS vars
+- `ui/tools/audio-recorder/index.html` — rewritten: same design system treatment
+- `ui/tools/video-processor/index.html` — rewritten: operation tab buttons use Alpine `:class` binding to toggle `btn-primary/btn-secondary`, inputs use `.input`, submit uses `btn btn-primary`
+- `ui/tools/photo-editor/index.html` — rewritten: toolbar integrated into `panel-header`, Brush/Eraser active state via `:class="tool==='brush' ? 'btn-primary' : 'btn-secondary'"`, Remove BG / Export use `.btn-disabled` when not available; layer strip buttons use `btn-primary` for active layer
+
+**base.css additions:**
+- `.btn-disabled` added alongside `.btn:disabled` (same opacity:0.45/pointer-events:none rule)
+
+### Bug fixes
+- Pinned items were never restored on app restart — SQL query was missing `pinned` key
+- Sidebar collapsed state was never restored — SQL query was missing `sidebar_collapsed` key
+- Translate empty-state emoji `📦` was rendered by Rust server-side, not the static HTML
+
+### Next
+- Voice panel polish (still uses old gray Tailwind classes)
+- Notes, Clipboard, OCR, Search, Models panels — design system pass
+- Phase 4.5 full completion: all panels consistent
+
+---
+
+## [2026-03-19] — Phase 4.5 Step 1: App Shell — Design System
+
+### Completed
+
+**Assets (bundled locally, offline-first)**
+- `ui/assets/fonts/inter-variable.woff2` + `inter-variable-italic.woff2` — Inter variable font (latin, @fontsource-variable/inter 5.2.8)
+- `ui/assets/lucide.min.js` — Lucide icons UMD bundle v0.577.0 (replaces all emojis)
+- `ui/assets/themes/dark.css` (default) — soft dark: `#0f1117` base, indigo-periwinkle accent `#6d83f2`
+- `ui/assets/themes/light.css`
+- `ui/assets/themes/catppuccin-mocha.css` — Mauve accent `#cba6f7`
+- `ui/assets/themes/catppuccin-latte.css`
+- `ui/assets/themes/tokyo-night.css` — Blue accent `#7aa2f7`
+- `ui/assets/base.css` — full component design system: fonts, scrollbar, sidebar, nav-item, btn-primary/secondary/ghost/danger, input, card, card-glass, badge, empty-state, skeleton, prose, HTMX indicator
+
+**Theme system CSS variables (per-theme):**
+`--bg-base`, `--bg-surface`, `--bg-elevated`, `--bg-overlay`, `--text-primary/secondary/muted`, `--accent`, `--accent-subtle/hover`, `--border`, `--border-focus`, `--shadow/shadow-lg`, `--glass-bg/blur/border`, `--destructive/success/warning` (+ subtle variants), `--radius-sm/md/lg/xl`
+
+**Glassmorphism system:**
+- Default: sidebar + cards use `backdrop-filter: blur(20px)` + semi-transparent fill
+- Disabled: `html.no-glass` class → opaque fills, no blur
+
+**App Shell (`ui/index.html`) — full rewrite:**
+- Loads Inter, Lucide, theme CSS, base.css; Tailwind CDN kept for layout utilities (preflight disabled — base.css owns resets)
+- `applyTheme(name)` + `applyGlass(enabled)` functions exposed on `window`
+- `initApp()` fetches `/api/settings/ui` on startup to apply saved theme/glass before first render
+- Lucide `createIcons()` called on DOMContentLoaded + on every `htmx:afterSwap` into `#tool-panel`
+- Plugin sidebar entries use `<i data-lucide="puzzle">` instead of emojis
+- Sidebar responsive layout owned by `base.css` media queries (no Tailwind responsive classes on `#sidebar`)
+- Three sidebar groups: **Tools** (Clipboard, Notes, Voice, OCR, Translate, Search) / **Media** (Screen Rec, Audio Rec, Photo Edit, Video, Quick Actions) / **Plugins** (dynamic) + bottom: Models, Settings
+- Pill-style active nav item: `--accent-subtle` background + `--accent` text
+- "ELEUTHERIA" → `logo-dot` (8px accent circle) + "Eleutheria" label
+- Command palette: glassmorphism box, Lucide search icon, styled input
+
+**Backend (`src-tauri/src/server.rs`):**
+- `GET /api/settings/ui` — returns `{theme, glass, font}` with defaults; used by `initApp()`
+- `POST /api/settings/ui` — upserts theme/glass/font keys in settings table
+
+**Settings panel (`ui/tools/settings/index.html`) — rewritten:**
+- Theme dropdown (5 themes), glassmorphism toggle switch, font selector (Inter / system)
+- Changes applied instantly to the shell + persisted via `/api/settings/ui`
+- App info section (version, server port, phase)
+
+### Architecture notes
+- `base.css` is the single source of truth for all component visual styles
+- Theme files only define CSS custom properties — zero layout/component rules
+- Responsive sidebar visibility in `base.css` @media queries, not Tailwind
+- `applyTheme()` and `applyGlass()` are global window functions so the Settings panel can call them after a fetch()
+
+### Next: Priority 2 — Clipboard History panel polish
+
+---
+
 ## [2026-03-19] — Phase 4.5 planning scaffolding
 
 ### Completed

@@ -1,22 +1,123 @@
-<div id="tool-panel">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold">⚙️ Settings</h2>
-  </div>
-  <div class="rounded-lg border border-gray-800 bg-gray-900 p-6 text-sm space-y-4">
+<div class="panel">
+
+  <div class="panel-header">
     <div>
-      <p class="text-gray-400 font-medium mb-1">App</p>
-      <p class="text-gray-500">Version 0.1.0 — Phase 0</p>
+      <h1 class="panel-title">Settings</h1>
+      <p class="panel-subtitle">Appearance, behavior, and app information.</p>
     </div>
-    <div class="border-t border-gray-800 pt-4">
-      <p class="text-gray-400 font-medium mb-1">Server</p>
-      <p class="text-gray-500">
-        Running on
-        <span class="font-mono text-gray-300"
-              x-text="'http://127.0.0.1:' + window.__API_PORT__"></span>
-      </p>
+  </div>
+
+  <div x-data="{
+    theme: 'dark', glass: true, font: 'Inter',
+    saved: false, _t: null,
+    async load() {
+      try {
+        const r = await fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/settings/ui',
+          { headers: { Authorization: 'Bearer ' + window.__SESSION_TOKEN__ } });
+        if (r.ok) { const s = await r.json();
+          if (s.theme) this.theme = s.theme;
+          if (typeof s.glass === 'boolean') this.glass = s.glass;
+          if (s.font) this.font = s.font; }
+      } catch(_) {}
+    },
+    async save() {
+      if (window.applyTheme) applyTheme(this.theme);
+      if (window.applyGlass) applyGlass(this.glass);
+      try {
+        await fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/settings/ui', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + window.__SESSION_TOKEN__, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: this.theme, glass: this.glass, font: this.font })
+        });
+        this.saved = true;
+        clearTimeout(this._t);
+        this._t = setTimeout(() => { this.saved = false; }, 2000);
+      } catch(_) {}
+    }
+  }" x-init="load()">
+
+    <!-- Appearance section -->
+    <p style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;">Appearance</p>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;flex-direction:column;gap:18px;">
+
+        <!-- Theme -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+          <div>
+            <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0 0 2px;">Theme</p>
+            <p style="font-size:12px;color:var(--text-muted);margin:0;">Color palette for the entire app.</p>
+          </div>
+          <select x-model="theme" @change="save()"
+                  style="background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 10px;font-size:13px;color:var(--text-primary);font-family:inherit;outline:none;cursor:pointer;min-width:175px;">
+            <option value="dark">Dark (default)</option>
+            <option value="light">Light</option>
+            <option value="catppuccin-mocha">Catppuccin Mocha</option>
+            <option value="catppuccin-latte">Catppuccin Latte</option>
+            <option value="tokyo-night">Tokyo Night</option>
+          </select>
+        </div>
+
+        <div style="height:1px;background:var(--border);"></div>
+
+        <!-- Glassmorphism toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+          <div>
+            <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0 0 2px;">Glassmorphism</p>
+            <p style="font-size:12px;color:var(--text-muted);margin:0;">Frosted-glass sidebar. Disable on lower-end hardware.</p>
+          </div>
+          <button type="button" @click="glass = !glass; save()"
+                  :style="glass ? 'background:var(--accent)' : 'background:var(--bg-base);border:1px solid var(--border)'"
+                  style="width:44px;height:26px;border-radius:99px;cursor:pointer;position:relative;transition:background 180ms;flex-shrink:0;padding:0;border:1px solid transparent;">
+            <span :style="glass ? 'transform:translateX(20px)' : 'transform:translateX(3px)'"
+                  style="display:block;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform 180ms;box-shadow:0 1px 4px rgba(0,0,0,0.3);position:absolute;top:2px;left:0;"></span>
+          </button>
+        </div>
+
+        <div style="height:1px;background:var(--border);"></div>
+
+        <!-- Font -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+          <div>
+            <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0 0 2px;">Font</p>
+            <p style="font-size:12px;color:var(--text-muted);margin:0;">Inter is bundled. System uses your OS default.</p>
+          </div>
+          <select x-model="font" @change="save()"
+                  style="background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 10px;font-size:13px;color:var(--text-primary);font-family:inherit;outline:none;cursor:pointer;min-width:175px;">
+            <option value="Inter">Inter (default)</option>
+            <option value="system">System font</option>
+          </select>
+        </div>
+
+      </div>
     </div>
-    <div class="border-t border-gray-800 pt-4 text-gray-600">
-      <p>Full settings panel coming in Phase 1.</p>
+
+    <p x-show="saved" x-transition.opacity
+       style="font-size:12px;color:var(--success);margin-bottom:16px;">
+      ✓ Saved
+    </p>
+
+    <!-- App info -->
+    <p style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;">App</p>
+    <div class="card">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--text-muted);">Version</span>
+          <span style="color:var(--text-primary);font-weight:500;">0.1.0 — pre-release</span>
+        </div>
+        <div style="height:1px;background:var(--border);"></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--text-muted);">API server</span>
+          <span style="color:var(--text-primary);font-family:monospace;font-size:12px;"
+                x-text="'http://127.0.0.1:' + (window.__API_PORT__ || '...')"></span>
+        </div>
+        <div style="height:1px;background:var(--border);"></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--text-muted);">Phase</span>
+          <span style="color:var(--text-primary);font-weight:500;">4.5 — UI Polish</span>
+        </div>
+      </div>
     </div>
+
   </div>
 </div>

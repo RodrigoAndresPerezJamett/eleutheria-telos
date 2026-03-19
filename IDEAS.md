@@ -8,6 +8,16 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## UI / UX Ideas
 
+- **Draw on screen (Screen Annotation)** — draw, highlight, and annotate directly on top of live screen content. Overlay window using Tauri's transparent always-on-top window. Proposed by user during Phase 4.5 Q&A as a wanted feature.
+
+- **Dynamic color adaptation from wallpaper** — inspired by Caelestia Shell: the app UI palette adapts in real time when the desktop background changes color or a new app is opened. Optional feature the user can activate. Requires reading the dominant color from the wallpaper or sampling the screen behind the window. Architecturally complex (OS-level color sampling). Phase 6+.
+
+- **Arc-style sidebar: user-creatable groups + stacking** — users can create named groups in the sidebar (like Arc Spaces), drag tools into groups, and collapse/expand them. Tools can be "stacked" (multiple tools share one sidebar slot with a mini-tab selector). Requires a backend data model for group persistence (SQLite). Phase 5.
+
+- **Floating radial mode (fan menu)** — a small always-on-top floating button that, when clicked, fans out into a radial menu of the user's most-used tools. Designed for use overlaid on other apps without opening a full window. Requires a Tauri transparent always-on-top overlay window + radial CSS layout. Phase 5. (See also: "Mini mode" below.)
+
+- **Font system in Settings** — download and install new fonts directly from within the app. Browse a curated list, download to `ui/assets/fonts/`, and switch the active font. Phase 5.
+
 - **Command Palette (`Ctrl+K`)** — global search across all tools and notes, launcher for quick actions. Already planned for MVP but worth noting here as a high-priority idea.
 - **Quick Actions / Pipelines** — user-defined chains of tool events without code. Example: "after OCR, auto-translate and copy to clipboard". Event Bus already supports this — just needs a UI. *(Implemented in Phase 4.7 — ideas below are for future enhancement.)*
 - **Quick Actions: keybinds per pipeline** — assign a keyboard shortcut to a pipeline so it can be triggered manually without auto-running after every OCR/voice/clipboard event. Useful when the user only sometimes wants to run a pipeline after a tool completes, e.g. "I want to translate this particular OCR result but not all of them". Requires `tauri-plugin-global-shortcut` for global hotkeys, or a local hotkey approach within the app window.

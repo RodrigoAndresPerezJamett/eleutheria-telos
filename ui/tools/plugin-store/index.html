@@ -1,0 +1,46 @@
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <h1 class="panel-title">Plugin Store</h1>
+      <p class="panel-subtitle">Browse and install community plugins.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="empty-state" style="padding:32px 16px;">
+      <i data-lucide="store" style="width:40px;height:40px;color:var(--text-muted);opacity:0.4;margin-bottom:8px;"></i>
+      <p class="empty-state-title">Plugin marketplace coming in Phase 5</p>
+      <p class="empty-state-desc">
+        You'll be able to browse, install, and update community plugins directly from here.
+        For now, install plugins manually by placing them in the <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;font-size:12px;">plugins/</code> directory.
+      </p>
+    </div>
+  </div>
+
+  <p style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;">Developer tools</p>
+  <div class="card">
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0 0 2px;">Hello Python</p>
+          <p style="font-size:12px;color:var(--text-muted);margin:0;">Reference Python plugin — demonstrates the plugin API.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm"
+                hx-get="/plugins/hello-python" hx-target="#tool-panel" hx-swap="innerHTML">
+          Open
+        </button>
+      </div>
+      <div style="height:1px;background:var(--border);"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0 0 2px;">Hello Node</p>
+          <p style="font-size:12px;color:var(--text-muted);margin:0;">Reference Node.js plugin — demonstrates the plugin API.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm"
+                hx-get="/plugins/hello-node" hx-target="#tool-panel" hx-swap="innerHTML">
+          Open
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

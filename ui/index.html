@@ -1,61 +1,109 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-gray-950 text-gray-100">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Eleutheria Telos</title>
 
-  <!-- Tailwind CSS (CDN — will be replaced with compiled build in Phase 5) -->
+  <link id="theme-css" rel="stylesheet" href="/assets/themes/dark.css" />
+  <link rel="stylesheet" href="/assets/base.css" />
+
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { corePlugins: { preflight: false } };</script>
 
-  <!-- HTMX — bundled locally for offline-first (D-015) -->
   <script src="/assets/htmx.min.js"></script>
-
-  <!-- Alpine.js — bundled locally for offline-first (D-015) -->
   <script src="/assets/alpine.min.js" defer></script>
+  <script src="/assets/lucide.min.js"></script>
+
+  <style>
+    /* Sidebar collapse transition */
+    #sidebar { transition: width 200ms ease; }
+
+    /* Sidebar collapse: narrow mode */
+    #sidebar.collapsed { width: 56px; }
+    #sidebar.collapsed .sidebar-group-label,
+    #sidebar.collapsed .nav-label { display: none; }
+    #sidebar.collapsed .sidebar-sep { margin: 4px 6px; }
+    #sidebar.collapsed .nav-item { justify-content: center; padding: 8px; gap: 0; }
+    #sidebar.collapsed .sidebar-logo span:last-child { display: none; }
+    #sidebar.collapsed .sidebar-logo { justify-content: center; padding: 4px 0 12px; }
+
+    /* Context menu */
+    #ctx-menu {
+      position: fixed;
+      z-index: 9999;
+      min-width: 168px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 4px;
+      box-shadow: 0 8px 32px var(--shadow-lg);
+    }
+    #ctx-menu button {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 7px 10px;
+      border: none; background: transparent; cursor: pointer;
+      font-size: 13px; font-family: inherit;
+      color: var(--text-primary);
+      border-radius: var(--radius-md);
+      text-align: left;
+      transition: background 100ms;
+    }
+    #ctx-menu button:hover { background: var(--accent-subtle); color: var(--accent); }
+    #ctx-menu button.danger { color: var(--destructive); }
+    #ctx-menu button.danger:hover { background: var(--destructive-subtle); }
+    #ctx-menu .ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+  </style>
 
   <script>
-    // HTMX 2.x defaults: selfRequestsOnly=true blocks cross-origin requests.
-    // Our shell is on tauri://localhost but Axum is http://127.0.0.1:{PORT}.
-    // Disable the restriction so HTMX can reach the API server.
     htmx.config.selfRequestsOnly = false;
 
-    // Injected by Tauri initialization_script before any page scripts run.
-    // Fallback values used only when not running inside Tauri (browser preview).
     if (!window.__SESSION_TOKEN__) window.__SESSION_TOKEN__ = 'dev-token';
     if (!window.__API_PORT__)      window.__API_PORT__      = 47821;
 
-    // Configure HTMX:
-    //   1. Always send the session token.
-    //   2. Rewrite relative paths (/tools/..., /api/...) to the Axum server.
-    //      This is needed because the shell is loaded from tauri://localhost/
-    //      (static file) while API calls must go to http://127.0.0.1:{PORT}/.
-    document.addEventListener('htmx:configRequest', function (evt) {
+    // Tool registry — used for pinned section and context menu
+    window.ET_TOOLS = {
+      clipboard:          { label: 'Clipboard',     icon: 'clipboard',    group: 'tools' },
+      notes:              { label: 'Notes',          icon: 'notebook-pen', group: 'tools' },
+      voice:              { label: 'Voice',          icon: 'mic',          group: 'tools' },
+      ocr:                { label: 'OCR',            icon: 'scan-text',    group: 'tools' },
+      translate:          { label: 'Translate',      icon: 'languages',    group: 'tools' },
+      search:             { label: 'Search',         icon: 'search',       group: 'tools' },
+      'screen-recorder':  { label: 'Screen Rec',     icon: 'monitor-play', group: 'media' },
+      'audio-recorder':   { label: 'Audio Rec',      icon: 'mic-2',        group: 'media' },
+      'photo-editor':     { label: 'Photo Edit',     icon: 'image',        group: 'media' },
+      'video-processor':  { label: 'Video',          icon: 'video',        group: 'media' },
+      'quick-actions':    { label: 'Quick Actions',  icon: 'zap',          group: 'media' },
+    };
+
+    // ── Theme & glass ─────────────────────────────────────────────────────────
+    window.applyTheme = function(name) {
+      const valid = ['dark','light','catppuccin-mocha','catppuccin-latte','tokyo-night'];
+      if (!valid.includes(name)) name = 'dark';
+      document.getElementById('theme-css').href = '/assets/themes/' + name + '.css';
+      document.documentElement.setAttribute('data-theme', name);
+    };
+    window.applyGlass = function(enabled) {
+      document.documentElement.classList.toggle('no-glass', !enabled);
+    };
+
+    // ── HTMX request interceptor ──────────────────────────────────────────────
+    document.addEventListener('htmx:configRequest', function(evt) {
       evt.detail.headers['Authorization'] = 'Bearer ' + window.__SESSION_TOKEN__;
-
       const p = evt.detail.path;
-      if (!p || p.startsWith('http://127.0.0.1:')) return; // already pointing at Axum
-
-      // HTMX 2.x resolves relative paths to absolute tauri:// URLs for elements
-      // injected via dynamic swap. Extract pathname+search regardless of format.
+      if (!p || p.startsWith('http://127.0.0.1:')) return;
       const apiPath = p.startsWith('/') ? p : new URL(p).pathname + (new URL(p).search || '');
       evt.detail.path = 'http://127.0.0.1:' + window.__API_PORT__ + apiPath;
     });
 
-    // After every swap into #tool-panel, force-process the new content so that
-    // hx-trigger="load" elements inside swapped partials are properly initialized.
-    // htmx.ajax() uses document.body as the source element (no real source), which
-    // can cause the post-swap Ae() task to miss child initialization in some builds.
-    document.addEventListener('htmx:afterSwap', function (evt) {
+    document.addEventListener('htmx:afterSwap', function(evt) {
       if (evt.detail.target && evt.detail.target.id === 'tool-panel') {
         htmx.process(evt.detail.target);
+        if (window.lucide) lucide.createIcons({ node: evt.detail.target });
       }
     });
 
-    // App init: optionally confirm token+port via Tauri invoke, then load
-    // the default tool panel. initialization_script already set the values;
-    // invoke is only called if the function is actually available in this
-    // context (it is not always exposed without withGlobalTauri: true).
+    // ── initApp ───────────────────────────────────────────────────────────────
     async function initApp() {
       try {
         const invoke =
@@ -68,422 +116,544 @@
           window.__SESSION_TOKEN__ = await invoke('get_session_token');
           window.__API_PORT__      = await invoke('get_api_port');
         }
-      } catch (e) {
-        // initialization_script already set the values — proceed with those.
-      }
-      // Load the default tool panel using the confirmed token and port.
-      // Pass the full absolute URL so htmx:configRequest path-rewriting is not needed.
+      } catch (_) {}
+
       const token = window.__SESSION_TOKEN__;
       const port  = window.__API_PORT__;
-      htmx.ajax('GET', 'http://127.0.0.1:' + port + '/tools/clipboard', {
-        target:  '#tool-panel',
-        swap:    'innerHTML',
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
 
-      // Plugin sidebar entries — injected by Tauri initialization_script before page load.
+      // Load UI preferences
+      try {
+        const res = await fetch('http://127.0.0.1:' + port + '/api/settings/ui',
+          { headers: { 'Authorization': 'Bearer ' + token } });
+        if (res.ok) {
+          const s = await res.json();
+          if (s.theme) applyTheme(s.theme);
+          if (typeof s.glass === 'boolean') applyGlass(s.glass);
+          // Dispatch to Alpine component via custom event
+          window.dispatchEvent(new CustomEvent('et:settings-loaded', { detail: s }));
+        }
+      } catch (_) {}
+
+      // Init Lucide in shell
+      if (window.lucide) lucide.createIcons();
+
+      // Plugin sidebar entries
       var plugins = window.__SIDEBAR_PLUGINS__;
       if (plugins && plugins.length) {
         var desktop = document.getElementById('plugin-sidebar-desktop');
         var tablet  = document.getElementById('plugin-sidebar-tablet');
-        plugins.forEach(function (p) {
-          var icon  = p.icon  || '🔌';
+        plugins.forEach(function(p) {
           var label = p.label || p.name;
           var id    = p.id;
-
           var li1 = document.createElement('li');
           li1.innerHTML =
-            '<button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"' +
-            ' hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
-            '<span class="text-lg">' + icon + '</span><span>' + label + '</span></button>';
+            '<button class="nav-item" hx-get="/plugins/' + id + '"' +
+            ' hx-target="#tool-panel" hx-swap="innerHTML">' +
+            '<i data-lucide="puzzle" style="width:16px;height:16px"></i>' +
+            '<span class="nav-label">' + label + '</span></button>';
           desktop.appendChild(li1);
           htmx.process(li1);
 
           var li2 = document.createElement('li');
           li2.innerHTML =
-            '<button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"' +
-            ' title="' + label + '" hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
-            icon + '</button>';
+            '<button class="nav-item-icon" title="' + label + '"' +
+            ' hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+            '<i data-lucide="puzzle" style="width:18px;height:18px"></i></button>';
           tablet.appendChild(li2);
           htmx.process(li2);
         });
+        if (window.lucide) lucide.createIcons();
       }
+
+      // Load default panel
+      htmx.ajax('GET', 'http://127.0.0.1:' + port + '/tools/clipboard', {
+        target: '#tool-panel', swap: 'innerHTML',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
     }
 
     document.addEventListener('DOMContentLoaded', initApp);
   </script>
-
-  <style>
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
-    .nav-item.active { background-color: #1f2937; }
-    /* HTMX request indicator: hidden by default, shown while request is in-flight */
-    .htmx-indicator { display: none; }
-    .htmx-indicator.htmx-request { display: inline; }
-  </style>
 </head>
 
-<body class="h-full flex"
-      x-data="{ activeTool: 'clipboard', paletteOpen: false }"
+<body x-data="shellState()"
       @keydown.ctrl.k.window.prevent="paletteOpen = true"
-      @keydown.escape.window="paletteOpen = false">
+      @keydown.escape.window="paletteOpen = false; ctxMenu.open = false"
+      @click.window="ctxMenu.open = false"
+      @contextmenu.window="ctxMenu.open = false"
+      style="display:flex;height:100%;overflow:hidden;">
 
-  <!-- ── Sidebar (desktop ≥1024px) ──────────────────────────────────────── -->
-  <nav id="sidebar"
-       class="hidden lg:flex flex-col w-52 shrink-0 bg-gray-900 border-r border-gray-800 py-4">
+  <!-- ── Context menu ──────────────────────────────────────────────────────── -->
+  <div id="ctx-menu"
+       x-show="ctxMenu.open"
+       x-transition.scale.origin.top.left
+       :style="`top:${ctxMenu.y}px;left:${ctxMenu.x}px`"
+       @click.stop="">
+    <button @click.stop="togglePin(ctxMenu.tool); ctxMenu.open = false">
+      <i :data-lucide="isPinned(ctxMenu.tool) ? 'pin-off' : 'pin'" style="width:14px;height:14px"></i>
+      <span x-text="isPinned(ctxMenu.tool) ? 'Unpin from top' : 'Pin to top'"></span>
+    </button>
+    <div class="ctx-sep"></div>
+    <button @click.stop="loadTool(ctxMenu.tool); ctxMenu.open = false">
+      <i data-lucide="arrow-right" style="width:14px;height:14px"></i>
+      <span>Open</span>
+    </button>
+  </div>
 
-    <div class="px-4 mb-6">
-      <span class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Eleutheria</span>
+  <!-- ── Sidebar (desktop ≥1024px) ─────────────────────────────────────────── -->
+  <nav id="sidebar" :class="{ collapsed: sidebarCollapsed }">
+
+    <!-- Logo + collapse toggle -->
+    <div class="sidebar-logo" style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px 12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="logo-dot"></span>
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);">Eleutheria</span>
+      </div>
+      <button @click.stop="toggleSidebar()"
+              style="border:none;background:transparent;cursor:pointer;padding:4px;border-radius:var(--radius-sm);color:var(--text-muted);display:flex;align-items:center;"
+              :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+        <i :data-lucide="sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'" style="width:15px;height:15px;"></i>
+      </button>
     </div>
 
-    <ul class="flex-1 overflow-y-auto space-y-1 px-2">
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'clipboard' }"
-                hx-get="/tools/clipboard"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'clipboard'">
-          <span class="text-lg">📋</span>
-          <span>Clipboard</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'notes' }"
-                hx-get="/tools/notes"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'notes'">
-          <span class="text-lg">📝</span>
-          <span>Notes</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'voice' }"
-                hx-get="/tools/voice"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'voice'">
-          <span class="text-lg">🎙️</span>
-          <span>Voice</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'ocr' }"
-                hx-get="/tools/ocr"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'ocr'">
-          <span class="text-lg">🔤</span>
-          <span>OCR</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'translate' }"
-                hx-get="/tools/translate"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'translate'">
-          <span class="text-lg">🌐</span>
-          <span>Translate</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'search' }"
-                hx-get="/tools/search"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'search'">
-          <span class="text-lg">🔍</span>
-          <span>Search</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'screen-recorder' }"
-                hx-get="/tools/screen-recorder"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'screen-recorder'">
-          <span class="text-lg">🎬</span>
-          <span>Screen Rec</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'audio-recorder' }"
-                hx-get="/tools/audio-recorder"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'audio-recorder'">
-          <span class="text-lg">🎙</span>
-          <span>Audio Rec</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'photo-editor' }"
-                hx-get="/tools/photo-editor"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'photo-editor'">
-          <span class="text-lg">🖼️</span>
-          <span>Photo Edit</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'video-processor' }"
-                hx-get="/tools/video-processor"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'video-processor'">
-          <span class="text-lg">🎞️</span>
-          <span>Video</span>
-        </button>
-      </li>
-      <li>
-        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-                :class="{ 'active': activeTool === 'quick-actions' }"
-                hx-get="/tools/quick-actions"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'quick-actions'">
-          <span class="text-lg">⚡</span>
-          <span>Quick Actions</span>
-        </button>
-      </li>
-    </ul>
+    <div class="sidebar-scroll">
 
-    <!-- Plugin sidebar items — populated by initApp() from window.__SIDEBAR_PLUGINS__ -->
-    <ul id="plugin-sidebar-desktop" class="space-y-1 px-2 mt-2"></ul>
+        <!-- ── Pinned 3×3 grid (ARK-style) — hidden when sidebar collapsed ─── -->
+      <template x-if="pinned.length > 0 && !sidebarCollapsed">
+        <div>
+          <span class="sidebar-group-label">Pinned</span>
+          <div class="pinned-grid">
+            <template x-for="toolId in pinned" :key="toolId">
+              <button class="pinned-icon-btn"
+                      :class="{ active: activeTool === toolId }"
+                      :title="toolLabel(toolId)"
+                      @click.stop="loadTool(toolId)"
+                      @contextmenu.prevent.stop="openCtxMenu($event, toolId)"
+                      x-effect="$nextTick(() => { if(window.lucide) lucide.createIcons({ node: $el }) })">
+                <i :data-lucide="toolIcon(toolId)" style="width:17px;height:17px"></i>
+              </button>
+            </template>
+          </div>
+          <div class="sidebar-sep"></div>
+        </div>
+      </template>
 
-    <div class="px-2 mt-auto space-y-1">
-      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-              :class="{ 'active': activeTool === 'models' }"
-              hx-get="/tools/models"
-              hx-target="#tool-panel"
-              hx-swap="innerHTML"
-              @click="activeTool = 'models'">
-        <span class="text-lg">🧠</span>
-        <span>Models</span>
+      <!-- ── Tools group ───────────────────────────────────────────────────── -->
+      <span class="sidebar-group-label">Tools</span>
+      <ul class="list-none p-0 m-0" style="display:flex;flex-direction:column;gap:2px;">
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='clipboard'}"
+                  hx-get="/tools/clipboard" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='clipboard'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'clipboard')">
+            <i data-lucide="clipboard" style="width:16px;height:16px"></i>
+            <span class="nav-label">Clipboard</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='notes'}"
+                  hx-get="/tools/notes" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='notes'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'notes')">
+            <i data-lucide="notebook-pen" style="width:16px;height:16px"></i>
+            <span class="nav-label">Notes</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='voice'}"
+                  hx-get="/tools/voice" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='voice'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'voice')">
+            <i data-lucide="mic" style="width:16px;height:16px"></i>
+            <span class="nav-label">Voice</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='ocr'}"
+                  hx-get="/tools/ocr" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='ocr'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'ocr')">
+            <i data-lucide="scan-text" style="width:16px;height:16px"></i>
+            <span class="nav-label">OCR</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='translate'}"
+                  hx-get="/tools/translate" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='translate'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'translate')">
+            <i data-lucide="languages" style="width:16px;height:16px"></i>
+            <span class="nav-label">Translate</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='search'}"
+                  hx-get="/tools/search" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='search'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'search')">
+            <i data-lucide="search" style="width:16px;height:16px"></i>
+            <span class="nav-label">Search</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="sidebar-sep"></div>
+
+      <!-- ── Media group ───────────────────────────────────────────────────── -->
+      <span class="sidebar-group-label">Media</span>
+      <ul class="list-none p-0 m-0" style="display:flex;flex-direction:column;gap:2px;">
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='screen-recorder'}"
+                  hx-get="/tools/screen-recorder" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='screen-recorder'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'screen-recorder')">
+            <i data-lucide="monitor-play" style="width:16px;height:16px"></i>
+            <span class="nav-label">Screen Rec</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='audio-recorder'}"
+                  hx-get="/tools/audio-recorder" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='audio-recorder'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'audio-recorder')">
+            <i data-lucide="mic-2" style="width:16px;height:16px"></i>
+            <span class="nav-label">Audio Rec</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='photo-editor'}"
+                  hx-get="/tools/photo-editor" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='photo-editor'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'photo-editor')">
+            <i data-lucide="image" style="width:16px;height:16px"></i>
+            <span class="nav-label">Photo Edit</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='video-processor'}"
+                  hx-get="/tools/video-processor" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='video-processor'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'video-processor')">
+            <i data-lucide="video" style="width:16px;height:16px"></i>
+            <span class="nav-label">Video</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='quick-actions'}"
+                  hx-get="/tools/quick-actions" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='quick-actions'"
+                  @contextmenu.prevent.stop="openCtxMenu($event,'quick-actions')">
+            <i data-lucide="zap" style="width:16px;height:16px"></i>
+            <span class="nav-label">Quick Actions</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="sidebar-sep"></div>
+
+      <!-- ── Plugins group ─────────────────────────────────────────────────── -->
+      <span class="sidebar-group-label">Plugins</span>
+      <ul class="list-none p-0 m-0" style="display:flex;flex-direction:column;gap:2px;">
+        <!-- Dynamic plugin entries (from __SIDEBAR_PLUGINS__) -->
+        <ul id="plugin-sidebar-desktop" class="list-none p-0 m-0" style="display:flex;flex-direction:column;gap:2px;"></ul>
+        <!-- Plugin store entry -->
+        <li>
+          <button class="nav-item" :class="{active:activeTool==='plugin-store'}"
+                  hx-get="/tools/plugin-store" hx-target="#tool-panel" hx-swap="innerHTML"
+                  @click.stop="activeTool='plugin-store'">
+            <i data-lucide="store" style="width:16px;height:16px"></i>
+            <span class="nav-label">Browse Plugins</span>
+          </button>
+        </li>
+      </ul>
+
+    </div><!-- end .sidebar-scroll -->
+
+    <!-- Bottom: Models + Settings -->
+    <div class="sidebar-bottom">
+      <button class="nav-item" :class="{active:activeTool==='models'}"
+              hx-get="/tools/models" hx-target="#tool-panel" hx-swap="innerHTML"
+              @click.stop="activeTool='models'">
+        <i data-lucide="brain" style="width:16px;height:16px"></i>
+        <span class="nav-label">Models</span>
       </button>
-      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
-              :class="{ 'active': activeTool === 'settings' }"
-              hx-get="/tools/settings"
-              hx-target="#tool-panel"
-              hx-swap="innerHTML"
-              @click="activeTool = 'settings'">
-        <span class="text-lg">⚙️</span>
-        <span>Settings</span>
+      <button class="nav-item" :class="{active:activeTool==='settings'}"
+              hx-get="/tools/settings" hx-target="#tool-panel" hx-swap="innerHTML"
+              @click.stop="activeTool='settings'">
+        <i data-lucide="settings" style="width:16px;height:16px"></i>
+        <span class="nav-label">Settings</span>
       </button>
+    </div>
+
+    <!-- Drag-to-resize handle on right edge -->
+    <div id="sidebar-resize-handle" @mousedown.stop="startResizeDrag($event)" title="Drag to resize"></div>
+  </nav>
+
+  <!-- ── Icon sidebar (tablet 640–1023px) ───────────────────────────────────── -->
+  <nav id="sidebar-tablet">
+    <div style="padding:8px 0 10px;display:flex;justify-content:center;">
+      <span class="logo-dot" style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:block;"></span>
+    </div>
+    <div class="flex-1 overflow-y-auto flex flex-col gap-0.5 px-1">
+      <button class="nav-item-icon" :class="{active:activeTool==='clipboard'}" title="Clipboard"
+              hx-get="/tools/clipboard" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='clipboard'">
+        <i data-lucide="clipboard" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='notes'}" title="Notes"
+              hx-get="/tools/notes" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='notes'">
+        <i data-lucide="notebook-pen" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='voice'}" title="Voice"
+              hx-get="/tools/voice" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='voice'">
+        <i data-lucide="mic" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='ocr'}" title="OCR"
+              hx-get="/tools/ocr" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='ocr'">
+        <i data-lucide="scan-text" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='translate'}" title="Translate"
+              hx-get="/tools/translate" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='translate'">
+        <i data-lucide="languages" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='search'}" title="Search"
+              hx-get="/tools/search" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='search'">
+        <i data-lucide="search" style="width:18px;height:18px"></i></button>
+      <div style="height:1px;background:var(--border);margin:4px 6px;"></div>
+      <button class="nav-item-icon" :class="{active:activeTool==='screen-recorder'}" title="Screen Rec"
+              hx-get="/tools/screen-recorder" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='screen-recorder'">
+        <i data-lucide="monitor-play" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='audio-recorder'}" title="Audio Rec"
+              hx-get="/tools/audio-recorder" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='audio-recorder'">
+        <i data-lucide="mic-2" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='photo-editor'}" title="Photo Edit"
+              hx-get="/tools/photo-editor" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='photo-editor'">
+        <i data-lucide="image" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='video-processor'}" title="Video"
+              hx-get="/tools/video-processor" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='video-processor'">
+        <i data-lucide="video" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='quick-actions'}" title="Quick Actions"
+              hx-get="/tools/quick-actions" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='quick-actions'">
+        <i data-lucide="zap" style="width:18px;height:18px"></i></button>
+      <div style="height:1px;background:var(--border);margin:4px 6px;"></div>
+      <ul id="plugin-sidebar-tablet" class="flex flex-col gap-0.5 list-none p-0 m-0"></ul>
+    </div>
+    <div style="border-top:1px solid var(--border);padding:4px 4px 0;display:flex;flex-direction:column;gap:2px;">
+      <button class="nav-item-icon" :class="{active:activeTool==='models'}" title="Models"
+              hx-get="/tools/models" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='models'">
+        <i data-lucide="brain" style="width:18px;height:18px"></i></button>
+      <button class="nav-item-icon" :class="{active:activeTool==='settings'}" title="Settings"
+              hx-get="/tools/settings" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='settings'">
+        <i data-lucide="settings" style="width:18px;height:18px"></i></button>
     </div>
   </nav>
 
-  <!-- ── Icon-only sidebar (tablet 640px–1023px) ───────────────────────── -->
-  <nav id="sidebar-tablet"
-       class="hidden sm:flex lg:hidden flex-col w-14 shrink-0 bg-gray-900 border-r border-gray-800 py-4 items-center">
-    <ul class="flex-1 overflow-y-auto space-y-2">
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Clipboard"
-                hx-get="/tools/clipboard"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'clipboard'">📋</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Notes"
-                hx-get="/tools/notes"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'notes'">📝</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Voice"
-                hx-get="/tools/voice"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'voice'">🎙️</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="OCR"
-                hx-get="/tools/ocr"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'ocr'">🔤</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Translate"
-                hx-get="/tools/translate"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'translate'">🌐</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Search"
-                hx-get="/tools/search"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'search'">🔍</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Screen Recorder"
-                hx-get="/tools/screen-recorder"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'screen-recorder'">🎬</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Audio Recorder"
-                hx-get="/tools/audio-recorder"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'audio-recorder'">🎙</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Photo Editor"
-                hx-get="/tools/photo-editor"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'photo-editor'">🖼️</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Video Processor"
-                hx-get="/tools/video-processor"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'video-processor'">🎞️</button>
-      </li>
-      <li>
-        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-                title="Quick Actions"
-                hx-get="/tools/quick-actions"
-                hx-target="#tool-panel"
-                hx-swap="innerHTML"
-                @click="activeTool = 'quick-actions'">⚡</button>
-      </li>
-    </ul>
-
-    <!-- Plugin sidebar items (icon-only) — populated by initApp() -->
-    <ul id="plugin-sidebar-tablet" class="space-y-2 mt-2"></ul>
-
-    <div class="mt-auto flex flex-col gap-1">
-      <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-              title="Models"
-              hx-get="/tools/models"
-              hx-target="#tool-panel"
-              hx-swap="innerHTML"
-              @click="activeTool = 'models'">🧠</button>
-      <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
-              title="Settings"
-              hx-get="/tools/settings"
-              hx-target="#tool-panel"
-              hx-swap="innerHTML"
-              @click="activeTool = 'settings'">⚙️</button>
-    </div>
-  </nav>
-
-  <!-- ── Main content ───────────────────────────────────────────────────── -->
-  <main class="flex-1 flex flex-col overflow-hidden">
-
-    <div id="tool-panel"
-         class="flex-1 overflow-y-auto p-6">
-      <div class="flex items-center justify-center h-full text-gray-600">
-        Loading…
+  <!-- ── Main content ────────────────────────────────────────────────────────── -->
+  <main id="main">
+    <div id="tool-panel">
+      <div class="empty-state" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <i data-lucide="loader-2" class="spin" style="width:28px;height:28px;color:var(--text-muted)"></i>
       </div>
     </div>
-
   </main>
 
-  <!-- ── Bottom nav (mobile <640px) ────────────────────────────────────── -->
-  <nav id="bottom-nav"
-       class="sm:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-2 z-50">
-    <button class="flex flex-col items-center gap-1 text-xs p-2"
-            hx-get="/tools/clipboard"
-            hx-target="#tool-panel"
-            hx-swap="innerHTML"
-            @click="activeTool = 'clipboard'">
-      <span class="text-xl">📋</span>
-      <span>Clip</span>
-    </button>
-    <button class="flex flex-col items-center gap-1 text-xs p-2"
-            hx-get="/tools/notes"
-            hx-target="#tool-panel"
-            hx-swap="innerHTML"
-            @click="activeTool = 'notes'">
-      <span class="text-xl">📝</span>
-      <span>Notes</span>
-    </button>
-    <button class="flex flex-col items-center gap-1 text-xs p-2"
-            hx-get="/tools/voice"
-            hx-target="#tool-panel"
-            hx-swap="innerHTML"
-            @click="activeTool = 'voice'">
-      <span class="text-xl">🎙️</span>
-      <span>Voice</span>
-    </button>
-    <button class="flex flex-col items-center gap-1 text-xs p-2"
-            hx-get="/tools/ocr"
-            hx-target="#tool-panel"
-            hx-swap="innerHTML"
-            @click="activeTool = 'ocr'">
-      <span class="text-xl">🔤</span>
-      <span>OCR</span>
-    </button>
-    <button class="flex flex-col items-center gap-1 text-xs p-2"
-            hx-get="/tools/settings"
-            hx-target="#tool-panel"
-            hx-swap="innerHTML"
-            @click="activeTool = 'settings'">
-      <span class="text-xl">⚙️</span>
-      <span>More</span>
-    </button>
+  <!-- ── Bottom nav (mobile) ─────────────────────────────────────────────────── -->
+  <nav id="bottom-nav" class="fixed bottom-0 left-0 right-0 justify-around py-2 z-50">
+    <button style="display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 12px;background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--text-secondary);font-family:inherit;"
+            hx-get="/tools/clipboard" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='clipboard'">
+      <i data-lucide="clipboard" style="width:20px;height:20px"></i><span>Clip</span></button>
+    <button style="display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 12px;background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--text-secondary);font-family:inherit;"
+            hx-get="/tools/notes" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='notes'">
+      <i data-lucide="notebook-pen" style="width:20px;height:20px"></i><span>Notes</span></button>
+    <button style="display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 12px;background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--text-secondary);font-family:inherit;"
+            hx-get="/tools/voice" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='voice'">
+      <i data-lucide="mic" style="width:20px;height:20px"></i><span>Voice</span></button>
+    <button style="display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 12px;background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--text-secondary);font-family:inherit;"
+            hx-get="/tools/ocr" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='ocr'">
+      <i data-lucide="scan-text" style="width:20px;height:20px"></i><span>OCR</span></button>
+    <button style="display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 12px;background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--text-secondary);font-family:inherit;"
+            hx-get="/tools/settings" hx-target="#tool-panel" hx-swap="innerHTML" @click="activeTool='settings'">
+      <i data-lucide="settings" style="width:20px;height:20px"></i><span>More</span></button>
   </nav>
 
-
-  <!-- ── Ctrl+K Command Palette ─────────────────────────────────────────── -->
+  <!-- ── Ctrl+K Command Palette ──────────────────────────────────────────────── -->
   <div x-show="paletteOpen"
        x-transition.opacity
-       class="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60"
+       id="palette-backdrop"
+       class="fixed inset-0 z-50 flex items-start justify-center pt-24"
        @click.self="paletteOpen = false">
-    <div class="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
-         @click.stop="">
-      <input x-ref="paletteInput"
-             x-effect="if (paletteOpen) $nextTick(() => $refs.paletteInput.focus())"
-             @input.stop=""
-             type="text"
-             name="q"
-             placeholder="Search notes and clipboard…"
-             class="w-full bg-transparent px-4 py-3 text-gray-100 placeholder-gray-500 outline-none border-b border-gray-700 text-sm"
-             hx-get="/api/search"
-             hx-trigger="input changed delay:250ms"
-             hx-target="#palette-results"
-             hx-swap="innerHTML"
-             @keydown.escape.stop="paletteOpen = false" />
-      <div id="palette-results" class="max-h-72 overflow-y-auto py-1">
-        <p class="text-xs text-gray-600 px-3 py-2">Type to search…</p>
+    <div id="palette-box" class="w-full max-w-lg overflow-hidden" @click.stop="">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);">
+        <i data-lucide="search" style="width:15px;height:15px;color:var(--text-muted);flex-shrink:0;"></i>
+        <input x-ref="paletteInput"
+               x-effect="if (paletteOpen) $nextTick(() => $refs.paletteInput.focus())"
+               @input.stop=""
+               type="text" name="q"
+               placeholder="Search notes and clipboard…"
+               style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text-primary);font-family:inherit;"
+               hx-get="/api/search"
+               hx-trigger="input changed delay:250ms"
+               hx-target="#palette-results"
+               hx-swap="innerHTML"
+               @keydown.escape.stop="paletteOpen = false" />
       </div>
-      <div class="border-t border-gray-800 px-3 py-2 flex gap-4">
-        <span class="text-xs text-gray-600">↵ open &nbsp; Esc close</span>
+      <div id="palette-results" class="max-h-72 overflow-y-auto py-1">
+        <p style="font-size:12px;color:var(--text-muted);padding:10px 14px;">Type to search…</p>
+      </div>
+      <div style="border-top:1px solid var(--border);padding:8px 14px;">
+        <span style="font-size:11px;color:var(--text-muted);">↵ open &nbsp; Esc close</span>
       </div>
     </div>
   </div>
+
+  <!-- ── Alpine component ────────────────────────────────────────────────────── -->
+  <script>
+    function shellState() {
+      return {
+        activeTool: 'clipboard',
+        paletteOpen: false,
+        sidebarCollapsed: false,
+        pinned: [],          // array of tool IDs, max 9
+        ctxMenu: { open: false, tool: null, x: 0, y: 0 },
+
+        init() {
+          // Apply settings loaded by initApp()
+          window.addEventListener('et:settings-loaded', (evt) => {
+            const s = evt.detail;
+            if (Array.isArray(s.pinned)) this.pinned = s.pinned;
+            if (typeof s.sidebar_collapsed === 'boolean') {
+              this.sidebarCollapsed = s.sidebar_collapsed;
+            }
+          });
+        },
+
+        toolLabel(id) {
+          return (window.ET_TOOLS[id] || {}).label || id;
+        },
+        toolIcon(id) {
+          return (window.ET_TOOLS[id] || {}).icon || 'box';
+        },
+
+        loadTool(id) {
+          this.activeTool = id;
+          htmx.ajax('GET', 'http://127.0.0.1:' + window.__API_PORT__ + '/tools/' + id, {
+            target: '#tool-panel', swap: 'innerHTML',
+            headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
+          });
+        },
+
+        openCtxMenu(event, toolId) {
+          // Clamp to viewport
+          const vw = window.innerWidth, vh = window.innerHeight;
+          const x = Math.min(event.clientX, vw - 180);
+          const y = Math.min(event.clientY, vh - 120);
+          this.ctxMenu = { open: true, tool: toolId, x, y };
+          // Re-render Lucide in context menu after Alpine renders it
+          this.$nextTick(() => {
+            const menu = document.getElementById('ctx-menu');
+            if (menu && window.lucide) lucide.createIcons({ node: menu });
+          });
+        },
+
+        isPinned(id) { return this.pinned.includes(id); },
+
+        togglePin(id) {
+          if (this.isPinned(id)) {
+            this.pinned = this.pinned.filter(x => x !== id);
+          } else {
+            if (this.pinned.length >= 9) return; // max 9
+            this.pinned = [...this.pinned, id];
+          }
+          this.savePinned();
+        },
+
+        async savePinned() {
+          try {
+            await fetch(
+              'http://127.0.0.1:' + window.__API_PORT__ + '/api/settings/ui',
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': 'Bearer ' + window.__SESSION_TOKEN__,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ pinned: this.pinned })
+              }
+            );
+          } catch (_) {}
+        },
+
+        toggleSidebar() {
+          this.sidebarCollapsed = !this.sidebarCollapsed;
+          this.saveSidebarState();
+          // Re-render Lucide icons after collapse/expand
+          this.$nextTick(() => {
+            if (window.lucide) lucide.createIcons({ node: document.getElementById('sidebar') });
+          });
+        },
+
+        async saveSidebarState() {
+          try {
+            await fetch(
+              'http://127.0.0.1:' + window.__API_PORT__ + '/api/settings/ui',
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': 'Bearer ' + window.__SESSION_TOKEN__,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ sidebar_collapsed: this.sidebarCollapsed })
+              }
+            );
+          } catch (_) {}
+        },
+
+        // ── Drag-to-resize sidebar ──────────────────────────────────────────
+        // Shows live width while dragging, then snaps to 56px or 200px on release.
+        // Snap threshold: if final dragged width < 128px → collapse, else → expand.
+        startResizeDrag(event) {
+          event.preventDefault();
+          const sidebar = document.getElementById('sidebar');
+          const handle  = document.getElementById('sidebar-resize-handle');
+          if (handle) handle.classList.add('dragging');
+
+          const startX    = event.clientX;
+          const startWidth = this.sidebarCollapsed ? 56 : 200;
+          const self = this;
+
+          // Disable CSS transition for instant live feedback
+          if (sidebar) sidebar.style.transition = 'none';
+
+          const onMouseMove = (e) => {
+            const delta    = e.clientX - startX;
+            const newWidth = Math.max(40, Math.min(240, startWidth + delta));
+            if (sidebar) sidebar.style.width = newWidth + 'px';
+          };
+
+          const onMouseUp = (e) => {
+            if (handle) handle.classList.remove('dragging');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            // Re-enable CSS transition before snapping
+            if (sidebar) { sidebar.style.transition = ''; sidebar.style.width = ''; }
+
+            const finalWidth   = startWidth + (e.clientX - startX);
+            const shouldCollapse = finalWidth < 128;
+
+            self.sidebarCollapsed = shouldCollapse;
+            if (shouldCollapse !== (startWidth < 100)) {
+              self.saveSidebarState();
+            }
+            self.$nextTick(() => {
+              if (window.lucide) lucide.createIcons({ node: sidebar });
+            });
+          };
+
+          document.body.style.cursor = 'ew-resize';
+          document.body.style.userSelect = 'none';
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+        }
+      };
+    }
+  </script>
 
 </body>
 </html>

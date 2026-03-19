@@ -13,7 +13,7 @@
   ],
   "permissions": [],
   "sidebar": {
-    "show": true,
+    "show": false,
     "label": "Hello Python",
     "order": 100
   }

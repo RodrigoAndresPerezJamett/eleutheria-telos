@@ -1,28 +1,28 @@
-<div id="tool-panel" class="flex flex-col h-full">
+<div class="panel" style="display:flex;flex-direction:column;height:100%;padding:0;">
 
   <!-- Header -->
-  <div class="px-6 pt-6 pb-4 border-b border-gray-800 shrink-0">
-    <h2 class="text-xl font-semibold text-white">⚡ Quick Actions</h2>
-    <p class="text-sm text-gray-400 mt-1">
-      Build pipelines that connect tools visually — no code needed.
-    </p>
+  <div class="panel-header" style="padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div>
+      <h1 class="panel-title">Quick Actions</h1>
+      <p class="panel-subtitle">Build pipelines that connect tools visually — no code needed.</p>
+    </div>
   </div>
 
   <!-- Body: two-column layout -->
-  <div class="flex flex-1 min-h-0">
+  <div style="display:flex;flex:1;min-height:0;">
 
     <!-- Left column: pipeline list -->
-    <div class="w-64 shrink-0 border-r border-gray-800 flex flex-col">
+    <div style="width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;">
 
       <!-- Create form -->
-      <div class="px-3 py-3 border-b border-gray-800"
+      <div style="padding:12px;border-bottom:1px solid var(--border);"
            x-data="{open: false, name: '', trigger: '{&quot;type&quot;:&quot;Manual&quot;}'}">
-        <button class="w-full text-xs bg-blue-700 hover:bg-blue-600 text-white rounded px-3 py-2 transition-colors"
+        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;"
                 @click="open = !open">
           + New Pipeline
         </button>
         <form x-show="open"
-              class="mt-2 flex flex-col gap-2"
+              style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"
               hx-post="/api/pipelines"
               hx-target="#pipeline-list"
               hx-swap="outerHTML"
@@ -32,45 +32,46 @@
                  type="text"
                  placeholder="Pipeline name"
                  required
-                 class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-600" />
+                 class="input"
+                 style="font-size:12px;padding:5px 8px;" />
           <select name="trigger"
                   x-model="trigger"
-                  class="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 focus:outline-none">
-            <option value="{&quot;type&quot;:&quot;Manual&quot;}">⚡ Manual</option>
-            <option value="{&quot;type&quot;:&quot;OcrCompleted&quot;}">📷 After OCR</option>
-            <option value="{&quot;type&quot;:&quot;TranscriptionCompleted&quot;}">🎙 After Voice</option>
-            <option value="{&quot;type&quot;:&quot;ClipboardChanged&quot;}">📋 On Clipboard Change</option>
+                  class="input"
+                  style="font-size:12px;padding:5px 8px;">
+            <option value="{&quot;type&quot;:&quot;Manual&quot;}">Manual</option>
+            <option value="{&quot;type&quot;:&quot;OcrCompleted&quot;}">After OCR</option>
+            <option value="{&quot;type&quot;:&quot;TranscriptionCompleted&quot;}">After Voice</option>
+            <option value="{&quot;type&quot;:&quot;ClipboardChanged&quot;}">On Clipboard Change</option>
           </select>
-          <button type="submit"
-                  class="w-full text-xs bg-blue-700 hover:bg-blue-600 text-white rounded px-2 py-1.5 transition-colors">
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
             Create
           </button>
         </form>
       </div>
 
       <!-- Pipeline list -->
-      <div class="flex-1 overflow-y-auto px-2 py-2">
+      <div style="flex:1;overflow-y:auto;padding:8px;">
         <div hx-get="/api/pipelines"
              hx-trigger="load"
              hx-swap="outerHTML">
-          <ul id="pipeline-list" class="space-y-1.5">
-            <li class="text-xs text-gray-600 px-1 py-2 animate-pulse">Loading…</li>
+          <ul id="pipeline-list" style="list-style:none;margin:0;padding:0;">
+            <li style="font-size:12px;color:var(--text-muted);padding:8px 4px;">Loading…</li>
           </ul>
         </div>
       </div>
     </div>
 
     <!-- Right column: editor + run result -->
-    <div class="flex-1 overflow-y-auto px-6 py-4">
+    <div style="flex:1;overflow-y:auto;padding:20px 24px;">
 
       <!-- Editor: loaded here when clicking a pipeline -->
       <div id="qa-editor"
-           class="text-sm text-gray-500 italic">
+           style="font-size:13px;color:var(--text-muted);font-style:italic;">
         Select a pipeline on the left to edit it, or create a new one.
       </div>
 
       <!-- Manual run result (also updated from list ▶ button) -->
-      <div id="qa-run-result" class="mt-4 text-xs"></div>
+      <div id="qa-run-result" style="margin-top:16px;font-size:12px;"></div>
 
     </div>
   </div>

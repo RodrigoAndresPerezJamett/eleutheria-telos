@@ -1,6 +1,9 @@
-<div id="tool-panel">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold">🌐 Translate</h2>
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <h1 class="panel-title">Translate</h1>
+      <p class="panel-subtitle">Translate text between languages using offline models.</p>
+    </div>
   </div>
 
   <!-- Language pair selector and form — loaded dynamically based on installed models -->
@@ -8,6 +11,6 @@
        hx-get="/api/translate/langs"
        hx-trigger="load"
        hx-swap="innerHTML">
-    <p class="text-gray-500 text-sm">Loading language packs…</p>
+    <p style="font-size:13px;color:var(--text-muted);">Loading language packs…</p>
   </div>
 </div>

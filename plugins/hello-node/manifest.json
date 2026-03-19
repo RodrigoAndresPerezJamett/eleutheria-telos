@@ -13,7 +13,7 @@
   ],
   "permissions": [],
   "sidebar": {
-    "show": true,
+    "show": false,
     "label": "Hello Node",
     "order": 101
   }

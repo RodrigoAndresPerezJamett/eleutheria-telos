@@ -1,0 +1,30 @@
+/* Eleutheria Telos — Catppuccin Latte */
+:root {
+  --bg-base:        #eff1f5;
+  --bg-surface:     #e6e9ef;
+  --bg-elevated:    #dce0e8;
+  --bg-overlay:     rgba(230, 233, 239, 0.72);
+  --text-primary:   #4c4f69;
+  --text-secondary: #5c5f77;
+  --text-muted:     #9ca0b0;
+  --accent:         #8839ef;
+  --accent-subtle:  rgba(136, 57, 239, 0.1);
+  --accent-hover:   rgba(136, 57, 239, 0.18);
+  --border:         rgba(76, 79, 105, 0.1);
+  --border-focus:   rgba(136, 57, 239, 0.5);
+  --shadow:         rgba(0, 0, 0, 0.08);
+  --shadow-lg:      rgba(0, 0, 0, 0.15);
+  --glass-bg:       rgba(230, 233, 239, 0.68);
+  --glass-blur:     blur(20px);
+  --glass-border:   rgba(255, 255, 255, 0.85);
+  --destructive:    #d20f39;
+  --destructive-subtle: rgba(210, 15, 57, 0.1);
+  --success:        #40a02b;
+  --success-subtle: rgba(64, 160, 43, 0.1);
+  --warning:        #df8e1d;
+  --warning-subtle: rgba(223, 142, 29, 0.1);
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      14px;
+  --radius-xl:      18px;
+}

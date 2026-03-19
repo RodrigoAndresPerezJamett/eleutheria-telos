@@ -1,0 +1,30 @@
+/* Eleutheria Telos — Tokyo Night */
+:root {
+  --bg-base:        #1a1b26;
+  --bg-surface:     #16161e;
+  --bg-elevated:    #1f2335;
+  --bg-overlay:     rgba(31, 35, 53, 0.7);
+  --text-primary:   #c0caf5;
+  --text-secondary: #a9b1d6;
+  --text-muted:     #565f89;
+  --accent:         #7aa2f7;
+  --accent-subtle:  rgba(122, 162, 247, 0.14);
+  --accent-hover:   rgba(122, 162, 247, 0.22);
+  --border:         rgba(192, 202, 245, 0.07);
+  --border-focus:   rgba(122, 162, 247, 0.55);
+  --shadow:         rgba(0, 0, 0, 0.5);
+  --shadow-lg:      rgba(0, 0, 0, 0.7);
+  --glass-bg:       rgba(22, 22, 30, 0.68);
+  --glass-blur:     blur(20px);
+  --glass-border:   rgba(192, 202, 245, 0.07);
+  --destructive:    #f7768e;
+  --destructive-subtle: rgba(247, 118, 142, 0.14);
+  --success:        #9ece6a;
+  --success-subtle: rgba(158, 206, 106, 0.14);
+  --warning:        #e0af68;
+  --warning-subtle: rgba(224, 175, 104, 0.14);
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      14px;
+  --radius-xl:      18px;
+}
