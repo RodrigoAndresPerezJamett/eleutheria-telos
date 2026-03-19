@@ -22,6 +22,8 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 - **Dynamic color adaptation from wallpaper** — inspired by Caelestia Shell: the app UI palette adapts in real time when the desktop background changes color or a new app is opened. Optional feature the user can activate. Requires reading the dominant color from the wallpaper or sampling the screen behind the window. Architecturally complex (OS-level color sampling). Phase 6+.
 
+- **Resizable panel dividers** — the vertical separator between the notes list and notes editor (and any other two-column panel like Quick Actions) should be draggable to resize, same as the sidebar. User sets their preferred split and it persists in settings. Low implementation cost — same drag logic already used for the sidebar. Phase 5.
+
 - **Arc-style sidebar: user-creatable groups + stacking** — users can create named groups in the sidebar (like Arc Spaces), drag tools into groups, and collapse/expand them. Tools can be "stacked" (multiple tools share one sidebar slot with a mini-tab selector). Requires a backend data model for group persistence (SQLite). Phase 5.
 
 - **Floating radial mode (fan menu)** — a small always-on-top floating button that, when clicked, fans out into a radial menu of the user's most-used tools. Designed for use overlaid on other apps without opening a full window. Requires a Tauri transparent always-on-top overlay window + radial CSS layout. Phase 5. (See also: "Mini mode" below.)
