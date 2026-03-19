@@ -111,6 +111,46 @@ Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
 
 ---
 
+## [2026-03-19] — Phase 3 Step 4: Video Processor (Phase 3 complete)
+
+### Completed
+
+**Backend (Rust)**
+- `src-tauri/src/tools/video_processor.rs` — 1 route handler:
+  - `POST /api/video/process` — form-urlencoded body; dispatches to ffmpeg based on `operation` field
+  - **Trim**: `ffmpeg -i input -ss start -to end -c copy output.mp4` (stream copy, lossless, near-instant)
+  - **Extract audio**: `ffmpeg -i input -vn -c:a {libmp3lame|pcm_s16le|flac} output.{mp3|wav|flac}`
+  - **Compress**: `ffmpeg -vaapi_device /dev/dri/renderD128 -i input -vf 'format=nv12,hwupload' -c:v h264_vaapi -qp {18–40} output.mp4` (optional downscale)
+  - **Resize**: same pipeline with `scale=-2:{height},format=nv12,hwupload`; preserves aspect ratio
+- `src-tauri/src/tools/mod.rs` — registered `video_processor` module
+- `src-tauri/src/server.rs` — imported `video_processor`, merged `video_processor::router()`
+
+**Frontend**
+- `ui/tools/video-processor/index.html` — operation tab selector (Trim/Extract Audio/Compress/Resize), conditional field panels per operation, Alpine QP slider with quality label, `hx-indicator` for long-running ffmpeg jobs
+- `ui/index.html` — added Video (🎞️) to desktop sidebar and tablet icon sidebar
+- `ui/locales/en.json` — 12 video processor strings
+
+### Architecture
+- No new AppState fields — stateless handler (ffmpeg runs and completes within the HTTP request)
+- Input: file path text field (avoids uploading GB-sized video files to localhost)
+- Output: `~/Videos/Eleutheria/video-{op}-{timestamp}.mp4` or `~/Music/Eleutheria/audio-{timestamp}.{ext}`
+- Codec choice: h264_vaapi for encode (confirmed available in ffmpeg-free on Nobara); trim uses `-c copy` (codec-agnostic); audio uses libmp3lame/pcm_s16le/flac
+- Duplicate `resolution` field problem avoided by using `compress_resolution` and `resize_resolution` as separate form field names
+- ffmpeg stderr truncated to last 25 lines in error responses (avoids overwhelming the UI)
+
+### CI status
+- `cargo fmt --check` ✓
+- `cargo clippy -- -D warnings` ✓
+- `cargo test` ✓ (19 tests, 0 failures)
+
+### Phase 3 complete
+All four media tools implemented: Screen Recorder, Audio Recorder, Photo Editor + Background Removal, Video Processor.
+
+### Next session should start with
+Phase 4 — MCP server (expose tools to AI agents) + Plugin system.
+
+---
+
 ## [2026-03-19] — Phase 3 Step 3: Photo Editor + Background Removal
 
 ### Completed

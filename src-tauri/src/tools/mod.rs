@@ -12,4 +12,5 @@ pub mod photo_editor;
 pub mod screen_recorder;
 pub mod search;
 pub mod translate;
+pub mod video_processor;
 pub mod voice;

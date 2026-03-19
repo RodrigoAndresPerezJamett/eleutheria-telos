@@ -22,7 +22,7 @@ use crate::event_bus::EventBus;
 use crate::mcp;
 use crate::tools::{
     audio_recorder, clipboard, models as models_tool, notes, ocr, photo_editor, screen_recorder,
-    search, translate, voice,
+    search, translate, video_processor, voice,
 };
 
 pub const DEFAULT_PORT: u16 = 47821;
@@ -218,6 +218,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(audio_recorder::router())
         .merge(photo_editor::router())
         .merge(screen_recorder::router())
+        .merge(video_processor::router())
         .merge(translate::router())
         .merge(voice::router())
         .route_layer(middleware::from_fn_with_state(

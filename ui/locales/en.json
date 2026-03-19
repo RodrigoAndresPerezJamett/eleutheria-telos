@@ -82,5 +82,16 @@
   "photo_editor.placeholder": "Open an image to start editing.",
   "photo_editor.working": "Working…",
   "photo_editor.bg_removed": "Background removed.",
-  "photo_editor.subtitle": "Open an image, draw, erase, remove background, then export."
+  "photo_editor.subtitle": "Open an image, draw, erase, remove background, then export.",
+  "nav.video_processor": "Video",
+  "video_processor.title": "Video Processor",
+  "video_processor.subtitle": "Trim, extract audio, compress, or resize — powered by ffmpeg.",
+  "video_processor.path_label": "Input video path",
+  "video_processor.path_tip": "Right-click in your file manager → Copy path, or drag the file into a terminal.",
+  "video_processor.op_trim": "Trim",
+  "video_processor.op_extract": "Extract Audio",
+  "video_processor.op_compress": "Compress",
+  "video_processor.op_resize": "Resize",
+  "video_processor.process": "Process",
+  "video_processor.processing": "Processing… (this may take a while for large files)"
 }

@@ -209,6 +209,17 @@
           <span>Photo Edit</span>
         </button>
       </li>
+      <li>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
+                :class="{ 'active': activeTool === 'video-processor' }"
+                hx-get="/tools/video-processor"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'video-processor'">
+          <span class="text-lg">🎞️</span>
+          <span>Video</span>
+        </button>
+      </li>
     </ul>
 
     <div class="px-2 mt-auto space-y-1">
@@ -308,6 +319,14 @@
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
                 @click="activeTool = 'photo-editor'">🖼️</button>
+      </li>
+      <li>
+        <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Video Processor"
+                hx-get="/tools/video-processor"
+                hx-target="#tool-panel"
+                hx-swap="innerHTML"
+                @click="activeTool = 'video-processor'">🎞️</button>
       </li>
     </ul>
     <div class="mt-auto flex flex-col gap-1">

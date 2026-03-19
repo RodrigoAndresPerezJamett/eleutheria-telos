@@ -58,7 +58,7 @@
 - [x] **Audio recorder** — record microphone to mp3/wav
 - [x] **Photo editor** — open image, paint/erase (for manual background removal), layer a second image on top, export
 - [x] **Background removal** — remove image background with rembg (AI, offline), or manually with eraser brush
-- [ ] **Video processor** — cut/trim video, extract audio, compress, change resolution — all via ffmpeg, no visual timeline
+- [x] **Video processor** — cut/trim video, extract audio, compress, change resolution — all via ffmpeg, no visual timeline
 
 **Phase 3 is complete when** a user can record their screen, do basic photo compositing, and process videos without a third-party app.
 
