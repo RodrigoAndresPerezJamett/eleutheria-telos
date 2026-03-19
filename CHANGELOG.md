@@ -7,6 +7,39 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.7: Quick Actions (visual pipeline builder)
+
+### Completed
+
+- `src-tauri/migrations/004_phase4_pipelines.sql` (new) — `pipelines` and `pipeline_steps` tables; `pipeline_steps` has `ON DELETE CASCADE` referencing `pipelines(id)`
+- `src-tauri/src/tools/quick_actions.rs` (new) — full pipeline CRUD + execution engine:
+  - HTML renderers: `render_pipeline_list()`, `render_steps()`, `render_editor()`
+  - Routes: `GET/POST /api/pipelines`, `GET /api/pipelines/:id/editor`, `PUT /api/pipelines/:id`, `DELETE /api/pipelines/:id`, `POST /api/pipelines/:id/steps`, `DELETE /api/pipelines/:id/steps/:step_id`, `POST /api/pipelines/:id/steps/:step_id/move`, `POST /api/pipelines/:id/run`
+  - Step types: `translate` (calls `scripts/translate.py`), `copy_clipboard` (arboard), `save_note` (SQLite insert)
+  - `start_pipeline_engine()` — background task subscribing to Event Bus, executes matching enabled pipelines when `OcrCompleted`, `TranscriptionCompleted`, or `ClipboardChanged` events fire
+- `src-tauri/src/tools/ocr.rs` — emits `Event::OcrCompleted` after successful Tesseract run
+- `src-tauri/src/tools/voice.rs` — emits `Event::TranscriptionCompleted` after successful Whisper transcription
+- `src-tauri/src/tools/mod.rs` — added `pub mod quick_actions;`
+- `src-tauri/src/server.rs` — merged `quick_actions::router()`
+- `src-tauri/src/lib.rs` — spawned `start_pipeline_engine` as background tokio task
+- `ui/tools/quick-actions/index.html` (new) — two-column layout: pipeline list + step editor
+- `ui/index.html` — added ⚡ Quick Actions entry to desktop and tablet sidebars; added `overflow-y-auto` to sidebar `<ul>` elements
+
+### Bug fixes
+
+- **Trigger select not saving** — `<option value='{"type":"OcrCompleted"}'>` inner quotes terminated the HTML attribute early; browser sent only `{` to server. Fixed by applying `html_escape()` in `render_editor()` and `&quot;` entities in the static create form.
+- **Quick Actions not visible in sidebar** — sidebar `<ul class="flex-1">` without `overflow-y-auto` silently clipped items below viewport height. Fixed by adding `overflow-y-auto`.
+
+### Future ideas added to IDEAS.md
+- Keybinds per pipeline (manual trigger via hotkey)
+- Opt-in/opt-out for auto-triggered pipeline execution (toast prompt before running)
+- Full visual canvas editor with drag-and-drop boxes, arrow connectors, cycles, conditions
+
+### Next session should start with
+Phase 5 — Monetization + Distribution (license key, onboarding flow, auto-updater, installers). Or confirm with user whether to address any remaining Phase 4 gaps first.
+
+---
+
 ## [2026-03-19] — Phase 4.6: Plugin developer documentation
 
 ### Completed

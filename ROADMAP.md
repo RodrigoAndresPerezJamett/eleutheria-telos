@@ -73,8 +73,8 @@
 - [x] **Plugin system — full implementation** — plugins run, routes proxied, permissions enforced, sidebar entry added
 - [x] **Example plugin (Python)** — reference implementation with full manifest
 - [x] **Example plugin (Node.js)** — reference implementation
-- [ ] **Plugin developer documentation** — how to build, manifest schema, available permissions, event bus events
-- [ ] **Quick Actions (basic)** — connect tool events to actions without code (e.g., auto-translate after OCR)
+- [x] **Plugin developer documentation** — how to build, manifest schema, available permissions, event bus events
+- [x] **Quick Actions (basic)** — connect tool events to actions without code (e.g., auto-translate after OCR)
 
 **Phase 4 is complete when** an AI agent can use the app's tools, and a community developer can build and install a working plugin by following the docs.
 
