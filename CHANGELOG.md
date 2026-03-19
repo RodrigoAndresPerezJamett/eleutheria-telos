@@ -7,6 +7,61 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4 complete: Plugin system + sidebar + bug fixes
+
+### Completed
+
+**Phase 4.3 – Plugin system bug fixes (this session)**
+
+- `src-tauri/src/plugins.rs` — fixed raw string literals: `r#"..."#` → `r##"..."##` (the `"#` in `hx-target="#tool-panel"` was terminating the raw string causing a parse error); removed `axum::extract::Path` extractor from `plugin_proxy_handler`, now extracts `plugin_id` from `req.uri().path()` directly (fixes "Wrong number of path arguments" 500 on `/plugins/:id/*path`); fixed permission check logic (was checking declared routes against the URL prefix; now checks request path against each declared route)
+- `src-tauri/src/server.rs` — added `find_free_port_from(start: u16) -> u16`; `find_free_port_sync()` now delegates to it; fixed plugin port collision (all plugins were allocated the same port because each call to `find_free_port_sync()` scanned from `DEFAULT_PORT` before the server had bound)
+- `src-tauri/src/plugin_loader.rs` — fixed port allocation: tracks `next_port = app_port + 1`, increments `next_port = plugin_port + 1` after each allocation via `find_free_port_from(next_port)`
+- `src-tauri/Cargo.toml` — added `default-run = "app"` to `[package]` (fixes "could not determine which binary to run" when two `[[bin]]` entries exist)
+- `src-tauri/src/api.rs` — added `list_sidebar_plugins` Tauri command (returns sorted list of plugins with sidebar entries)
+- `src-tauri/src/lib.rs` — `initialization_script` now injects `window.__SIDEBAR_PLUGINS__` (sorted JSON array of plugin sidebar entries) before any page script runs
+
+**Plugin sidebar in UI**
+
+- `ui/index.html` — added plugin sidebar loading to `initApp()` (reads `window.__SIDEBAR_PLUGINS__`, creates `<li>` elements via `document.createElement`, calls `htmx.process()` on each); added `<ul id="plugin-sidebar-desktop">` after the main tool list; added `<ul id="plugin-sidebar-tablet">` in the tablet icon sidebar — both populated at startup from the injected plugin list
+
+**Note:** `ui/shell.html` is NOT loaded by the app (Tauri loads `ui/index.html` via `WebviewUrl::App("index.html")`). Shell.html is kept as a standalone browser-preview artifact only.
+
+### Verified working (end-to-end)
+- 🐍 Hello Python and 🟩 Hello Node appear in the sidebar below the main tools
+- Echo form works: typing a message and clicking "Echo" returns the message (both plugins)
+- "Fetch plugin info" shows `host_reachable: true` and correct plugin metadata (both plugins)
+- Plugins run on separate ports (47854, 47863 in latest run) — no port collision
+- Plugin proxy correctly routes `/plugins/hello-python/api/echo` → Python process → response back to WebView
+
+### Bug fixes summary
+| Bug | Root cause | Fix |
+|-----|-----------|-----|
+| All plugins same port | `find_free_port_sync()` rescans from DEFAULT_PORT each call | `find_free_port_from(next_port)` with counter |
+| Proxy 500 on subpaths | `Path<String>` extractor doesn't work with 2-segment routes | Extract from `req.uri().path()` directly |
+| Permission check never 403 | Logic inverted (routes checked against request prefix) | Check request path against each declared route |
+| `host_reachable: false` | Plugins called `/api/clipboard` (returns HTML, not JSON) | Call `/health` (returns JSON) |
+| Sidebar plugins not visible | All edits were applied to `shell.html`; app loads `index.html` | Apply changes to `index.html` |
+| `cargo tauri dev` binary error | Two `[[bin]]` entries, no `default-run` | Added `default-run = "app"` to `Cargo.toml` |
+
+### Files changed this session
+- `src-tauri/Cargo.toml` — `default-run = "app"`
+- `src-tauri/src/api.rs` — `list_sidebar_plugins` command
+- `src-tauri/src/lib.rs` — `__SIDEBAR_PLUGINS__` injection + `list_sidebar_plugins` in invoke_handler
+- `src-tauri/src/server.rs` — `find_free_port_from(start)`
+- `src-tauri/src/plugin_loader.rs` — port counter fix
+- `src-tauri/src/plugins.rs` — proxy handler fix + permission check fix + raw string fix
+- `ui/index.html` — plugin sidebar loading in `initApp()` + sidebar `<ul>` containers
+- `ui/shell.html` — same changes (for browser-preview parity, but not loaded by app)
+
+### CI status
+- Tests pass locally (all prior tests still green)
+- `cargo fmt --check` ✓ (no new formatting issues)
+
+### Next session should start with
+Phase 4.6: Plugin developer documentation — `plugins/README.md` covering manifest schema, env vars, routing/permissions, HTMX UI conventions, and local dev workflow.
+
+---
+
 ## [2026-03-18] — Project foundation
 
 ### Completed

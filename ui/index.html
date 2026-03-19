@@ -80,6 +80,34 @@
         swap:    'innerHTML',
         headers: { 'Authorization': 'Bearer ' + token }
       });
+
+      // Plugin sidebar entries — injected by Tauri initialization_script before page load.
+      var plugins = window.__SIDEBAR_PLUGINS__;
+      if (plugins && plugins.length) {
+        var desktop = document.getElementById('plugin-sidebar-desktop');
+        var tablet  = document.getElementById('plugin-sidebar-tablet');
+        plugins.forEach(function (p) {
+          var icon  = p.icon  || '🔌';
+          var label = p.label || p.name;
+          var id    = p.id;
+
+          var li1 = document.createElement('li');
+          li1.innerHTML =
+            '<button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"' +
+            ' hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+            '<span class="text-lg">' + icon + '</span><span>' + label + '</span></button>';
+          desktop.appendChild(li1);
+          htmx.process(li1);
+
+          var li2 = document.createElement('li');
+          li2.innerHTML =
+            '<button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"' +
+            ' title="' + label + '" hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+            icon + '</button>';
+          tablet.appendChild(li2);
+          htmx.process(li2);
+        });
+      }
     }
 
     document.addEventListener('DOMContentLoaded', initApp);
@@ -222,6 +250,9 @@
       </li>
     </ul>
 
+    <!-- Plugin sidebar items — populated by initApp() from window.__SIDEBAR_PLUGINS__ -->
+    <ul id="plugin-sidebar-desktop" class="space-y-1 px-2 mt-2"></ul>
+
     <div class="px-2 mt-auto space-y-1">
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
               :class="{ 'active': activeTool === 'models' }"
@@ -329,6 +360,10 @@
                 @click="activeTool = 'video-processor'">🎞️</button>
       </li>
     </ul>
+
+    <!-- Plugin sidebar items (icon-only) — populated by initApp() -->
+    <ul id="plugin-sidebar-tablet" class="space-y-2 mt-2"></ul>
+
     <div class="mt-auto flex flex-col gap-1">
       <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"
               title="Models"

@@ -115,10 +115,36 @@ pub fn run() {
                 .build(app)?;
 
             // ── Main window ──────────────────────────────────────────────────
-            // Inject session token and port into the WebView before any script runs.
+            // Build the sidebar plugin list for injection into the WebView.
+            let sidebar_plugins: Vec<_> = state
+                .plugin_registry
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|p| p.manifest.sidebar.as_ref().map(|s| s.show).unwrap_or(false))
+                .map(|p| {
+                    serde_json::json!({
+                        "id": p.manifest.id,
+                        "name": p.manifest.name,
+                        "icon": p.manifest.icon,
+                        "label": p.manifest.sidebar.as_ref()
+                            .map(|s| s.label.clone())
+                            .unwrap_or_default(),
+                        "order": p.manifest.sidebar.as_ref()
+                            .and_then(|s| s.order)
+                            .unwrap_or(u32::MAX),
+                    })
+                })
+                .collect();
+            let mut sidebar_plugins = sidebar_plugins;
+            sidebar_plugins.sort_by_key(|p| p["order"].as_u64().unwrap_or(u64::MAX));
+            let plugins_json =
+                serde_json::to_string(&sidebar_plugins).unwrap_or_else(|_| "[]".to_string());
+
+            // Inject session token, port, and plugin list before any page script runs.
             let init_script = format!(
-                "window.__SESSION_TOKEN__ = '{}'; window.__API_PORT__ = {};",
-                session_token, port
+                "window.__SESSION_TOKEN__ = '{}'; window.__API_PORT__ = {}; window.__SIDEBAR_PLUGINS__ = {};",
+                session_token, port, plugins_json
             );
 
             WebviewWindowBuilder::new(
@@ -140,6 +166,7 @@ pub fn run() {
             api::get_api_port,
             api::health_check,
             api::get_config,
+            api::list_sidebar_plugins,
         ])
         .on_window_event(|window, event| {
             // Closing the window hides it instead of quitting (tray-resident app).

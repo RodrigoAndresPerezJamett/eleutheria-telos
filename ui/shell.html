@@ -37,6 +37,36 @@
         htmx.process(evt.detail.target);
       }
     });
+
+    // Plugin sidebar entries are pre-loaded by Tauri's initialization_script into
+    // window.__SIDEBAR_PLUGINS__ before any page script runs — no async needed.
+    document.addEventListener('DOMContentLoaded', function () {
+      var plugins = window.__SIDEBAR_PLUGINS__;
+      if (!plugins || !plugins.length) return;
+      var desktop = document.getElementById('plugin-sidebar-desktop');
+      var tablet  = document.getElementById('plugin-sidebar-tablet');
+      plugins.forEach(function (p) {
+        var icon  = p.icon  || '🔌';
+        var label = p.label || p.name;
+        var id    = p.id;
+
+        var li1 = document.createElement('li');
+        li1.innerHTML =
+          '<button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"' +
+          ' hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+          '<span class="text-lg">' + icon + '</span><span>' + label + '</span></button>';
+        desktop.appendChild(li1);
+        htmx.process(li1);
+
+        var li2 = document.createElement('li');
+        li2.innerHTML =
+          '<button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors"' +
+          ' title="' + label + '" hx-get="/plugins/' + id + '" hx-target="#tool-panel" hx-swap="innerHTML">' +
+          icon + '</button>';
+        tablet.appendChild(li2);
+        htmx.process(li2);
+      });
+    });
   </script>
 
   <style>
@@ -129,12 +159,8 @@
       </li>
     </ul>
 
-    <!-- Plugin sidebar items (HTMX-loaded, empty when no plugins installed) -->
-    <ul id="plugin-sidebar-desktop"
-        class="space-y-1 px-2 mt-2"
-        hx-get="/api/plugins/sidebar"
-        hx-trigger="load"
-        hx-swap="innerHTML"></ul>
+    <!-- Plugin sidebar items — loaded via htmx.ajax() in DOMContentLoaded (D-019) -->
+    <ul id="plugin-sidebar-desktop" class="space-y-1 px-2 mt-2"></ul>
 
     <div class="px-2 mt-auto">
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors"
@@ -203,12 +229,8 @@
       </li>
     </ul>
 
-    <!-- Plugin sidebar items (icon-only, HTMX-loaded) -->
-    <ul id="plugin-sidebar-tablet"
-        class="space-y-2 mt-2"
-        hx-get="/api/plugins/sidebar?layout=tablet"
-        hx-trigger="load"
-        hx-swap="innerHTML"></ul>
+    <!-- Plugin sidebar items (icon-only) — loaded via htmx.ajax() in DOMContentLoaded -->
+    <ul id="plugin-sidebar-tablet" class="space-y-2 mt-2"></ul>
 
     <button class="nav-item p-2 rounded-lg hover:bg-gray-800 transition-colors mt-auto"
             title="Settings"
