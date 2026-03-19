@@ -261,7 +261,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
 /// Synchronous port detection for use inside Tauri's setup hook.
 pub fn find_free_port_sync() -> u16 {
-    let mut port = DEFAULT_PORT;
+    find_free_port_from(DEFAULT_PORT)
+}
+
+/// Like `find_free_port_sync` but starts scanning from `start`.
+/// Use this when allocating plugin ports to avoid returning the same port
+/// that was already reserved for the app or for a previous plugin.
+pub fn find_free_port_from(start: u16) -> u16 {
+    let mut port = start;
     loop {
         if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
             return port;

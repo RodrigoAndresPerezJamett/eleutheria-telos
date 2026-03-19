@@ -52,9 +52,13 @@ pub fn start_plugins(
 ) -> (PluginRegistry, Vec<std::process::Child>) {
     let mut registry = HashMap::new();
     let mut children = Vec::new();
+    // Start scanning from app_port + 1 so plugins never receive the app port,
+    // and increment after each allocation so consecutive plugins get distinct ports.
+    let mut next_port = app_port + 1;
 
     for manifest in manifests {
-        let plugin_port = crate::server::find_free_port_sync();
+        let plugin_port = crate::server::find_free_port_from(next_port);
+        next_port = plugin_port + 1;
         let plugin_dir = Path::new("../plugins").join(&manifest.id);
 
         let mut cmd = match manifest.runtime.as_str() {

@@ -144,7 +144,8 @@ async function handleRequest(req, res) {
 
   // GET /api/hello  or  GET /plugins/hello-node/api/hello
   if (req.method === "GET" && (path === "/api/hello" || path === "/plugins/hello-node/api/hello")) {
-    const hostData = await callHostApi("/api/clipboard?limit=1");
+    // Verify host connectivity via /health (returns JSON, no auth needed)
+    const hostData = await callHostApi("/health");
     const data = {
       plugin_id:    PLUGIN_ID,
       plugin_port:  PLUGIN_PORT,

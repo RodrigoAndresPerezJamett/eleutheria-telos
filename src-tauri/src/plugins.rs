@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use axum::http::Request;
 use axum::{
     body::{to_bytes, Body},
     extract::{Query, State},
@@ -17,7 +18,6 @@ use axum::{
     routing::{any, get},
     Router,
 };
-use axum::{extract::Path, http::Request};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -136,9 +136,18 @@ pub async fn plugins_sidebar_handler(
 
 pub async fn plugin_proxy_handler(
     State(state): State<Arc<AppState>>,
-    Path(plugin_id): Path<String>,
     req: Request<Body>,
 ) -> impl IntoResponse {
+    // Extract plugin_id from the URI — works for both /plugins/:id and /plugins/:id/*path
+    // without needing a Path extractor (which would conflict between the two route arities).
+    let plugin_id = req
+        .uri()
+        .path()
+        .strip_prefix("/plugins/")
+        .map(|s| s.split('/').next().unwrap_or(""))
+        .unwrap_or("")
+        .to_string();
+
     // 1. Look up the plugin in the registry.
     let plugin_info = {
         let registry = state.plugin_registry.lock().unwrap();
@@ -153,12 +162,13 @@ pub async fn plugin_proxy_handler(
             .into_response();
     };
 
-    // 2. Permission check — the plugin must declare this route in its manifest.
+    // 2. Permission check — the request path must start with a route declared in the manifest.
+    // A declaration of "/plugins/foo" covers "/plugins/foo", "/plugins/foo/bar", etc.
     if let Some(routes) = &plugin.manifest.routes {
-        let prefix = format!("/plugins/{}", plugin_id);
+        let request_path = req.uri().path();
         let allowed = routes
             .iter()
-            .any(|r| r == &prefix || r.starts_with(&format!("{}/", prefix)));
+            .any(|r| request_path == r.as_str() || request_path.starts_with(&format!("{}/", r)));
         if !allowed {
             return (
                 StatusCode::FORBIDDEN,

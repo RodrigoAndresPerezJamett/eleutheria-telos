@@ -134,8 +134,8 @@ class PluginHandler(BaseHTTPRequestHandler):
                 "app_port": APP_PORT,
                 "python_version": __import__("sys").version,
             }
-            # Optionally enrich with data from the host (clipboard count)
-            host_data = call_host_api("/api/clipboard?limit=1")
+            # Verify host connectivity via /health (returns JSON, no auth needed)
+            host_data = call_host_api("/health")
             if host_data is not None:
                 data["host_reachable"] = True
             else:
