@@ -23,9 +23,14 @@
       <p class="panel-subtitle" style="margin:2px 0 0;">Your ideas, local and searchable.</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn btn-ghost btn-sm"
+      <button class="btn btn-primary btn-sm" @click="createNote()">+ New</button>
+      <button id="notes-trash-btn"
+              class="btn btn-ghost btn-sm"
               onclick="notesShowTrash()"
-              style="font-size:12px;display:flex;align-items:center;gap:5px;">
+              style="font-size:12px;display:flex;align-items:center;gap:5px;transition:background 0.1s,color 0.1s;"
+              ondragover="event.preventDefault();this.style.background='var(--destructive)';this.style.color='white'"
+              ondragleave="this.style.background='';this.style.color=''"
+              ondrop="this.style.background='';this.style.color='';notesTrashDrop(event)">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         Trash
       </button>
@@ -37,7 +42,6 @@
               hx-confirm="Move all notes to Trash?">
         Clear all
       </button>
-      <button class="btn btn-primary btn-sm" @click="createNote()">+ New</button>
     </div>
   </div>
 
@@ -52,7 +56,7 @@
       <div :style="{ filter: (searchFocused || preview) ? 'blur(3px)' : '', 'pointer-events': (searchFocused || preview) ? 'none' : '', transition: 'filter 0.15s' }"
            style="flex:1;min-height:0;display:flex;flex-direction:row;">
 
-        <!-- Tag sidebar wrapper — scrollable tag list + fixed trash button -->
+        <!-- Tag sidebar -->
         <div style="width:168px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;">
           <div id="notes-tag-sidebar"
                style="flex:1;overflow-y:auto;padding:8px 0;"
@@ -60,17 +64,6 @@
                hx-trigger="load, noteUpdated from:body"
                hx-swap="innerHTML">
             <p style="padding:12px 10px;font-size:11px;color:var(--text-muted);margin:0;">Loading…</p>
-          </div>
-          <!-- Trash button — always at bottom of sidebar -->
-          <div style="flex-shrink:0;border-top:1px solid var(--border);padding:6px 10px 8px;">
-            <button id="notes-trash-btn"
-                    onclick="notesShowTrash()"
-                    style="width:100%;text-align:left;padding:5px 8px;font-size:11px;color:var(--text-muted);background:transparent;border:none;cursor:pointer;border-radius:5px;display:flex;align-items:center;gap:6px;outline:none;"
-                    onmouseenter="this.style.color='var(--destructive)';this.style.background='var(--bg-hover)'"
-                    onmouseleave="if(!window.notesTrashActive)this.style.color='var(--text-muted)';this.style.background='transparent'">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-              Trash
-            </button>
           </div>
         </div>
 
@@ -258,6 +251,14 @@
     } catch (e) {
       console.error('notes: retag failed', e);
     }
+  };
+
+  // ── Drag note to trash ────────────────────────────────────────────────────
+  window.notesTrashDrop = function (event) {
+    event.preventDefault();
+    const id = event.dataTransfer.getData('text/plain');
+    if (!id) return;
+    notesDeleteNote(id);
   };
 
   // ── Trash view ────────────────────────────────────────────────────────────

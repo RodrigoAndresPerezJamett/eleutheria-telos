@@ -532,8 +532,12 @@ pub async fn trash_clipboard_handler(State(state): State<Arc<AppState>>) -> impl
     }
 
     let mut html = String::from(
-        r#"<div style="grid-column:1/-1;padding:6px 0 12px;">
+        r#"<div style="grid-column:1/-1;padding:6px 0 12px;display:flex;align-items:center;justify-content:space-between;">
   <p style="font-size:11px;color:var(--text-muted);margin:0;">Items are automatically deleted after 30 days.</p>
+  <button onclick="window.clipExitTrash()"
+          style="font-size:11px;color:var(--text-muted);background:transparent;border:none;cursor:pointer;display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:4px;"
+          onmouseenter="this.style.color='var(--text-primary)';this.style.background='var(--bg-hover)'"
+          onmouseleave="this.style.color='var(--text-muted)';this.style.background='transparent'">← Back</button>
 </div>"#,
     );
     for (id, content, deleted_at, content_type) in &rows {
