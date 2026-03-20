@@ -24,7 +24,11 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 - **Dynamic color adaptation from wallpaper** — inspired by Caelestia Shell: the app UI palette adapts in real time when the desktop background changes color or a new app is opened. Optional feature the user can activate. Requires reading the dominant color from the wallpaper or sampling the screen behind the window. Architecturally complex (OS-level color sampling). Phase 6+.
 
+- **Panel navigation history (back / forward)** — browser-like back/forward arrows in the shell header. Every tool navigation is pushed onto an in-memory stack. Back re-navigates to the previous tool; forward re-navigates if the user went back. Useful when accidentally clicking the wrong tool. Implementation: a JS `navHistory[]` array + current index, updated on every `htmx:afterSwap` of `#tool-panel`. Chevron buttons shown/hidden based on stack state. Phase 5.
+
 - **Resizable panel dividers** — the vertical separator between the notes list and notes editor (and any other two-column panel like Quick Actions) should be draggable to resize, same as the sidebar. User sets their preferred split and it persists in settings. Low implementation cost — same drag logic already used for the sidebar. Phase 5.
+
+- **Sidebar customisation: remove / restore built-in tools** — right-clicking a sidebar item (or hovering to reveal an X button) lets the user hide it from the sidebar. Hidden tools are not deleted — their data is preserved. They can be re-enabled from the Plugin Store, where built-in tools appear as a first section ("Built-in tools") above the community plugin listing. The Plugin Store has a search bar (non-functional for now — no community registry yet; bar is present for structural completeness and future use). State stored in `settings` table as `sidebar_hidden_tools: JSON array`. Phase 5.
 
 - **Arc-style sidebar: user-creatable groups + stacking** — users can create named groups in the sidebar (like Arc Spaces), drag tools into groups, and collapse/expand them. Tools can be "stacked" (multiple tools share one sidebar slot with a mini-tab selector). Requires a backend data model for group persistence (SQLite). Phase 5.
 
@@ -68,6 +72,8 @@ Claude Code: do not implement anything from this file unless it has been explici
   - **Visual timeline** — a minimal waveform + keyframe strip showing the video duration, with draggable in/out handles for the Trim operation. Eliminates manual `HH:MM:SS` typing. Could use `ffprobe` for duration metadata and `ffmpeg -vf thumbnail` for frame extraction.
 - **Audio Editor** — trim, fade, normalize audio. ffmpeg-based. Smaller scope than video editor.
 - **Batch Image Processing** — resize, convert, compress multiple images at once. rembg for batch background removal.
+- **Photo Editor: undo / redo** — Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) to step backwards and forwards through edit history. Requires a command stack per session: each operation (paint stroke, erase, layer move, crop, filter) is pushed onto the stack. Undo pops and reverses; redo re-applies. Stack can be capped at 50 steps. Phase 5.
+
 - **Photo Editor: crop tool** — crop an image by dragging a selection box over the canvas, with aspect ratio lock options (free, 1:1, 16:9, 4:3). The crop applies non-destructively until confirmed; original is preserved until the user explicitly saves. Phase 5.
 - **Photo Editor: move image within layer** — pan the image inside the canvas/layer without resizing it. Useful for repositioning after scaling. Requires a transform matrix per layer (translateX, translateY, scale, rotation) stored separately from the canvas dimensions. Phase 5.
 - **Photo Editor: resize layer without affecting photo** — scale the canvas/layer bounding box independently of the image content, cropping or adding transparent/filled padding around the image. Equivalent to Photoshop "Canvas Size" vs "Image Size". Allows adding space around an image for text overlays or border effects. Phase 5.
@@ -90,7 +96,15 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ---
 
+## Session Recovery
+
+- **Crash / accidental navigation recovery for stateful tools** — if the user closes the app, force-quits, or accidentally navigates away while working in the Photo Editor, Video Processor, or Quick Actions pipeline builder, their in-progress work should be restored when they return to that tool. Mechanism: each tool periodically serialises its current state to a `session_drafts` SQLite table (key = tool name, value = JSON snapshot). On panel load, if a draft exists, show a non-intrusive banner: "You have unsaved work from [time] — restore it?" with Restore / Discard buttons. Auto-saves every 30 seconds while the tool is active. Phase 5.
+
+---
+
 ## Voice Tool Enhancements
+
+- **Notes: text highlighting / marker** — select a word or sentence and apply a highlight colour (like a marker pen). Multiple colours available (yellow, green, pink, blue) via a small colour chip toolbar that appears on text selection. Highlights stored as markdown-compatible annotations (`==text==` syntax, rendered via a custom CSS rule as `background: <color>`). Useful for study notes, review workflows, and meeting notes. Phase 5.
 
 - **Audio playback in Voice panel** — after recording or uploading, show an HTML5 `<audio>` player so the user can listen back to the recording before or after transcription. Includes play/pause controls.
 - **Save audio file** — "Save Recording" button that copies the WAV/audio file from `/tmp/` to a user-chosen location (or a default `~/Documents/eleutheria-recordings/`). Currently only the transcript is saved; the audio is discarded after transcription.

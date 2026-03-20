@@ -129,7 +129,9 @@
 
 ## Phase 5 — Monetization + Distribution
 
-**Goal:** Make the app distributable to non-technical users.
+**Goal:** Make the app distributable to non-technical users and close the most impactful product gaps identified in the Phase 4.6 introspection.
+
+### Distribution
 
 - [ ] **License key system** — Gumroad integration, asymmetric key verification, no server required
 - [ ] **Ad integration** — ethical-ads.io or Carbon Ads, one ad per day on app open, auto-dismissed after 5 seconds
@@ -138,6 +140,20 @@
 - [ ] **Installers** — signed installers for Windows (.msi), macOS (.dmg), Linux (.AppImage + .deb)
 - [ ] **Code signing** — Apple Developer + Windows EV certificate (or document manual install workaround for free MVP)
 - [ ] **Backup/restore** — export/import user data as ZIP from Settings panel
+
+### Product quality (fast wins from Phase 4.6 introspection)
+
+- [ ] **Clipboard: pin entries + content-type icons** — `is_pinned` column, pinned items float to top; content-type badge (URL globe, image thumbnail chip, code `{}` icon) shown on each item. Data already captured — UI only.
+- [ ] **OCR: click-to-capture** — screengrab directly from a selection marquee inside the app (Tauri screenshot API + region select overlay), no file dialog required. Eliminates the #1 friction point of the current OCR flow.
+- [ ] **Voice: live recording waveform** — Web Audio API `AnalyserNode` feeds a canvas waveform visualisation during mic recording. Purely frontend, no native code. Makes recording feel responsive and confirms the mic is active.
+- [ ] **Notes: inline #tag extraction** — `#tag` tokens in note body are parsed at save time, stored to a `tags` table, and rendered as clickable chips in the note list sidebar. Enables "show all notes tagged #meeting". No backlinks yet.
+- [ ] **Screen Recorder: global hotkey start/stop** — `tauri-plugin-global-shortcut` binding (default `Super+Shift+R`) starts/stops recording without requiring the user to click inside the app. Essential for real screencasting use.
+- [ ] **Panel navigation history (back / forward)** — back/forward chevrons in the shell header; in-memory nav stack updated on every panel swap. See IDEAS.md for implementation detail.
+- [ ] **Sidebar customisation** — hide/show built-in tools from sidebar; plugin store lists built-ins first; store has search bar. See IDEAS.md for detail.
+- [ ] **Session recovery for stateful tools** — photo editor, video processor, quick actions auto-save state to `session_drafts` table; on re-open show "restore unsaved work?" banner. See IDEAS.md for detail.
+- [ ] **Command palette learns** — `command_history` table with access counts and last-used timestamps; Ctrl+K surfaces most-used items first.
+- [ ] **Notes: text highlighting / markers** — `==text==` syntax, multi-colour chip toolbar on selection. See IDEAS.md for detail.
+- [ ] **Photo Editor: undo / redo** — command stack (max 50 steps), Ctrl+Z / Ctrl+Shift+Z. See IDEAS.md for detail.
 
 ---
 
