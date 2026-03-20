@@ -56,6 +56,7 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
      data-note-content="{escaped_content}"{truncated_attr}
      draggable="true"
      ondragstart="notesDragStart(event,'{id}')"
+     ondragend="this.style.opacity='1'"
      style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.display='inline-flex')"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.note-action').forEach(e=>e.style.display='none')"
@@ -392,10 +393,12 @@ fn render_tag_tree(rows: &[(String, i64)]) -> String {
         if has_kids {
             html.push_str(&format!(
                 r##"<div x-data="{{ open: true }}" style="margin:0 6px 4px;">
-  <div style="display:flex;align-items:center;background:var(--bg-elevated);border-radius:6px;border-left:2px solid var(--accent);"
+  <div data-tag-card="{root}"
+       style="display:flex;align-items:center;background:var(--bg-elevated);border-radius:6px;border-left:2px solid var(--accent);"
        ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
        ondragleave="this.style.background='var(--bg-elevated)'"
-       ondrop="this.style.background='var(--bg-elevated)';notesDrop(event,'{root}')">
+       ondrop="this.style.background='var(--bg-elevated)';notesDrop(event,'{root}')"
+       oncontextmenu="notesTagContextMenu(event,'{root}')">
     <div @click.stop="open=!open"
          style="flex-shrink:0;cursor:pointer;padding:6px 10px 6px 8px;color:var(--text-muted);display:flex;align-items:center;align-self:stretch;transition:color 0.1s;user-select:none;"
          :style="open ? '' : 'transform:rotate(-90deg)'"
@@ -431,6 +434,7 @@ fn render_tag_tree(rows: &[(String, i64)]) -> String {
             ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
             ondragleave="this.style.background='transparent'"
             ondrop="this.style.background='transparent';notesDrop(event,this.dataset.tag)"
+            oncontextmenu="notesTagContextMenu(event,'{child_tag}')"
             hx-get="/api/notes?tag={child_tag_enc}" hx-target="#notes-grid" hx-swap="innerHTML">
       <span style="color:var(--accent);opacity:0.5;font-size:10px;flex-shrink:0;">›</span>
       <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{child_label}</span>
@@ -455,7 +459,8 @@ fn render_tag_tree(rows: &[(String, i64)]) -> String {
           onmouseleave="this.style.background='var(--bg-elevated)'"
           ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
           ondragleave="this.style.background='var(--bg-elevated)'"
-          ondrop="this.style.background='var(--bg-elevated)';notesDrop(event,this.dataset.tag)">
+          ondrop="this.style.background='var(--bg-elevated)';notesDrop(event,this.dataset.tag)"
+          oncontextmenu="notesTagContextMenu(event,'{root}')">
     <span style="color:var(--accent);font-size:11px;font-weight:700;flex-shrink:0;">#</span>
     <span style="font-size:12px;font-weight:600;color:var(--text-primary);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{root}</span>
     {count_badge}
@@ -898,6 +903,54 @@ pub async fn retag_handler(
     Json(json!({ "ok": true })).into_response()
 }
 
+#[derive(Deserialize)]
+pub struct DeleteTagQuery {
+    pub name: String,
+}
+
+pub async fn delete_tag_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<DeleteTagQuery>,
+) -> impl IntoResponse {
+    let tag = params.name.to_lowercase();
+
+    // Fetch all notes that reference this tag or any child tag (e.g. work/* when deleting work)
+    let notes: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT DISTINCT n.id, n.title, n.content FROM notes n \
+         JOIN note_tags t ON t.note_id = n.id \
+         WHERE t.tag = ? OR t.tag LIKE ?",
+    )
+    .bind(&tag)
+    .bind(format!("{}/%", tag))
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    for (id, title, content) in notes {
+        let (new_title, _) = replace_tag_in_text(&title, &tag, "");
+        let (new_content, _) = replace_tag_in_text(&content, &tag, "");
+        sqlx::query(
+            "UPDATE notes SET title = ?, content = ?, content_fts = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(&new_title)
+        .bind(&new_content)
+        .bind(&new_content)
+        .bind(now)
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .ok();
+        sync_note_tags(&state.db, &id, &new_title, &new_content).await;
+    }
+
+    StatusCode::NO_CONTENT
+}
+
 pub async fn tags_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let rows: Vec<(String, i64)> = sqlx::query_as(
         "SELECT tag, COUNT(*) AS count FROM note_tags GROUP BY tag ORDER BY tag",
@@ -914,7 +967,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/notes", get(list_handler).post(create_handler))
         // /api/notes/tags must be declared before /api/notes/:id (matchit static > param)
-        .route("/api/notes/tags", get(tags_handler))
+        .route("/api/notes/tags", get(tags_handler).delete(delete_tag_handler))
         .route(
             "/api/notes/:id",
             get(get_handler).put(update_handler).delete(delete_handler),

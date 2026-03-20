@@ -7,6 +7,39 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7: Notes tag UX polish — drag opacity, active highlight, tag deletion
+
+### Completed
+
+**`src-tauri/src/tools/notes.rs`**
+- `render_note_card` — added `ondragend="this.style.opacity='1'"` to card div (pair with JS drag start fade)
+- `render_tag_tree` — has_kids flex row now has `data-tag-card="{root}"` attribute so the active highlight can cover the chevron+label row as a unit
+- `render_tag_tree` — `oncontextmenu="notesTagContextMenu(event, '{tag}')"` added to: has_kids flex row, leaf tag button, and child tag buttons; right-click on any tag node now opens delete menu
+- `DeleteTagQuery` struct + `delete_tag_handler` — `DELETE /api/notes/tags?name={tag}`: finds all notes referencing the tag or any child (`LIKE 'tag/%'`), strips the tag token from title+content via `replace_tag_in_text(text, tag, "")`, saves, calls `sync_note_tags`; returns 204
+- Router: `/api/notes/tags` now registered as `get(tags_handler).delete(delete_tag_handler)`
+- All 15 notes tests pass; no new clippy warnings in notes.rs
+
+**`ui/tools/notes/index.html`**
+- `notesDragStart` — added `setTimeout(() => { el.style.opacity = '0.35'; }, 0)` to fade card during drag; deferred so the ghost captures at full opacity first
+- `_applyActiveTag` — now resets then applies outline to `[data-tag-card]` container first (covers chevron+label); falls back to standalone `button[data-tag]` for leaf/All Notes buttons
+- `notesTagContextMenu(event, tag)` — creates a floating context menu at cursor; single "Delete #tag" item; auto-dismissed on next click
+- `notesDeleteTag(tag)` — calls `DELETE /api/notes/tags?name=…`; resets active filter to All Notes if the deleted tag was active; triggers `noteUpdated` to refresh sidebar + grid
+
+**`IDEAS.md`**
+- Added 3 new entries: Trash bin with 30-day retention (#5), Date-chunked grid organisation (#6), Obsidian-style `[[Note Title]]` backlinks (#7)
+
+### Known pre-existing failures (not from this session)
+- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
+- `clippy::unnecessary_closure` in `quick_actions.rs` — pre-existing
+
+### Next session
+Phase 4.7 polish or Phase 5. Candidates:
+- Tag badge pills on note cards (render `notes.tags` JSON as small pills at card bottom)
+- Trash bin (Phase 5 item — now fully speced in IDEAS.md)
+- Clipboard search history `[object Object]` bug — GitHub issue #3, needs DevTools
+
+---
+
 ## [2026-03-20] — Phase 4.7: Notes Bear-style inline tags
 
 ### Completed

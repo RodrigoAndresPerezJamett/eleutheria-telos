@@ -191,6 +191,9 @@
   window.notesDragStart = function (event, noteId) {
     event.dataTransfer.setData('text/plain', noteId);
     event.dataTransfer.effectAllowed = 'move';
+    // Defer opacity change so drag ghost captures at full opacity first
+    const el = event.target;
+    setTimeout(() => { el.style.opacity = '0.35'; }, 0);
   };
 
   window.notesDrop = async function (event, toTag) {
@@ -233,14 +236,39 @@
 
   function _applyActiveTag() {
     const active = window.notesActiveTag;
-    document.querySelectorAll('#notes-tag-sidebar button[data-tag]').forEach(btn => {
-      const isActive = active !== null && btn.dataset.tag === active;
-      // Use outline so it doesn't conflict with onmouseenter/leave background changes
-      btn.style.outline = isActive ? '2px solid var(--accent)' : '';
-      btn.style.outlineOffset = isActive ? '-2px' : '';
-      btn.style.fontWeight = isActive ? '700' : '';
-      btn.style.color = isActive ? 'var(--accent)' : '';
+    // Reset all containers (has-children rows that include the chevron)
+    document.querySelectorAll('#notes-tag-sidebar [data-tag-card]').forEach(el => {
+      el.style.outline = '';
+      el.style.outlineOffset = '';
     });
+    // Reset all standalone buttons
+    document.querySelectorAll('#notes-tag-sidebar button[data-tag]').forEach(btn => {
+      btn.style.outline = '';
+      btn.style.outlineOffset = '';
+      btn.style.fontWeight = '';
+      btn.style.color = '';
+    });
+    if (active === null) return;
+    // Prefer container (covers chevron+label row) if present, else fall back to button
+    const sidebar = document.getElementById('notes-tag-sidebar');
+    let highlighted = false;
+    sidebar.querySelectorAll('[data-tag-card]').forEach(el => {
+      if (el.dataset.tagCard === active) {
+        el.style.outline = '2px solid var(--accent)';
+        el.style.outlineOffset = '-2px';
+        highlighted = true;
+      }
+    });
+    if (!highlighted) {
+      sidebar.querySelectorAll('button[data-tag]').forEach(btn => {
+        if (btn.dataset.tag === active) {
+          btn.style.outline = '2px solid var(--accent)';
+          btn.style.outlineOffset = '-2px';
+          btn.style.fontWeight = '700';
+          btn.style.color = 'var(--accent)';
+        }
+      });
+    }
   }
 
   // Re-apply active state after sidebar HTMX refreshes (e.g. on noteUpdated)
@@ -254,6 +282,67 @@
   window.notesOpenEditor = function (el) {
     const id = el.dataset.noteId;
     document.dispatchEvent(new CustomEvent('notes:open-editor', { detail: { id } }));
+  };
+
+  // ── Tag right-click context menu ──────────────────────────────────────────
+  window.notesTagContextMenu = function (event, tag) {
+    event.preventDefault();
+    event.stopPropagation();
+    const existing = document.getElementById('notes-tag-ctx-menu');
+    if (existing) existing.remove();
+    const menu = document.createElement('div');
+    menu.id = 'notes-tag-ctx-menu';
+    menu.style.cssText = [
+      'position:fixed',
+      'z-index:9999',
+      'background:var(--bg-elevated)',
+      'border:1px solid var(--border)',
+      'border-radius:var(--radius-sm)',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.35)',
+      'padding:4px 0',
+      'min-width:160px',
+    ].join(';');
+    menu.style.left = Math.min(event.clientX, window.innerWidth - 170) + 'px';
+    menu.style.top = Math.min(event.clientY, window.innerHeight - 60) + 'px';
+    const trashSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+    const btn = document.createElement('button');
+    btn.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;padding:7px 12px;background:transparent;border:none;cursor:pointer;font-size:12px;color:var(--destructive);text-align:left;font-family:inherit;';
+    btn.innerHTML = trashSvg + ' Delete #' + tag;
+    btn.onmouseenter = function() { this.style.background = 'var(--bg-hover)'; };
+    btn.onmouseleave = function() { this.style.background = 'transparent'; };
+    btn.onclick = function() { menu.remove(); notesDeleteTag(tag); };
+    menu.appendChild(btn);
+    document.body.appendChild(menu);
+    // Dismiss on next click anywhere
+    setTimeout(() => {
+      document.addEventListener('click', function dismiss() {
+        menu.remove();
+        document.removeEventListener('click', dismiss);
+      });
+    }, 0);
+  };
+
+  window.notesDeleteTag = async function (tag) {
+    const label = tag.includes('/') ? '#' + tag : '#' + tag + ' (and all sub-tags)';
+    if (!confirm('Remove ' + label + ' from all notes?\n\nNotes are kept — only the tag is removed.')) return;
+    try {
+      await fetch(
+        'http://127.0.0.1:' + window.__API_PORT__ + '/api/notes/tags?name=' + encodeURIComponent(tag),
+        { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } }
+      );
+      // If we were filtered by this tag (or a child), reset to All Notes
+      const active = window.notesActiveTag || '';
+      if (active === tag || active.startsWith(tag + '/')) {
+        window.notesActiveTag = null;
+        htmx.ajax('GET',
+          'http://127.0.0.1:' + window.__API_PORT__ + '/api/notes',
+          { target: '#notes-grid', swap: 'innerHTML',
+            headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } });
+      }
+      htmx.trigger(document.body, 'noteUpdated');
+    } catch (e) {
+      console.error('notes: delete tag failed', e);
+    }
   };
 
   // Kept for backwards-compatibility (Copy button in preview modal still dispatches this)
