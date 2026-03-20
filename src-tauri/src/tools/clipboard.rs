@@ -58,17 +58,28 @@ fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
     )
 }
 
-fn render_list(entries: &[(String, String, i64)]) -> String {
+const PAGE: i64 = 20;
+
+fn render_list(entries: &[(String, String, i64)], has_more: bool, next_offset: i64) -> String {
     if entries.is_empty() {
         return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
   <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Lost something you copied?</p>
   <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Everything you copy appears here automatically.<br>Start copying and it will show up.</p>
 </div>"#.to_string();
     }
-    entries
+    let mut html: String = entries
         .iter()
         .map(|(id, content, ts)| render_entry_card(id, content, *ts))
-        .collect()
+        .collect();
+    if has_more {
+        html.push_str(&format!(
+            r#"<div id="clip-sentinel" style="grid-column:1/-1;padding:12px;text-align:center;color:var(--text-muted);font-size:12px;"
+     hx-get="/api/clipboard?offset={next_offset}&limit={PAGE}"
+     hx-trigger="intersect once"
+     hx-swap="outerHTML">Loading more…</div>"#
+        ));
+    }
+    html
 }
 
 fn html_escape(s: &str) -> String {
@@ -109,7 +120,7 @@ pub struct ListQuery {
 }
 
 fn default_limit() -> i64 {
-    50
+    PAGE
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -118,32 +129,37 @@ pub async fn list_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let rows: Vec<(String, String, i64)> = if params.q.is_empty() {
+    // Fetch one extra row to detect whether a next page exists
+    let fetch_limit = params.limit + 1;
+    let mut rows: Vec<(String, String, i64)> = if params.q.is_empty() {
         sqlx::query_as(
             "SELECT id, content, created_at FROM clipboard
              ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
-        .bind(params.limit)
+        .bind(fetch_limit)
         .bind(params.offset)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
     } else {
+        // Search returns all matches — no pagination when filtering
         let pattern = format!("%{}%", params.q);
         sqlx::query_as(
             "SELECT id, content, created_at FROM clipboard
              WHERE content LIKE ?
-             ORDER BY created_at DESC LIMIT ? OFFSET ?",
+             ORDER BY created_at DESC LIMIT 200 OFFSET 0",
         )
         .bind(&pattern)
-        .bind(params.limit)
-        .bind(params.offset)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
     };
 
-    Html(render_list(&rows))
+    let has_more = rows.len() > params.limit as usize && params.q.is_empty();
+    rows.truncate(params.limit as usize);
+    let next_offset = params.offset + params.limit;
+
+    Html(render_list(&rows, has_more, next_offset))
 }
 
 pub async fn recopy_handler(

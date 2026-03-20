@@ -68,19 +68,30 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
     )
 }
 
-fn render_note_list(entries: &[(String, String, String, i64, i64)]) -> String {
+const PAGE: i64 = 24;
+
+fn render_note_list(entries: &[(String, String, String, i64, i64)], has_more: bool, next_offset: i64) -> String {
     if entries.is_empty() {
         return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
   <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Got something worth keeping?</p>
   <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Write your first note — it stays local, searchable, and yours forever.</p>
 </div>"#.to_string();
     }
-    entries
+    let mut html: String = entries
         .iter()
         .map(|(id, title, content, pinned, updated_at)| {
             render_note_card(id, title, content, *pinned, *updated_at)
         })
-        .collect()
+        .collect();
+    if has_more {
+        html.push_str(&format!(
+            r#"<div id="notes-sentinel" style="grid-column:1/-1;padding:12px;text-align:center;color:var(--text-muted);font-size:12px;"
+     hx-get="/api/notes?offset={next_offset}&limit={PAGE}"
+     hx-trigger="intersect once"
+     hx-swap="outerHTML">Loading more…</div>"#
+        ));
+    }
+    html
 }
 
 fn render_editor(id: &str, title: &str, content: &str) -> String {
@@ -180,7 +191,7 @@ pub struct ListQuery {
 }
 
 fn default_limit() -> i64 {
-    50
+    PAGE
 }
 
 #[derive(Deserialize)]
@@ -207,35 +218,39 @@ pub async fn list_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let rows: Vec<(String, String, String, i64, i64)> = if params.q.is_empty() {
+    // Fetch one extra row to detect whether a next page exists
+    let fetch_limit = params.limit + 1;
+    let mut rows: Vec<(String, String, String, i64, i64)> = if params.q.is_empty() {
         sqlx::query_as(
             "SELECT id, title, content, pinned, updated_at FROM notes
              ORDER BY pinned DESC, updated_at DESC LIMIT ? OFFSET ?",
         )
-        .bind(params.limit)
+        .bind(fetch_limit)
         .bind(params.offset)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
     } else {
-        // FTS5 MATCH search — returns rowids joined to notes
+        // FTS5 search returns all matches — no pagination when filtering
         sqlx::query_as(
             "SELECT n.id, n.title, n.content, n.pinned, n.updated_at
              FROM notes n
              JOIN notes_fts f ON f.rowid = n.rowid
              WHERE notes_fts MATCH ?
              ORDER BY n.pinned DESC, rank
-             LIMIT ? OFFSET ?",
+             LIMIT 200 OFFSET 0",
         )
         .bind(&params.q)
-        .bind(params.limit)
-        .bind(params.offset)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
     };
 
-    Html(render_note_list(&rows))
+    let has_more = rows.len() > params.limit as usize && params.q.is_empty();
+    rows.truncate(params.limit as usize);
+    let next_offset = params.offset + params.limit;
+
+    Html(render_note_list(&rows, has_more, next_offset))
 }
 
 pub async fn create_handler(

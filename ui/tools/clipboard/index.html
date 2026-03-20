@@ -17,11 +17,11 @@
     </button>
   </div>
 
-  <!-- Card grid -->
+  <!-- Card grid — refreshes on load and when window regains focus (via custom event) -->
   <div id="clipboard-grid"
        style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;align-content:start;"
        hx-get="/api/clipboard"
-       hx-trigger="load, every 3s"
+       hx-trigger="load, clipboardRefresh from:body"
        hx-swap="innerHTML">
     <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
   </div>
@@ -92,6 +92,11 @@
       }
     }));
   };
+
+  // Refresh grid when the window regains focus (user switches back to app)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) htmx.trigger(document.body, 'clipboardRefresh');
+  });
 
   window.clipboardApp = function () {
     return {
