@@ -166,10 +166,8 @@ fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
             format!(
                 r##"<li style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-elevated);border-radius:var(--radius-md);margin-bottom:4px;cursor:pointer;" class="group">
   {enabled_dot}
-  <div style="flex:1;min-width:0;"
-       hx-get="/api/pipelines/{id}/editor"
-       hx-target="#qa-editor"
-       hx-swap="innerHTML">
+  <div style="flex:1;min-width:0;cursor:pointer;"
+       onclick="qaLoadPipeline('{id}', '{name_js}', '{tlabel}')">
     <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
     <p style="font-size:11px;color:var(--text-muted);margin:2px 0 0;">{tlabel}</p>
   </div>
@@ -183,6 +181,7 @@ fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
 </li>"##,
                 id = p.id,
                 name = name,
+                name_js = name.replace('\'', "\\'"),
                 tlabel = tlabel,
                 enabled_dot = enabled_dot,
                 run_btn = run_btn,
@@ -547,11 +546,16 @@ async fn use_template_handler(
     State(state): State<Arc<AppState>>,
     Form(params): Form<UseTemplateParams>,
 ) -> impl IntoResponse {
+    use axum::http::{HeaderMap, HeaderName, HeaderValue};
+
     let Some(tmpl) = TEMPLATES.iter().find(|t| t.id == params.template_id) else {
-        return Html(format!(
-            r#"<ul id="pipeline-list"><li style="font-size:12px;color:var(--destructive);padding:8px;">Unknown template: {}</li></ul>"#,
-            html_escape(&params.template_id)
-        ));
+        return (
+            HeaderMap::new(),
+            Html(format!(
+                r#"<ul id="pipeline-list"><li style="font-size:12px;color:var(--destructive);padding:8px;">Unknown template: {}</li></ul>"#,
+                html_escape(&params.template_id)
+            )),
+        );
     };
 
     let pipeline_id = uuid::Uuid::new_v4().to_string();
@@ -597,20 +601,21 @@ async fn use_template_handler(
     .await
     .unwrap_or_default();
 
-    let pipeline_row = PipelineRow {
-        id: pipeline_id.clone(),
-        name: tmpl.name.to_string(),
-        trigger: tmpl.trigger.to_string(),
-        enabled: 1,
-        created_at: now,
-    };
-    let editor_html = render_editor(&pipeline_row, &steps);
+    // Emit HX-Trigger to open the canvas for the new pipeline
+    let tlabel = trigger_label(tmpl.trigger);
+    let name_js = tmpl.name.replace('\'', "\\'");
+    let hx_trigger = format!(
+        r#"{{"qa:load-pipeline":{{"id":"{pid}","name":"{name}","triggerLabel":"{tl}"}}}}"#,
+        pid  = pipeline_id,
+        name = name_js,
+        tl   = tlabel,
+    );
 
-    Html(format!(
-        r#"{list_html}<div id="qa-editor" hx-swap-oob="true">{editor_html}</div>"#,
-        list_html = list_html,
-        editor_html = editor_html,
-    ))
+    let mut headers = HeaderMap::new();
+    if let Ok(val) = HeaderValue::from_str(&hx_trigger) {
+        headers.insert(HeaderName::from_static("hx-trigger"), val);
+    }
+    (headers, Html(list_html))
 }
 
 // ── Request structs ───────────────────────────────────────────────────────────

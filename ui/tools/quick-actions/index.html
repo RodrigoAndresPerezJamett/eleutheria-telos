@@ -2,59 +2,41 @@
 
   <!-- Header -->
   <div class="panel-header" style="padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-    <div>
-      <h1 class="panel-title">Quick Actions</h1>
-      <p class="panel-subtitle">Build pipelines that connect tools visually — no code needed.</p>
-    </div>
+    <h1 class="panel-title">Quick Actions</h1>
+    <p class="panel-subtitle">Build pipelines that connect tools visually — no code needed.</p>
   </div>
 
-  <!-- Body: two-column layout -->
-  <div style="display:flex;flex:1;min-height:0;">
+  <!-- Body: list + canvas -->
+  <div style="display:flex;flex:1;min-height:0;" x-data="qaApp()" x-init="init()">
 
-    <!-- Left column: pipeline list -->
+    <!-- ── Left: pipeline list ───────────────────────────────────────────── -->
     <div style="width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;">
 
       <!-- Create form -->
       <div style="padding:12px;border-bottom:1px solid var(--border);"
-           x-data="{open: false, name: '', trigger: '{&quot;type&quot;:&quot;Manual&quot;}'}"
-           x-init="if (window.__qaPreTrigger) { trigger = JSON.stringify({type: window.__qaPreTrigger}); open = true; delete window.__qaPreTrigger; }">
-        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;"
-                @click="open = !open">
+           x-data="{open:false,name:'',trigger:'{&quot;type&quot;:&quot;Manual&quot;}'}"
+           x-init="if(window.__qaPreTrigger){trigger=JSON.stringify({type:window.__qaPreTrigger});open=true;delete window.__qaPreTrigger;}">
+        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;" @click="open=!open">
           + New Pipeline
         </button>
-        <form x-show="open"
-              style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"
-              hx-post="/api/pipelines"
-              hx-target="#pipeline-list"
-              hx-swap="outerHTML"
-              @htmx:after-request="open = false; name = ''">
-          <input x-model="name"
-                 name="name"
-                 type="text"
-                 placeholder="Pipeline name"
-                 required
-                 class="input"
-                 style="font-size:12px;padding:5px 8px;" />
-          <select name="trigger"
-                  x-model="trigger"
-                  class="input"
-                  style="font-size:12px;padding:5px 8px;">
+        <form x-show="open" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"
+              hx-post="/api/pipelines" hx-target="#pipeline-list" hx-swap="outerHTML"
+              @htmx:after-request="open=false;name=''">
+          <input x-model="name" name="name" type="text" placeholder="Pipeline name" required
+                 class="input" style="font-size:12px;padding:5px 8px;" />
+          <select name="trigger" x-model="trigger" class="input" style="font-size:12px;padding:5px 8px;">
             <option value="{&quot;type&quot;:&quot;Manual&quot;}">Manual</option>
             <option value="{&quot;type&quot;:&quot;OcrCompleted&quot;}">After OCR</option>
             <option value="{&quot;type&quot;:&quot;TranscriptionCompleted&quot;}">After Voice</option>
             <option value="{&quot;type&quot;:&quot;ClipboardChanged&quot;}">On Clipboard Change</option>
           </select>
-          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
-            Create
-          </button>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">Create</button>
         </form>
       </div>
 
-      <!-- Pipeline list -->
+      <!-- Pipeline list (HTMX) -->
       <div style="flex:1;overflow-y:auto;padding:8px;">
-        <div hx-get="/api/pipelines"
-             hx-trigger="load"
-             hx-swap="outerHTML">
+        <div hx-get="/api/pipelines" hx-trigger="load" hx-swap="outerHTML">
           <ul id="pipeline-list" style="list-style:none;margin:0;padding:0;">
             <li style="font-size:12px;color:var(--text-muted);padding:8px 4px;">Loading…</li>
           </ul>
@@ -62,22 +44,379 @@
       </div>
     </div>
 
-    <!-- Right column: editor + run result -->
-    <div style="flex:1;overflow-y:auto;padding:20px 24px;">
+    <!-- ── Right: canvas or empty state ─────────────────────────────────── -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;">
 
-      <!-- Editor: shows templates by default; replaced when a pipeline is selected -->
-      <div id="qa-editor"
-           hx-get="/api/pipeline-templates"
-           hx-trigger="load"
-           hx-swap="outerHTML"
-           style="font-size:13px;color:var(--text-muted);font-style:italic;">
-        Loading…
+      <!-- Empty state -->
+      <div x-show="!pipelineId"
+           style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;">
+        <i data-lucide="workflow" style="width:40px;height:40px;color:var(--text-muted);opacity:0.5;"></i>
+        <p style="font-size:13px;color:var(--text-muted);text-align:center;max-width:240px;line-height:1.5;">
+          Select a pipeline from the list, or create a new one to open the visual canvas.
+        </p>
       </div>
 
-      <!-- Manual run result (also updated from list ▶ button) -->
-      <div id="qa-run-result" style="margin-top:16px;font-size:12px;"></div>
+      <!-- Canvas area (pipeline selected) -->
+      <div x-show="pipelineId" style="display:flex;flex-direction:column;height:100%;">
 
-    </div>
-  </div>
+        <!-- Toolbar -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg-elevated);flex-shrink:0;flex-wrap:wrap;">
+          <!-- Pipeline name -->
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary);margin-right:4px;" x-text="pipelineName"></span>
+          <span style="font-size:11px;color:var(--text-muted);padding:1px 6px;border-radius:var(--radius-pill);border:1px solid var(--border);" x-text="triggerLabel"></span>
 
-</div>
+          <!-- Divider -->
+          <div style="width:1px;height:18px;background:var(--border);margin:0 4px;"></div>
+
+          <!-- Add node palette -->
+          <span style="font-size:11px;color:var(--text-muted);">Add:</span>
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#22c55e;color:#22c55e;" @click="addNode('trigger')">Trigger</button>
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:var(--accent);color:var(--accent);" @click="addNode('action')">Action</button>
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#f59e0b;color:#f59e0b;" @click="addNode('condition')">Condition</button>
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#8b5cf6;color:#8b5cf6;" @click="addNode('loop')">Loop</button>
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#ef4444;color:#ef4444;" @click="addNode('end')">End</button>
+
+          <!-- Right side actions -->
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            <button x-show="selectedNode" class="btn btn-sm"
+                    style="font-size:11px;color:var(--destructive);border-color:var(--destructive);"
+                    @click="deleteSelectedNode()">
+              <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Delete
+            </button>
+            <button x-show="isManual" class="btn btn-secondary btn-sm" style="font-size:11px;"
+                    @click="runPipeline()" :disabled="running">
+              <i data-lucide="play" style="width:12px;height:12px;"></i>
+              <span x-text="running ? 'Running…' : 'Run'"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Run result bar -->
+        <div x-show="runResult" x-transition
+             style="padding:6px 14px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0;"
+             :style="runOk ? 'background:var(--success-subtle,#f0fdf4);color:var(--success,#22c55e)' : 'background:var(--destructive-subtle,#fef2f2);color:var(--destructive,#ef4444)'">
+          <span x-text="runResult"></span>
+          <button @click="runResult=null" style="border:none;background:transparent;cursor:pointer;color:inherit;font-size:14px;line-height:1;">✕</button>
+        </div>
+
+        <!-- Canvas scrollable container -->
+        <div style="flex:1;overflow:auto;cursor:default;" @click="selectedNode=null">
+
+          <!-- Canvas inner: large fixed area so nodes can be positioned freely -->
+          <div id="qa-canvas-inner"
+               style="position:relative;width:3000px;height:2000px;background-color:var(--bg-base);background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:28px 28px;">
+
+            <!-- SVG overlay for edges -->
+            <svg style="position:absolute;top:0;left:0;width:3000px;height:2000px;pointer-events:none;overflow:visible;">
+              <defs>
+                <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                  <polygon points="0 0, 8 3, 0 6" style="fill:var(--text-muted);opacity:0.6;" />
+                </marker>
+              </defs>
+              <template x-for="edge in edges" :key="edge.id">
+                <g>
+                  <path :d="edgePath(edge)"
+                        stroke="var(--text-muted)" stroke-width="1.5" fill="none"
+                        stroke-linecap="round" opacity="0.5"
+                        marker-end="url(#arrowhead)" />
+                  <text x-show="edge.edge_label && edge.edge_label !== 'default'"
+                        :x="edgeMidX(edge)" :y="edgeMidY(edge)"
+                        text-anchor="middle" dominant-baseline="middle"
+                        style="font-size:10px;fill:var(--text-muted);pointer-events:none;"
+                        x-text="edge.edge_label"></text>
+                </g>
+              </template>
+            </svg>
+
+            <!-- Nodes -->
+            <template x-for="node in nodes" :key="node.id">
+              <div :style="nodeStyle(node)"
+                   @mousedown.stop="startDrag($event, node)"
+                   @click.stop="selectedNode = node">
+                <!-- Colored top strip -->
+                <div :style="`height:3px;border-radius:3px 3px 0 0;margin:-10px -12px 8px;background:${nodeColor(node.node_type)};`"></div>
+                <!-- Header: icon + type label -->
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+                  <i :data-lucide="nodeIcon(node.node_type)"
+                     style="width:13px;height:13px;flex-shrink:0;"
+                     :style="`color:${nodeColor(node.node_type)}`"></i>
+                  <span style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;"
+                        :style="`color:${nodeColor(node.node_type)}`"
+                        x-text="nodeLabel(node.node_type)"></span>
+                </div>
+                <!-- Config summary -->
+                <p style="font-size:12px;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                   x-text="nodeConfigSummary(node)"></p>
+              </div>
+            </template>
+
+          </div><!-- /canvas-inner -->
+        </div><!-- /scrollable -->
+
+      </div><!-- /canvas area -->
+    </div><!-- /right -->
+  </div><!-- /body -->
+
+</div><!-- /panel -->
+
+<script>
+(function() {
+  const NODE_W = 180, NODE_H = 68;
+
+  const NODE_COLORS = {
+    trigger:   '#22c55e',
+    action:    '#8b74d4',
+    condition: '#f59e0b',
+    loop:      '#8b5cf6',
+    end:       '#ef4444'
+  };
+  const NODE_ICONS = {
+    trigger: 'zap', action: 'settings-2', condition: 'git-branch', loop: 'repeat-2', end: 'square'
+  };
+  const NODE_LABELS = {
+    trigger: 'Trigger', action: 'Action', condition: 'Condition', loop: 'Loop', end: 'End'
+  };
+  const TRIGGER_LABELS = {
+    Manual: 'Manual', OcrCompleted: 'After OCR',
+    TranscriptionCompleted: 'After Voice', ClipboardChanged: 'On Copy'
+  };
+  const TOOL_LABELS = {
+    translate: 'Translate', copy_clipboard: 'Copy to Clipboard', save_note: 'Save as Note'
+  };
+  const DEFAULT_CONFIGS = {
+    trigger:   JSON.stringify({ trigger: 'Manual' }),
+    action:    JSON.stringify({ tool: 'translate', params: { from_lang: 'auto', to_lang: 'en' } }),
+    condition: JSON.stringify({ condition: 'always_true' }),
+    loop:      JSON.stringify({ timeout_secs: 60 }),
+    end:       '{}'
+  };
+
+  window.qaApp = function() {
+    return {
+      pipelineId:    null,
+      pipelineName:  '',
+      triggerLabel:  '',
+      nodes:         [],
+      edges:         [],
+      selectedNode:  null,
+      dragging:      null,
+      running:       false,
+      runResult:     null,
+      runOk:         true,
+
+      get isManual() {
+        return this.triggerLabel === 'Manual';
+      },
+
+      init() {
+        document.addEventListener('qa:load-pipeline', (e) => {
+          this.loadGraph(e.detail.id, e.detail.name || '', e.detail.triggerLabel || '');
+        });
+      },
+
+      async loadGraph(id, name, trigLabel) {
+        this.pipelineId   = id;
+        this.pipelineName = name;
+        this.triggerLabel = trigLabel;
+        this.selectedNode = null;
+        this.runResult    = null;
+        const token = window.__SESSION_TOKEN__;
+        const port  = window.__API_PORT__;
+        try {
+          const res  = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + id + '/graph',
+                                   { headers: { 'Authorization': 'Bearer ' + token } });
+          const data = await res.json();
+          this.nodes = data.nodes || [];
+          this.edges = data.edges || [];
+          this.$nextTick(() => {
+            if (window.lucide) lucide.createIcons({ node: document.getElementById('qa-canvas-inner') });
+          });
+        } catch(e) { console.error('loadGraph failed:', e); }
+      },
+
+      // ── Node helpers ────────────────────────────────────────────────────
+      nodeColor(type)  { return NODE_COLORS[type]  || '#6b7280'; },
+      nodeIcon(type)   { return NODE_ICONS[type]   || 'box'; },
+      nodeLabel(type)  { return NODE_LABELS[type]  || type; },
+
+      nodeConfigSummary(node) {
+        try {
+          const c = JSON.parse(node.config || '{}');
+          if (node.node_type === 'trigger')
+            return TRIGGER_LABELS[c.trigger] || c.trigger || 'Manual';
+          if (node.node_type === 'action')
+            return TOOL_LABELS[c.tool] || c.tool || '';
+          if (node.node_type === 'condition')
+            return c.condition || 'always true';
+          if (node.node_type === 'loop')
+            return 'Timeout: ' + (c.timeout_secs || 60) + 's';
+        } catch(e) {}
+        return '';
+      },
+
+      nodeStyle(node) {
+        const color    = this.nodeColor(node.node_type);
+        const selected = this.selectedNode && this.selectedNode.id === node.id;
+        return [
+          'position:absolute',
+          'left:' + node.pos_x + 'px',
+          'top:'  + node.pos_y + 'px',
+          'width:' + NODE_W + 'px',
+          'min-height:' + NODE_H + 'px',
+          'background:var(--bg-elevated)',
+          'border:1px solid ' + (selected ? color : 'var(--border)'),
+          'border-radius:var(--radius-md)',
+          'padding:10px 12px',
+          'cursor:grab',
+          'user-select:none',
+          'box-shadow:' + (selected ? '0 0 0 3px ' + color + '40,var(--shadow-md)' : 'var(--shadow-sm)'),
+          'transition:box-shadow 120ms',
+          'z-index:' + (selected ? 10 : 1)
+        ].join(';');
+      },
+
+      // ── Edge helpers ────────────────────────────────────────────────────
+      _sourcePort(edge) {
+        const src = this.nodes.find(n => n.id === edge.source_id);
+        if (!src) return { x: 0, y: 0 };
+        const multi = src.node_type === 'condition' || src.node_type === 'loop';
+        const isTop = edge.edge_label === 'true' || edge.edge_label === 'body';
+        const y = multi
+          ? (isTop ? src.pos_y + NODE_H * 0.33 : src.pos_y + NODE_H * 0.67)
+          : src.pos_y + NODE_H / 2;
+        return { x: src.pos_x + NODE_W, y };
+      },
+
+      edgePath(edge) {
+        const src = this._sourcePort(edge);
+        const tgt = this.nodes.find(n => n.id === edge.target_id);
+        if (!tgt) return '';
+        const x2 = tgt.pos_x, y2 = tgt.pos_y + NODE_H / 2;
+        const dx  = Math.abs(x2 - src.x) * 0.5;
+        return 'M ' + src.x + ' ' + src.y +
+               ' C ' + (src.x + dx) + ' ' + src.y +
+               ' '  + (x2 - dx) + ' ' + y2 +
+               ' '  + x2 + ' ' + y2;
+      },
+
+      edgeMidX(edge) {
+        const src = this._sourcePort(edge);
+        const tgt = this.nodes.find(n => n.id === edge.target_id);
+        if (!tgt) return 0;
+        return (src.x + tgt.pos_x) / 2 + NODE_W / 2;
+      },
+      edgeMidY(edge) {
+        const src = this._sourcePort(edge);
+        const tgt = this.nodes.find(n => n.id === edge.target_id);
+        if (!tgt) return 0;
+        return (src.y + tgt.pos_y + NODE_H / 2) / 2 - 8;
+      },
+
+      // ── Drag ────────────────────────────────────────────────────────────
+      startDrag(evt, node) {
+        evt.preventDefault();
+        this.selectedNode = node;
+        const start = { node, mx: evt.clientX, my: evt.clientY, nx: node.pos_x, ny: node.pos_y };
+        this.dragging = start;
+
+        const self = this;
+        const onMove = (e) => {
+          if (!self.dragging) return;
+          self.dragging.node.pos_x = Math.max(0, self.dragging.nx + e.clientX - self.dragging.mx);
+          self.dragging.node.pos_y = Math.max(0, self.dragging.ny + e.clientY - self.dragging.my);
+        };
+        const onUp = async () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup',  onUp);
+          document.body.style.userSelect = '';
+          if (!self.dragging) return;
+          const n = self.dragging.node;
+          self.dragging = null;
+          await self.saveNodePosition(n);
+        };
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup',  onUp);
+      },
+
+      async saveNodePosition(node) {
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + node.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ pos_x: node.pos_x, pos_y: node.pos_y })
+          });
+        } catch(e) { console.error('saveNodePosition failed:', e); }
+      },
+
+      // ── Add / delete node ───────────────────────────────────────────────
+      async addNode(type) {
+        if (!this.pipelineId) return;
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        const maxX  = this.nodes.length
+          ? Math.max(...this.nodes.map(n => n.pos_x)) + NODE_W + 40
+          : 60;
+        const pos_x = maxX, pos_y = 200;
+        const config = DEFAULT_CONFIGS[type] || '{}';
+        try {
+          const res  = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ node_type: type, config, pos_x, pos_y })
+          });
+          const data = await res.json();
+          this.nodes.push({ id: data.id, pipeline_id: this.pipelineId, node_type: type, config, pos_x, pos_y });
+          this.$nextTick(() => {
+            if (window.lucide) lucide.createIcons({ node: document.getElementById('qa-canvas-inner') });
+          });
+        } catch(e) { console.error('addNode failed:', e); }
+      },
+
+      async deleteSelectedNode() {
+        const node = this.selectedNode;
+        if (!node) return;
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + node.id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          this.nodes = this.nodes.filter(n => n.id !== node.id);
+          this.edges = this.edges.filter(e => e.source_id !== node.id && e.target_id !== node.id);
+          this.selectedNode = null;
+        } catch(e) { console.error('deleteNode failed:', e); }
+      },
+
+      // ── Run ─────────────────────────────────────────────────────────────
+      async runPipeline() {
+        if (!this.pipelineId || this.running) return;
+        this.running = true; this.runResult = null;
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          const res = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Bearer ' + token },
+            body: 'initial_text='
+          });
+          const html = await res.text();
+          const tmp  = document.createElement('div');
+          tmp.innerHTML = html;
+          const txt = tmp.textContent.trim();
+          this.runOk     = res.ok && !txt.startsWith('✗');
+          this.runResult = txt || (res.ok ? '✓ Pipeline completed.' : '✗ Pipeline failed.');
+        } catch(e) {
+          this.runOk = false; this.runResult = '✗ ' + e.message;
+        } finally { this.running = false; }
+      }
+    };
+  };
+
+  // Global hook called by Rust-rendered pipeline list items
+  window.qaLoadPipeline = function(id, name, triggerLabel) {
+    document.dispatchEvent(new CustomEvent('qa:load-pipeline', {
+      detail: { id, name, triggerLabel }
+    }));
+  };
+})();
+</script>
