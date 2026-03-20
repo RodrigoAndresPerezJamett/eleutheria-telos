@@ -7,14 +7,24 @@
       <h1 class="panel-title" style="margin:0;">Clipboard History</h1>
       <p class="panel-subtitle" style="margin:2px 0 0;">Everything you've copied, searchable and one-click to recopy.</p>
     </div>
-    <button class="btn btn-ghost btn-sm"
-            style="color:var(--destructive);border-color:var(--destructive);"
-            hx-delete="/api/clipboard"
-            hx-target="#clipboard-grid"
-            hx-swap="innerHTML"
-            hx-confirm="Clear all clipboard history?">
-      Clear all
-    </button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-ghost btn-sm"
+              hx-get="/api/clipboard/trash"
+              hx-target="#clipboard-grid"
+              hx-swap="innerHTML"
+              style="font-size:12px;display:flex;align-items:center;gap:5px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        Trash
+      </button>
+      <button class="btn btn-ghost btn-sm"
+              style="color:var(--destructive);border-color:var(--destructive);"
+              hx-delete="/api/clipboard"
+              hx-target="#clipboard-grid"
+              hx-swap="innerHTML"
+              hx-confirm="Clear all clipboard history?">
+        Clear all
+      </button>
+    </div>
   </div>
 
   <!-- Content wrapper — blurred when search popup is open -->

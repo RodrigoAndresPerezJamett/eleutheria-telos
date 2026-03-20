@@ -36,13 +36,26 @@
       <div :style="{ filter: (searchFocused || preview) ? 'blur(3px)' : '', 'pointer-events': (searchFocused || preview) ? 'none' : '', transition: 'filter 0.15s' }"
            style="flex:1;min-height:0;display:flex;flex-direction:row;">
 
-        <!-- Tag sidebar -->
-        <div id="notes-tag-sidebar"
-             style="width:168px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px 0;"
-             hx-get="/api/notes/tags"
-             hx-trigger="load, noteUpdated from:body"
-             hx-swap="innerHTML">
-          <p style="padding:12px 10px;font-size:11px;color:var(--text-muted);margin:0;">Loading…</p>
+        <!-- Tag sidebar wrapper — scrollable tag list + fixed trash button -->
+        <div style="width:168px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;">
+          <div id="notes-tag-sidebar"
+               style="flex:1;overflow-y:auto;padding:8px 0;"
+               hx-get="/api/notes/tags"
+               hx-trigger="load, noteUpdated from:body"
+               hx-swap="innerHTML">
+            <p style="padding:12px 10px;font-size:11px;color:var(--text-muted);margin:0;">Loading…</p>
+          </div>
+          <!-- Trash button — always at bottom of sidebar -->
+          <div style="flex-shrink:0;border-top:1px solid var(--border);padding:6px 10px 8px;">
+            <button id="notes-trash-btn"
+                    onclick="notesShowTrash()"
+                    style="width:100%;text-align:left;padding:5px 8px;font-size:11px;color:var(--text-muted);background:transparent;border:none;cursor:pointer;border-radius:5px;display:flex;align-items:center;gap:6px;outline:none;"
+                    onmouseenter="this.style.color='var(--destructive)';this.style.background='var(--bg-hover)'"
+                    onmouseleave="if(!window.notesTrashActive)this.style.color='var(--text-muted)';this.style.background='transparent'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              Trash
+            </button>
+          </div>
         </div>
 
         <!-- Scrollable card grid -->
@@ -191,9 +204,14 @@
   window.notesDragStart = function (event, noteId) {
     event.dataTransfer.setData('text/plain', noteId);
     event.dataTransfer.effectAllowed = 'move';
-    // Defer opacity change so drag ghost captures at full opacity first
     const el = event.target;
-    setTimeout(() => { el.style.opacity = '0.35'; }, 0);
+    // Create a semi-transparent ghost so the drop target is visible while dragging
+    const ghost = el.cloneNode(true);
+    ghost.style.cssText += ';opacity:0.5;position:fixed;top:0;left:-9999px;width:' + el.offsetWidth + 'px;pointer-events:none;';
+    document.body.appendChild(ghost);
+    event.dataTransfer.setDragImage(ghost, event.offsetX, event.offsetY);
+    // Remove ghost after browser captures it; fade the source element
+    setTimeout(() => { ghost.remove(); el.style.opacity = '0.35'; }, 0);
   };
 
   window.notesDrop = async function (event, toTag) {
@@ -226,16 +244,38 @@
     }
   };
 
+  // ── Trash view ────────────────────────────────────────────────────────────
+  window.notesTrashActive = false;
+
+  window.notesShowTrash = function () {
+    window.notesTrashActive = true;
+    window.notesActiveTag = null;
+    _applyActiveTag();
+    const btn = document.getElementById('notes-trash-btn');
+    if (btn) { btn.style.color = 'var(--destructive)'; btn.style.fontWeight = '700'; }
+    htmx.ajax('GET',
+      'http://127.0.0.1:' + window.__API_PORT__ + '/api/notes/trash',
+      { target: '#notes-grid', swap: 'innerHTML',
+        headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } });
+  };
+
   // ── Active tag sidebar highlight ───────────────────────────────────────────
   window.notesActiveTag = null;
 
   window.notesSetActiveTag = function (tag) {
+    window.notesTrashActive = false;
     window.notesActiveTag = tag || null;
     _applyActiveTag();
   };
 
   function _applyActiveTag() {
     const active = window.notesActiveTag;
+    // Reset trash button
+    const trashBtn = document.getElementById('notes-trash-btn');
+    if (trashBtn && !window.notesTrashActive) {
+      trashBtn.style.color = '';
+      trashBtn.style.fontWeight = '';
+    }
     // Reset all containers (has-children rows that include the chevron)
     document.querySelectorAll('#notes-tag-sidebar [data-tag-card]').forEach(el => {
       el.style.outline = '';
@@ -381,6 +421,25 @@
       init() {
         document.addEventListener('notes:open-editor', e => {
           this.openEditor(e.detail.id);
+        });
+        // [[Note Title]] link clicked in preview → find and open the referenced note
+        const self = this;
+        document.addEventListener('notes:find-by-title', async e => {
+          const title = e.detail;
+          try {
+            const res = await fetch(
+              'http://127.0.0.1:' + window.__API_PORT__ + '/api/notes/resolve?title=' + encodeURIComponent(title),
+              { headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              self.openEditor(data.id);
+            } else {
+              alert('Note "' + title + '" not found.');
+            }
+          } catch (err) {
+            console.error('notes: resolve failed', err);
+          }
         });
         // Browser back button returns to notes grid (hash-based history entry)
         window.addEventListener('hashchange', () => {

@@ -124,11 +124,70 @@ fn render_entry_card(
 
 const PAGE: i64 = 20;
 
+fn clip_date_bucket(unix_ts: i64) -> &'static str {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let diff = now - unix_ts;
+    if diff < 86_400 { "Today" }
+    else if diff < 2 * 86_400 { "Yesterday" }
+    else if diff < 7 * 86_400 { "This Week" }
+    else if diff < 30 * 86_400 { "This Month" }
+    else { "Older" }
+}
+
+fn clip_bucket_separator(label: &str) -> String {
+    format!(
+        r#"<div style="grid-column:1/-1;padding:12px 2px 4px;font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;border-bottom:1px solid var(--border);margin-bottom:4px;">{label}</div>"#
+    )
+}
+
+fn render_trash_clip_card(id: &str, content: &str, deleted_at: i64, content_type: &str) -> String {
+    let ts = format_timestamp(deleted_at);
+    let preview = if content_type == "image" {
+        "[Image]".to_string()
+    } else {
+        html_escape(truncate_bytes(content, CONTENT_PREVIEW_MAX)).to_string()
+    };
+    format!(
+        r##"<div id="clip-{id}"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;display:flex;flex-direction:column;overflow:hidden;outline:1px solid var(--border);outline-offset:-1px;position:relative;opacity:0.65;transition:opacity 0.15s;"
+     onmouseenter="this.style.opacity='1'"
+     onmouseleave="this.style.opacity='0.65'">
+  <pre style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;word-break:break-all;font-family:inherit;line-height:1.5;margin:0 0 10px;flex:1;overflow:hidden;">{preview}</pre>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <span style="font-size:11px;color:var(--text-muted);">Deleted {ts}</span>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-ghost btn-sm"
+              style="font-size:11px;padding:2px 8px;color:var(--success);"
+              hx-post="/api/clipboard{id}/restore"
+              hx-target="#clip-{id}"
+              hx-swap="outerHTML"
+              hx-on::after-request="htmx.trigger(document.body,'clipboardRefresh')"
+              onclick="event.stopPropagation()">Restore</button>
+      <button class="btn btn-ghost btn-sm"
+              style="font-size:11px;padding:2px 8px;color:var(--destructive);"
+              hx-delete="/api/clipboard{id}/purge"
+              hx-target="#clip-{id}"
+              hx-swap="outerHTML"
+              hx-confirm="Permanently delete? This cannot be undone."
+              onclick="event.stopPropagation()">Delete forever</button>
+    </div>
+  </div>
+</div>"##,
+        id = id,
+        preview = preview,
+        ts = ts,
+    )
+}
+
 #[allow(clippy::type_complexity)]
 fn render_list(
     entries: &[(String, String, i64, Option<String>, String, bool)],
     has_more: bool,
     next_offset: i64,
+    show_buckets: bool,
 ) -> String {
     if entries.is_empty() {
         return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
@@ -136,12 +195,18 @@ fn render_list(
   <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Everything you copy appears here automatically.<br>Start copying and it will show up.</p>
 </div>"#.to_string();
     }
-    let mut html: String = entries
-        .iter()
-        .map(|(id, content, ts, image_thumb, content_type, is_pinned)| {
-            render_entry_card(id, content, *ts, content_type, image_thumb.as_deref(), *is_pinned)
-        })
-        .collect();
+    let mut html = String::new();
+    let mut current_bucket = "";
+    for (id, content, ts, image_thumb, content_type, is_pinned) in entries {
+        if show_buckets {
+            let b = clip_date_bucket(*ts);
+            if b != current_bucket {
+                current_bucket = b;
+                html.push_str(&clip_bucket_separator(b));
+            }
+        }
+        html.push_str(&render_entry_card(id, content, *ts, content_type, image_thumb.as_deref(), *is_pinned));
+    }
     if has_more {
         html.push_str(&format!(
             r#"<div id="clip-sentinel" style="grid-column:1/-1;padding:12px;text-align:center;color:var(--text-muted);font-size:12px;"
@@ -309,6 +374,7 @@ pub async fn list_handler(
     let mut rows: Vec<(String, String, i64, Option<String>, String, bool)> = if params.q.is_empty() {
         sqlx::query_as(
             "SELECT id, content, created_at, image_thumb, content_type, is_pinned FROM clipboard
+             WHERE deleted_at IS NULL
              ORDER BY is_pinned DESC, created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(fetch_limit)
@@ -321,7 +387,7 @@ pub async fn list_handler(
         let pattern = format!("%{}%", params.q);
         sqlx::query_as(
             "SELECT id, content, created_at, image_thumb, content_type, is_pinned FROM clipboard
-             WHERE content LIKE ?
+             WHERE deleted_at IS NULL AND content LIKE ?
              ORDER BY is_pinned DESC, created_at DESC LIMIT 200 OFFSET 0",
         )
         .bind(&pattern)
@@ -333,8 +399,9 @@ pub async fn list_handler(
     let has_more = rows.len() > params.limit as usize && params.q.is_empty();
     rows.truncate(params.limit as usize);
     let next_offset = params.offset + params.limit;
+    let show_buckets = params.offset == 0;
 
-    Html(render_list(&rows, has_more, next_offset))
+    Html(render_list(&rows, has_more, next_offset, show_buckets))
 }
 
 pub async fn get_one_handler(
@@ -390,13 +457,85 @@ pub async fn delete_one_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    sqlx::query("DELETE FROM clipboard WHERE id = ?")
+    // Soft delete — moved to trash, auto-purged after 30 days
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    sqlx::query("UPDATE clipboard SET deleted_at = ? WHERE id = ?")
+        .bind(now)
         .bind(&id)
         .execute(&state.db)
         .await
         .ok();
-    // Return empty string — HTMX outerHTML swap removes the card
     Html(String::new())
+}
+
+pub async fn restore_clipboard_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    sqlx::query("UPDATE clipboard SET deleted_at = NULL WHERE id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .ok();
+    (
+        [("HX-Trigger", "clipboardRefresh")],
+        Html(String::new()),
+    )
+}
+
+pub async fn purge_clipboard_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    sqlx::query("DELETE FROM clipboard WHERE id = ? AND deleted_at IS NOT NULL")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .ok();
+    Html(String::new())
+}
+
+pub async fn trash_clipboard_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    // Auto-purge items older than 30 days
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - 30 * 86_400;
+    sqlx::query("DELETE FROM clipboard WHERE deleted_at IS NOT NULL AND deleted_at < ?")
+        .bind(cutoff)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    let rows: Vec<(String, String, i64, String)> = sqlx::query_as(
+        "SELECT id, content, deleted_at, content_type FROM clipboard
+         WHERE deleted_at IS NOT NULL
+         ORDER BY deleted_at DESC",
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if rows.is_empty() {
+        return Html(r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
+  <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Trash is empty</p>
+  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Deleted clipboard items appear here for 30 days.</p>
+</div>"#.to_string());
+    }
+
+    let mut html = String::from(
+        r#"<div style="grid-column:1/-1;padding:6px 0 12px;">
+  <p style="font-size:11px;color:var(--text-muted);margin:0;">Items are automatically deleted after 30 days.</p>
+</div>"#,
+    );
+    for (id, content, deleted_at, content_type) in &rows {
+        html.push_str(&render_trash_clip_card(id, content, *deleted_at, content_type));
+    }
+    Html(html)
 }
 
 pub async fn clear_all_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -429,8 +568,12 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/clipboard",
             get(list_handler).delete(clear_all_handler),
         )
+        // Static paths before parameterized :id
+        .route("/api/clipboard/trash", get(trash_clipboard_handler))
         .route("/api/clipboard/:id/recopy", post(recopy_handler))
         .route("/api/clipboard/:id/pin", put(pin_toggle_handler))
+        .route("/api/clipboard/:id/restore", post(restore_clipboard_handler))
+        .route("/api/clipboard/:id/purge", axum::routing::delete(purge_clipboard_handler))
         .route(
             "/api/clipboard/:id",
             get(get_one_handler).delete(delete_one_handler),
@@ -734,11 +877,14 @@ mod tests {
         // Call handler directly to bypass router (tests business logic, not routing)
         delete_one_handler(State(state.clone()), Path("del-id".to_string())).await;
 
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clipboard WHERE id = 'del-id'")
-            .fetch_one(&state.db)
-            .await
-            .unwrap();
-        assert_eq!(count.0, 0);
+        // Soft-delete: row still exists but deleted_at is set
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM clipboard WHERE id = 'del-id' AND deleted_at IS NOT NULL",
+        )
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 1);
     }
 
     #[tokio::test]

@@ -57,7 +57,7 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
      draggable="true"
      ondragstart="notesDragStart(event,'{id}')"
      ondragend="this.style.opacity='1'"
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;user-select:none;"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.display='inline-flex')"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.note-action').forEach(e=>e.style.display='none')"
      onclick="notesOpenEditor(this)">
@@ -97,19 +97,46 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
 
 const PAGE: i64 = 24;
 
-fn render_note_list(entries: &[(String, String, String, i64, i64)], has_more: bool, next_offset: i64) -> String {
+// ── Date bucketing ────────────────────────────────────────────────────────────
+
+fn date_bucket(unix_ts: i64) -> &'static str {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let diff = now - unix_ts;
+    if diff < 86_400 { "Today" }
+    else if diff < 2 * 86_400 { "Yesterday" }
+    else if diff < 7 * 86_400 { "This Week" }
+    else if diff < 30 * 86_400 { "This Month" }
+    else { "Older" }
+}
+
+fn bucket_separator(label: &str) -> String {
+    format!(
+        r#"<div style="grid-column:1/-1;padding:12px 2px 4px;font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;border-bottom:1px solid var(--border);margin-bottom:4px;">{label}</div>"#
+    )
+}
+
+fn render_note_list(entries: &[(String, String, String, i64, i64)], has_more: bool, next_offset: i64, show_buckets: bool) -> String {
     if entries.is_empty() {
         return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
   <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Got something worth keeping?</p>
   <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Write your first note — it stays local, searchable, and yours forever.</p>
 </div>"#.to_string();
     }
-    let mut html: String = entries
-        .iter()
-        .map(|(id, title, content, pinned, updated_at)| {
-            render_note_card(id, title, content, *pinned, *updated_at)
-        })
-        .collect();
+    let mut html = String::new();
+    let mut current_bucket = "";
+    for (id, title, content, pinned, updated_at) in entries {
+        if show_buckets {
+            let b = date_bucket(*updated_at);
+            if b != current_bucket {
+                current_bucket = b;
+                html.push_str(&bucket_separator(b));
+            }
+        }
+        html.push_str(&render_note_card(id, title, content, *pinned, *updated_at));
+    }
     if has_more {
         html.push_str(&format!(
             r#"<div id="notes-sentinel" style="grid-column:1/-1;padding:12px;text-align:center;color:var(--text-muted);font-size:12px;"
@@ -119,6 +146,107 @@ fn render_note_list(entries: &[(String, String, String, i64, i64)], has_more: bo
         ));
     }
     html
+}
+
+// ── Trash card ────────────────────────────────────────────────────────────────
+
+fn render_trash_note_card(id: &str, title: &str, content: &str, deleted_at: i64) -> String {
+    let clean_title = strip_inline_tags(title);
+    let display_title = if clean_title.is_empty() { "Untitled".to_string() } else { clean_title };
+    let ts = format_timestamp(deleted_at);
+    let preview = html_escape(truncate_bytes(content, CONTENT_PREVIEW_MAX));
+    format!(
+        r##"<div id="note-{id}"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;display:flex;flex-direction:column;overflow:hidden;outline:1px solid var(--border);outline-offset:-1px;position:relative;opacity:0.65;transition:opacity 0.15s;"
+     onmouseenter="this.style.opacity='1'"
+     onmouseleave="this.style.opacity='0.65'">
+  <h3 style="font-size:13px;font-weight:600;color:var(--text-primary);margin:0 0 6px;overflow:hidden;max-height:2.6em;line-height:1.3;">{escaped_title}</h3>
+  <p style="font-size:12px;color:var(--text-muted);flex:1;margin:0 0 10px;overflow:hidden;line-height:1.5;">{preview}</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <span style="font-size:11px;color:var(--text-muted);">Deleted {ts}</span>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-ghost btn-sm"
+              style="font-size:11px;padding:2px 8px;color:var(--success);"
+              hx-post="/api/notes/{id}/restore"
+              hx-target="#note-{id}"
+              hx-swap="outerHTML"
+              hx-on::after-request="htmx.trigger(document.body,'noteUpdated')"
+              onclick="event.stopPropagation()">Restore</button>
+      <button class="btn btn-ghost btn-sm"
+              style="font-size:11px;padding:2px 8px;color:var(--destructive);"
+              hx-delete="/api/notes/{id}/purge"
+              hx-target="#note-{id}"
+              hx-swap="outerHTML"
+              hx-confirm="Permanently delete? This cannot be undone."
+              onclick="event.stopPropagation()">Delete forever</button>
+    </div>
+  </div>
+</div>"##,
+        id = id,
+        escaped_title = html_escape(&display_title),
+        preview = preview,
+        ts = ts,
+    )
+}
+
+// ── Note references ───────────────────────────────────────────────────────────
+
+/// Extracts [[Note Title]] references from content. Returns unique title strings.
+fn extract_note_refs(content: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    let bytes = content.as_bytes();
+    let n = bytes.len();
+    let mut i = 0;
+    while i + 1 < n {
+        if bytes[i] == b'[' && bytes[i + 1] == b'[' {
+            i += 2;
+            let start = i;
+            while i + 1 < n && !(bytes[i] == b']' && bytes[i + 1] == b']') {
+                i += 1;
+            }
+            if i + 1 < n {
+                let title = content[start..i].trim();
+                if !title.is_empty() && !title.contains('\n') {
+                    refs.push(title.to_string());
+                }
+                i += 2;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    refs.sort();
+    refs.dedup();
+    refs
+}
+
+/// Rebuilds note_links for a given note from its content [[refs]].
+async fn sync_note_links(db: &SqlitePool, from_id: &str, content: &str) {
+    let refs = extract_note_refs(content);
+    sqlx::query("DELETE FROM note_links WHERE from_id = ?")
+        .bind(from_id)
+        .execute(db)
+        .await
+        .ok();
+    for title in &refs {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM notes WHERE LOWER(title) = LOWER(?) AND deleted_at IS NULL LIMIT 1",
+        )
+        .bind(title)
+        .fetch_optional(db)
+        .await
+        .unwrap_or(None);
+        if let Some((to_id,)) = row {
+            if to_id != from_id {
+                sqlx::query("INSERT OR IGNORE INTO note_links (from_id, to_id) VALUES (?, ?)")
+                    .bind(from_id)
+                    .bind(&to_id)
+                    .execute(db)
+                    .await
+                    .ok();
+            }
+        }
+    }
 }
 
 fn render_editor(id: &str, title: &str, content: &str) -> String {
@@ -159,6 +287,14 @@ fn render_editor(id: &str, title: &str, content: &str) -> String {
   </div>
   <div x-show="preview" style="flex:1;overflow-y:auto;" class="prose prose-invert prose-sm max-w-none"
        x-html="renderMarkdown()"></div>
+  <!-- Backlinks panel — always visible below editor/preview -->
+  <div id="note-links-{id}"
+       style="flex-shrink:0;border-top:1px solid var(--border);padding:8px 0 0;margin-top:4px;"
+       hx-get="/api/notes/{id}/links"
+       hx-trigger="load, noteUpdated from:body"
+       hx-swap="innerHTML">
+    <p style="font-size:11px;color:var(--text-muted);margin:0;padding:4px 0;">Loading links…</p>
+  </div>
 </div>
 <script>
 function notesEditor(noteId) {{
@@ -192,8 +328,12 @@ function notesEditor(noteId) {{
       return [...new Set(m.map(x => x[1].toLowerCase()))];
     }},
     renderMarkdown() {{
-      if (typeof marked !== 'undefined') return marked.parse(this.content || '');
-      return '<pre>' + this.content + '</pre>';
+      let text = (this.content || '').replace(/\[\[([^\]\n]+)\]\]/g, function(_, t) {{
+        const safe = t.replace(/'/g, "\\'");
+        return '<span style="color:var(--accent);cursor:pointer;text-decoration:underline;" onclick="document.dispatchEvent(new CustomEvent(\'notes:find-by-title\',{{detail:\'' + safe + '\'}}))">[[' + t + ']]</span>';
+      }});
+      if (typeof marked !== 'undefined') return marked.parse(text);
+      return '<pre>' + text + '</pre>';
     }},
   }};
 }}
@@ -542,7 +682,7 @@ pub async fn list_handler(
             "SELECT n.id, n.title, n.content, n.pinned, n.updated_at
              FROM notes n
              JOIN note_tags t ON t.note_id = n.id
-             WHERE t.tag = ? OR t.tag LIKE ?
+             WHERE (t.tag = ? OR t.tag LIKE ?) AND n.deleted_at IS NULL
              GROUP BY n.id
              ORDER BY n.pinned DESC, MIN(t.tag), n.updated_at DESC
              LIMIT 200",
@@ -558,7 +698,7 @@ pub async fn list_handler(
             "SELECT n.id, n.title, n.content, n.pinned, n.updated_at
              FROM notes n
              JOIN notes_fts f ON f.rowid = n.rowid
-             WHERE notes_fts MATCH ?
+             WHERE notes_fts MATCH ? AND n.deleted_at IS NULL
              ORDER BY n.pinned DESC, rank
              LIMIT 200 OFFSET 0",
         )
@@ -569,6 +709,7 @@ pub async fn list_handler(
     } else {
         sqlx::query_as(
             "SELECT id, title, content, pinned, updated_at FROM notes
+             WHERE deleted_at IS NULL
              ORDER BY pinned DESC, updated_at DESC LIMIT ? OFFSET ?",
         )
         .bind(fetch_limit)
@@ -581,8 +722,9 @@ pub async fn list_handler(
     let has_more = rows.len() > params.limit as usize && browsing;
     rows.truncate(params.limit as usize);
     let next_offset = params.offset + params.limit;
+    let show_buckets = params.offset == 0 || effective_tag.is_some() || !params.q.is_empty();
 
-    Html(render_note_list(&rows, has_more, next_offset))
+    Html(render_note_list(&rows, has_more, next_offset, show_buckets))
 }
 
 pub async fn create_handler(
@@ -613,6 +755,7 @@ pub async fn create_handler(
     match result {
         Ok(_) => {
             sync_note_tags(&state.db, &id, &body.title, &body.content).await;
+            sync_note_links(&state.db, &id, &body.content).await;
             state.event_bus.publish(Event::NoteCreated {
                 id: id.clone(),
                 title: body.title.clone(),
@@ -633,7 +776,7 @@ pub async fn create_handler(
 
 pub async fn get_handler(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
     let row: Option<(String, String)> =
-        sqlx::query_as("SELECT title, content FROM notes WHERE id = ?")
+        sqlx::query_as("SELECT title, content FROM notes WHERE id = ? AND deleted_at IS NULL")
             .bind(&id)
             .fetch_optional(&state.db)
             .await
@@ -735,6 +878,7 @@ pub async fn update_handler(
                 .unwrap_or(None)
                 {
                     sync_note_tags(&state.db, &id, &t, &c).await;
+                    sync_note_links(&state.db, &id, &c).await;
                 }
             }
             state.event_bus.publish(Event::NoteUpdated { id });
@@ -751,12 +895,87 @@ pub async fn delete_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    sqlx::query("DELETE FROM notes WHERE id = ?")
+    // Soft delete: move to trash, preserve data for 30 days
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    sqlx::query("UPDATE notes SET deleted_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .ok();
+    // Return empty — HTMX outerHTML swap removes the card
+    Html(String::new())
+}
+
+pub async fn restore_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    sqlx::query("UPDATE notes SET deleted_at = NULL WHERE id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .ok();
+    // Return empty to remove card from trash view; HX-Trigger refreshes sidebar
+    (
+        [("HX-Trigger", "noteUpdated")],
+        Html(String::new()),
+    )
+}
+
+pub async fn purge_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    sqlx::query("DELETE FROM notes WHERE id = ? AND deleted_at IS NOT NULL")
         .bind(&id)
         .execute(&state.db)
         .await
         .ok();
     Html(String::new())
+}
+
+pub async fn trash_list_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    // Auto-purge items older than 30 days before rendering
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - 30 * 86_400;
+    sqlx::query("DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?")
+        .bind(cutoff)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    let rows: Vec<(String, String, String, i64)> = sqlx::query_as(
+        "SELECT id, title, content, deleted_at FROM notes
+         WHERE deleted_at IS NOT NULL
+         ORDER BY deleted_at DESC",
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if rows.is_empty() {
+        return Html(r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
+  <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Trash is empty</p>
+  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Deleted notes are kept here for 30 days,<br>then automatically removed forever.</p>
+</div>"#.to_string());
+    }
+
+    let mut html = String::from(
+        r#"<div style="grid-column:1/-1;padding:6px 0 12px;display:flex;align-items:center;justify-content:space-between;">
+  <p style="font-size:11px;color:var(--text-muted);margin:0;">Items are automatically deleted after 30 days.</p>
+</div>"#,
+    );
+    for (id, title, content, deleted_at) in &rows {
+        html.push_str(&render_trash_note_card(id, title, content, *deleted_at));
+    }
+    Html(html)
 }
 
 pub async fn pin_toggle_handler(
@@ -914,11 +1133,11 @@ pub async fn delete_tag_handler(
 ) -> impl IntoResponse {
     let tag = params.name.to_lowercase();
 
-    // Fetch all notes that reference this tag or any child tag (e.g. work/* when deleting work)
+    // Fetch all non-deleted notes that reference this tag or any child tag
     let notes: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT DISTINCT n.id, n.title, n.content FROM notes n \
          JOIN note_tags t ON t.note_id = n.id \
-         WHERE t.tag = ? OR t.tag LIKE ?",
+         WHERE (t.tag = ? OR t.tag LIKE ?) AND n.deleted_at IS NULL",
     )
     .bind(&tag)
     .bind(format!("{}/%", tag))
@@ -953,7 +1172,10 @@ pub async fn delete_tag_handler(
 
 pub async fn tags_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT tag, COUNT(*) AS count FROM note_tags GROUP BY tag ORDER BY tag",
+        "SELECT t.tag, COUNT(*) AS count FROM note_tags t
+         JOIN notes n ON n.id = t.note_id
+         WHERE n.deleted_at IS NULL
+         GROUP BY t.tag ORDER BY t.tag",
     )
     .fetch_all(&state.db)
     .await
@@ -961,13 +1183,102 @@ pub async fn tags_handler(State(state): State<Arc<AppState>>) -> impl IntoRespon
     Html(render_tag_tree(&rows))
 }
 
+pub async fn links_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    // Backlinks: notes that reference this note
+    let backlinks: Vec<(String, String)> = sqlx::query_as(
+        "SELECT n.id, n.title FROM note_links nl
+         JOIN notes n ON n.id = nl.from_id
+         WHERE nl.to_id = ? AND n.deleted_at IS NULL
+         ORDER BY n.updated_at DESC",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // Outgoing refs: notes this note references
+    let outgoing: Vec<(String, String)> = sqlx::query_as(
+        "SELECT n.id, n.title FROM note_links nl
+         JOIN notes n ON n.id = nl.to_id
+         WHERE nl.from_id = ? AND n.deleted_at IS NULL
+         ORDER BY n.title ASC",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if backlinks.is_empty() && outgoing.is_empty() {
+        return Html(String::new());
+    }
+
+    let mut html = String::new();
+    if !backlinks.is_empty() {
+        html.push_str(r#"<p style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin:0 0 4px;">Backlinks</p>"#);
+        for (link_id, link_title) in &backlinks {
+            let title = if link_title.is_empty() { "Untitled" } else { link_title.as_str() };
+            html.push_str(&format!(
+                r#"<button style="display:block;width:100%;text-align:left;font-size:11px;color:var(--accent);background:transparent;border:none;cursor:pointer;padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                        onclick="document.dispatchEvent(new CustomEvent('notes:open-editor',{{detail:{{id:'{link_id}'}}}}))"
+                        onmouseenter="this.style.textDecoration='underline'"
+                        onmouseleave="this.style.textDecoration='none'">↩ {title}</button>"#,
+                link_id = link_id,
+                title = html_escape(title),
+            ));
+        }
+    }
+    if !outgoing.is_empty() {
+        if !backlinks.is_empty() { html.push_str(r#"<div style="height:6px;"></div>"#); }
+        html.push_str(r#"<p style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin:0 0 4px;">References</p>"#);
+        for (link_id, link_title) in &outgoing {
+            let title = if link_title.is_empty() { "Untitled" } else { link_title.as_str() };
+            html.push_str(&format!(
+                r#"<button style="display:block;width:100%;text-align:left;font-size:11px;color:var(--accent);background:transparent;border:none;cursor:pointer;padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                        onclick="document.dispatchEvent(new CustomEvent('notes:open-editor',{{detail:{{id:'{link_id}'}}}}))"
+                        onmouseenter="this.style.textDecoration='underline'"
+                        onmouseleave="this.style.textDecoration='none'">↗ {title}</button>"#,
+                link_id = link_id,
+                title = html_escape(title),
+            ));
+        }
+    }
+    Html(html)
+}
+
+#[derive(Deserialize)]
+pub struct ResolveQuery {
+    pub title: String,
+}
+
+pub async fn resolve_by_title_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ResolveQuery>,
+) -> impl IntoResponse {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT id FROM notes WHERE LOWER(title) = LOWER(?) AND deleted_at IS NULL LIMIT 1",
+    )
+    .bind(&params.title)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+    match row {
+        Some((id,)) => Json(json!({ "id": id })).into_response(),
+        None => (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" }))).into_response(),
+    }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/notes", get(list_handler).post(create_handler))
-        // /api/notes/tags must be declared before /api/notes/:id (matchit static > param)
+        // Static paths must be declared before /:id (matchit static > param)
         .route("/api/notes/tags", get(tags_handler).delete(delete_tag_handler))
+        .route("/api/notes/trash", get(trash_list_handler))
+        .route("/api/notes/resolve", get(resolve_by_title_handler))
         .route(
             "/api/notes/:id",
             get(get_handler).put(update_handler).delete(delete_handler),
@@ -975,6 +1286,9 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/notes/:id/content", get(get_content_handler))
         .route("/api/notes/:id/pin", post(pin_toggle_handler))
         .route("/api/notes/:id/retag", put(retag_handler))
+        .route("/api/notes/:id/restore", post(restore_handler))
+        .route("/api/notes/:id/purge", axum::routing::delete(purge_handler))
+        .route("/api/notes/:id/links", get(links_handler))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1154,12 +1468,14 @@ mod tests {
         // Call handler directly to bypass router
         delete_handler(State(state.clone()), Path(id.to_string())).await;
 
-        let count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH 'DelTitle'")
-                .fetch_one(&state.db)
-                .await
-                .unwrap();
-        assert_eq!(count.0, 0);
+        // Soft-delete: note still in FTS (not hard-deleted), but deleted_at is set
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM notes WHERE title = 'DelTitle' AND deleted_at IS NOT NULL",
+        )
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 1);
     }
 
     #[tokio::test]
