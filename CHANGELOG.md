@@ -7,6 +7,34 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7 P1/P2/P3: pipeline folders + YAML export/import
+
+### Completed
+- **`src-tauri/migrations/006_pipeline_folders.sql`** — `pipeline_folders` table (id, name, sort_order) + `folder_id TEXT` column on `pipelines`
+- **`src-tauri/Cargo.toml`** — added `serde_yaml = "0.9"` (MIT, Rust 1.92 compatible)
+- **`src-tauri/src/tools/quick_actions.rs`** — P1/P2/P3 backend:
+  - `FolderRow`, `PipelineYaml`, `NodeYaml`, `EdgeYaml`, `CreateFolderParams`, `MoveFolderParams`, `ImportParams` structs
+  - `render_pipeline_item()`: single pipeline `<li>` with folder `<select>` (HTMX PUT on change, shows on hover via `.qa-hover` class)
+  - `render_pipeline_list()`: folder-aware; folders rendered as `<details>/<summary>` collapsible sections; uncategorised pipelines at bottom
+  - `load_and_render_list()`: single async helper fetching folders + pipelines; all CRUD handlers use it
+  - `create_folder_handler` / `delete_folder_handler` / `move_to_folder_handler` — full folder CRUD
+  - `export_handler`: serializes pipeline + nodes + edges to serde_yaml YAML; returns with `Content-Disposition: attachment`
+  - `import_handler`: deserializes YAML via serde_yaml; generates fresh UUIDs; remaps edge source/target IDs via HashMap
+  - Router: `/api/pipeline-folders`, `/api/pipelines/import` (before `/:id`), `/api/pipelines/:id/folder`, `/api/pipelines/:id/export`
+  - `PipelineRow` updated with `folder_id: Option<String>`; all SELECT queries updated
+- **`ui/tools/quick-actions/index.html`** — P1/P2/P3 frontend:
+  - Sidebar: "+ Pipeline" + "⊞ Folder" dual-button row; folder creation inline form
+  - Hidden `<input type="file" id="qa-import-input">` inside sidebar header
+  - Canvas toolbar: Export + Import buttons (with download/upload icons)
+  - `exportYaml()`: fetch + blob URL + `<a download>` click
+  - `importYaml(event)`: read file text → POST JSON → refresh list via fetch → auto-open imported pipeline
+- **`test-pipeline-h4.yaml`** — 7-node H4 test pipeline (read_file → not_empty condition → translate or save_note branches → two end nodes); ready to import and run
+
+### Next
+Notes: inline #tag extraction — `#tag` tokens parsed at save time → `tags` table → clickable chips → filter by tag.
+
+---
+
 ## [2026-03-20] — Phase 4.7 H4: graph-aware execution engine
 
 ### Completed

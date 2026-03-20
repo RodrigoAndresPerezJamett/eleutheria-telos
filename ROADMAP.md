@@ -148,9 +148,9 @@
 > **Loop design decision (2026-03-19):** No dedicated Loop node. Loops are back-edges — any output port can connect to any previous node, creating a cycle. The execution engine detects cycles and enforces a per-pipeline timeout (default 60s warn / 120s kill). This matches the user's mental model and simplifies the node type system.
 
 ### Pipeline organisation and portability
-- [ ] **P1 — Pipeline folders** — group pipelines in the left sidebar list; `pipeline_folders` table + `folder_id` FK on `pipelines`; collapse/expand folders; move pipeline into folder via UI.
-- [ ] **P2 — Export pipeline as YAML** — serialize nodes + edges to human-readable YAML; "Export" button in canvas toolbar; downloads `.yaml` file. YAML chosen over JSON (more readable) and BPMN (too complex).
-- [ ] **P3 — Import pipeline from YAML** — upload `.yaml`, parse, validate node types and tool names against available tools, insert into DB as new pipeline.
+- [x] **P1 — Pipeline folders** — group pipelines in the left sidebar list; `pipeline_folders` table + `folder_id` FK on `pipelines`; collapse/expand folders; move pipeline into folder via UI. ✓
+- [x] **P2 — Export pipeline as YAML** — serialize nodes + edges to human-readable YAML; "Export" button in canvas toolbar; downloads `.yaml` file. YAML chosen over JSON (more readable) and BPMN (too complex). ✓
+- [x] **P3 — Import pipeline from YAML** — upload `.yaml`, parse, insert into DB as new pipeline; fresh UUIDs generated, edges remapped. ✓
 
 > **Pipeline YAML format (2026-03-20):** Fields: `name`, `trigger` (string), `nodes` list (id slug, type, config object, pos_x, pos_y), `edges` list (source slug, target slug, label). Human-readable slugs in YAML; real UUIDs generated on import.
 
