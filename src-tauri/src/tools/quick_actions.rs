@@ -1105,6 +1105,182 @@ pub async fn start_pipeline_engine(state: Arc<AppState>) {
     }
 }
 
+// ── Graph DB row types ────────────────────────────────────────────────────────
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct NodeRow {
+    id: String,
+    pipeline_id: String,
+    node_type: String,
+    config: String,
+    pos_x: f64,
+    pos_y: f64,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct EdgeRow {
+    id: String,
+    pipeline_id: String,
+    source_id: String,
+    target_id: String,
+    edge_label: String,
+}
+
+// ── Graph request structs ─────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct AddNodeParams {
+    node_type: String,
+    config: Option<String>,
+    pos_x: Option<f64>,
+    pos_y: Option<f64>,
+}
+
+#[derive(serde::Deserialize)]
+struct UpdateNodeParams {
+    config: Option<String>,
+    pos_x: Option<f64>,
+    pos_y: Option<f64>,
+}
+
+#[derive(serde::Deserialize)]
+struct AddEdgeParams {
+    source_id: String,
+    target_id: String,
+    edge_label: Option<String>,
+}
+
+// ── Graph handlers ────────────────────────────────────────────────────────────
+
+async fn graph_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let nodes: Vec<NodeRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, node_type, config, pos_x, pos_y \
+         FROM pipeline_nodes WHERE pipeline_id = ? ORDER BY pos_x ASC",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let edges: Vec<EdgeRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, source_id, target_id, edge_label \
+         FROM pipeline_edges WHERE pipeline_id = ?",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    axum::Json(serde_json::json!({ "nodes": nodes, "edges": edges }))
+}
+
+async fn add_node_handler(
+    State(state): State<Arc<AppState>>,
+    Path(pipeline_id): Path<String>,
+    axum::Json(params): axum::Json<AddNodeParams>,
+) -> impl IntoResponse {
+    let id = uuid::Uuid::new_v4().to_string();
+    let config = params.config.unwrap_or_else(|| "{}".to_string());
+    let pos_x = params.pos_x.unwrap_or(100.0);
+    let pos_y = params.pos_y.unwrap_or(200.0);
+    let _ = sqlx::query(
+        "INSERT INTO pipeline_nodes (id, pipeline_id, node_type, config, pos_x, pos_y) \
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&pipeline_id)
+    .bind(&params.node_type)
+    .bind(&config)
+    .bind(pos_x)
+    .bind(pos_y)
+    .execute(&state.db)
+    .await;
+
+    axum::Json(serde_json::json!({ "id": id }))
+}
+
+async fn update_node_handler(
+    State(state): State<Arc<AppState>>,
+    Path((pipeline_id, node_id)): Path<(String, String)>,
+    axum::Json(params): axum::Json<UpdateNodeParams>,
+) -> impl IntoResponse {
+    if let Some(config) = &params.config {
+        let _ = sqlx::query(
+            "UPDATE pipeline_nodes SET config = ? WHERE id = ? AND pipeline_id = ?",
+        )
+        .bind(config)
+        .bind(&node_id)
+        .bind(&pipeline_id)
+        .execute(&state.db)
+        .await;
+    }
+    if let (Some(x), Some(y)) = (params.pos_x, params.pos_y) {
+        let _ = sqlx::query(
+            "UPDATE pipeline_nodes SET pos_x = ?, pos_y = ? WHERE id = ? AND pipeline_id = ?",
+        )
+        .bind(x)
+        .bind(y)
+        .bind(&node_id)
+        .bind(&pipeline_id)
+        .execute(&state.db)
+        .await;
+    }
+    axum::Json(serde_json::json!({ "ok": true }))
+}
+
+async fn delete_node_handler(
+    State(state): State<Arc<AppState>>,
+    Path((pipeline_id, node_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    // Edges referencing this node are deleted via ON DELETE CASCADE on source_id/target_id.
+    let _ = sqlx::query(
+        "DELETE FROM pipeline_nodes WHERE id = ? AND pipeline_id = ?",
+    )
+    .bind(&node_id)
+    .bind(&pipeline_id)
+    .execute(&state.db)
+    .await;
+    axum::Json(serde_json::json!({ "ok": true }))
+}
+
+async fn add_edge_handler(
+    State(state): State<Arc<AppState>>,
+    Path(pipeline_id): Path<String>,
+    axum::Json(params): axum::Json<AddEdgeParams>,
+) -> impl IntoResponse {
+    let id = uuid::Uuid::new_v4().to_string();
+    let label = params.edge_label.unwrap_or_else(|| "default".to_string());
+    let _ = sqlx::query(
+        "INSERT INTO pipeline_edges (id, pipeline_id, source_id, target_id, edge_label) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&pipeline_id)
+    .bind(&params.source_id)
+    .bind(&params.target_id)
+    .bind(&label)
+    .execute(&state.db)
+    .await;
+    axum::Json(serde_json::json!({ "id": id }))
+}
+
+async fn delete_edge_handler(
+    State(state): State<Arc<AppState>>,
+    Path((pipeline_id, edge_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let _ = sqlx::query(
+        "DELETE FROM pipeline_edges WHERE id = ? AND pipeline_id = ?",
+    )
+    .bind(&edge_id)
+    .bind(&pipeline_id)
+    .execute(&state.db)
+    .await;
+    axum::Json(serde_json::json!({ "ok": true }))
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -1126,5 +1302,17 @@ pub fn router() -> Router<Arc<AppState>> {
         .route(
             "/api/pipelines/:id/steps/:step_id/move",
             post(move_step_handler),
+        )
+        // Graph API (H1+)
+        .route("/api/pipelines/:id/graph", get(graph_handler))
+        .route("/api/pipelines/:id/nodes", post(add_node_handler))
+        .route(
+            "/api/pipelines/:id/nodes/:node_id",
+            put(update_node_handler).delete(delete_node_handler),
+        )
+        .route("/api/pipelines/:id/edges", post(add_edge_handler))
+        .route(
+            "/api/pipelines/:id/edges/:edge_id",
+            delete(delete_edge_handler),
         )
 }
