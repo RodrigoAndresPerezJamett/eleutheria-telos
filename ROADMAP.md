@@ -154,6 +154,9 @@
 
 > **Pipeline YAML format (2026-03-20):** Fields: `name`, `trigger` (string), `nodes` list (id slug, type, config object, pos_x, pos_y), `edges` list (source slug, target slug, label). Human-readable slugs in YAML; real UUIDs generated on import.
 
+### Known bugs (blocking backlog items that depend on translation)
+- [ ] **Translation model index 404** — Models panel returns `HTTP Error 404: Not Found` when fetching the argostranslate model index. Root cause: argostranslate index URL changed or is down; also blocked by Python 3.14 incompatibility (see D-036). Fix: replace argostranslate with ctranslate2 + Opus-MT (Phase 4.6 decision, deferred). Pipeline actions using `translate` will fail until this is resolved.
+
 ### Remaining backlog items (ordered by impact)
 - [ ] **Notes: inline #tag extraction** — `#tag` tokens parsed at save time → `tags` table → clickable chips in notes list → filter by tag. Touches: `notes.rs`, SQLite migration, notes list UI, search.
 - [ ] **Quick Actions: opt-in/opt-out for auto-triggered pipelines** — small non-blocking toast bottom-right when a pipeline trigger fires; Accept / Dismiss; auto-dismissed after 8s; "Don't ask again for this pipeline" checkbox. Touches: `event_bus.rs`, `quick_actions.rs`, result cards (OCR/Voice).
