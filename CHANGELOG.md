@@ -7,6 +7,66 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7: Trash bin, date chunks, note references, drag ghost fix
+
+### Completed
+
+**`src-tauri/migrations/010_trash.sql`** (created)
+- `deleted_at INTEGER DEFAULT NULL` on both `notes` and `clipboard`; two new indexes
+
+**`src-tauri/migrations/011_note_links.sql`** (created)
+- `note_links (from_id, to_id)` join table — `ON DELETE CASCADE`, two indexes
+- Derived read index rebuilt from `[[Note Title]]` tokens on every save
+
+**`src-tauri/src/tools/notes.rs`**
+- `date_bucket()` + `bucket_separator()` — buckets notes by recency (Today / Yesterday / This Week / This Month / Older)
+- `render_note_list` — now takes `show_buckets: bool`; emits `<div grid-column:1/-1>` separators between buckets
+- `render_trash_note_card()` — dimmed card with Restore + Delete Forever buttons; `hx-on::after-request` triggers `noteUpdated` on restore
+- `extract_note_refs()` + `sync_note_links()` — scans `[[...]]` tokens, resolves titles to IDs, rebuilds `note_links`
+- `sync_note_links` called in `create_handler` and `update_handler`
+- All list/tag/filter queries: `AND deleted_at IS NULL` / `AND n.deleted_at IS NULL`
+- `delete_handler` → soft delete (`UPDATE SET deleted_at = ?`); returns empty HTML to remove card from grid
+- `restore_handler: POST /api/notes/:id/restore` — sets `deleted_at = NULL`; returns `HX-Trigger: noteUpdated`
+- `purge_handler: DELETE /api/notes/:id/purge` — hard DELETE, only if `deleted_at IS NOT NULL`
+- `trash_list_handler: GET /api/notes/trash` — auto-purges >30d, renders trash cards
+- `links_handler: GET /api/notes/:id/links` — returns backlinks + outgoing refs HTML (buttons that dispatch `notes:open-editor`)
+- `resolve_by_title_handler: GET /api/notes/resolve?title=` — returns `{ id }` JSON for `[[...]]` link navigation
+- `render_note_card`: added `user-select:none` (fixes drag in tag-filtered views on WebKitGTK)
+- `render_editor`: backlinks panel below editor — `hx-get="/api/notes/{id}/links" hx-trigger="load, noteUpdated from:body"`
+- `renderMarkdown()` in `notesEditor` — `[[...]]` → clickable span dispatching `notes:find-by-title` event
+- Router: added `/api/notes/trash`, `/api/notes/resolve`, `/api/notes/:id/restore`, `/api/notes/:id/purge`, `/api/notes/:id/links`
+- Tests updated for soft-delete; 28 pass
+
+**`src-tauri/src/tools/clipboard.rs`**
+- `clip_date_bucket()` + `clip_bucket_separator()` + `render_trash_clip_card()` — same pattern as notes
+- `render_list` takes `show_buckets: bool`; date separators on first page only
+- List queries: `AND deleted_at IS NULL`
+- `delete_one_handler` → soft delete
+- `restore_clipboard_handler: POST /api/clipboard/:id/restore` — `HX-Trigger: clipboardRefresh`
+- `purge_clipboard_handler: DELETE /api/clipboard/:id/purge` — hard DELETE
+- `trash_clipboard_handler: GET /api/clipboard/trash` — auto-purges >30d, renders trash cards
+
+**`ui/tools/notes/index.html`**
+- Sidebar wrapper restructured: `flex-direction:column` with scrollable `#notes-tag-sidebar` + fixed trash button at bottom
+- `notesShowTrash()` — loads `/api/notes/trash`, highlights trash button, resets active tag
+- `notesSetActiveTag()` — now also clears `notesTrashActive`
+- `_applyActiveTag()` — resets trash button color when tag is selected
+- `notesDragStart` — creates semi-transparent ghost clone via `setDragImage` (fixes ghost opacity); fades source element
+- `notesApp.init()` — listens for `notes:find-by-title`; resolves title via `/api/notes/resolve`, opens editor
+
+**`ui/tools/clipboard/index.html`**
+- Header: added Trash button (`hx-get="/api/clipboard/trash"` into `#clipboard-grid`)
+
+### Known pre-existing failures (not from this session)
+- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
+- `clippy::unnecessary_closure` in `quick_actions.rs` — pre-existing
+
+### Next session
+- Test all features in the running app
+- Possible follow-up: tag pill badges on note cards, multi-select notes, clipboard trash accessible from notes panel
+
+---
+
 ## [2026-03-20] — Phase 4.7: Notes tag UX polish — drag opacity, active highlight, tag deletion
 
 ### Completed
