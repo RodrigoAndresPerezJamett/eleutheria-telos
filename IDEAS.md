@@ -6,6 +6,12 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ---
 
+## Bugs to Fix
+
+- **Clipboard: copy button muestra `{okay:true}` al hacer click** — el botón de copiar en cada ítem del historial de clipboard muestra el JSON de respuesta del servidor (`{okay:true}`) en lugar de un feedback visual apropiado (ej. cambio de ícono a checkmark por 1-2 segundos, o un toast "Copied!"). El handler HTMX está recibiendo la respuesta JSON y haciéndola swap al target incorrecto. Fix: el endpoint `/tools/clipboard/:id/copy` debe devolver HTML (un fragmento con el botón en estado "copiado"), o el botón debe usar `hx-swap="none"` + un `htmx:afterRequest` listener que actualice el estado del botón via JS. Alta prioridad — es el flujo principal del clipboard.
+
+---
+
 ## UI / UX Ideas
 
 - **Search: recent searches history** — below the search bar, show the last 5–8 searches as clickable chips. Dismissable individually or all at once. Persisted in SQLite (`search_history` table). Helps users re-run common queries without retyping. Phase 5.
