@@ -306,6 +306,16 @@ function notesEditor(noteId) {{
     saving: false,
     saved: false,
     preview: false,
+    init() {{
+      this._onClear = () => {{
+        this.content = '';
+        this.save();
+      }};
+      document.addEventListener('notes:clear-content', this._onClear);
+    }},
+    destroy() {{
+      document.removeEventListener('notes:clear-content', this._onClear);
+    }},
     async save() {{
       this.saving = true;
       try {{

@@ -26,21 +26,20 @@
       <button class="btn btn-primary btn-sm" @click="createNote()">+ New</button>
       <button id="notes-trash-btn"
               class="btn btn-ghost btn-sm"
-              onclick="notesShowTrash()"
+              @click="mode === 'editor' ? trashCurrentNote() : notesShowTrash()"
+              :title="mode === 'editor' ? 'Move this note to Trash' : 'View Trash'"
               style="font-size:12px;display:flex;align-items:center;gap:5px;transition:background 0.1s,color 0.1s;"
               ondragover="event.preventDefault();this.style.background='var(--destructive)';this.style.color='white'"
               ondragleave="this.style.background='';this.style.color=''"
               ondrop="this.style.background='';this.style.color='';notesTrashDrop(event)">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        Trash
+        <span x-text="mode === 'editor' ? 'Delete note' : 'Trash'"></span>
       </button>
       <button class="btn btn-ghost btn-sm"
               style="font-size:12px;color:var(--destructive);border-color:var(--destructive);"
-              hx-delete="/api/notes"
-              hx-target="#notes-grid"
-              hx-swap="innerHTML"
-              hx-confirm="Move all notes to Trash?">
-        Clear all
+              @click="handleClearAll()"
+              :title="mode === 'editor' ? 'Clear note content' : 'Move all notes to Trash'">
+        <span x-text="mode === 'editor' ? 'Clear note' : 'Clear all'"></span>
       </button>
     </div>
   </div>
@@ -517,6 +516,7 @@
   window.notesApp = function () {
     return {
       mode:          'grid',   // 'grid' | 'editor'
+      currentNoteId: null,
       preview:       null,     // { id, title, content } | null
       copyFeedback:  false,
       searchFocused: false,
@@ -634,8 +634,37 @@
         }
       },
 
+      async trashCurrentNote() {
+        if (!this.currentNoteId) return;
+        if (!confirm('Move this note to Trash?')) return;
+        const id = this.currentNoteId;
+        this.currentNoteId = null;
+        this.mode = 'grid';
+        if (location.hash === '#editor') history.replaceState(null, '', location.pathname);
+        await notesDeleteNote(id);
+      },
+
+      clearCurrentNote() {
+        if (!this.currentNoteId) return;
+        if (!confirm('Clear note content? This will erase the text and save immediately.')) return;
+        document.dispatchEvent(new CustomEvent('notes:clear-content'));
+      },
+
+      handleClearAll() {
+        if (this.mode === 'editor') {
+          this.clearCurrentNote();
+        } else {
+          if (!confirm('Move all notes to Trash?')) return;
+          htmx.ajax('DELETE',
+            'http://127.0.0.1:' + window.__API_PORT__ + '/api/notes',
+            { target: '#notes-grid', swap: 'innerHTML',
+              headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } });
+        }
+      },
+
       async openEditor(id) {
         this.preview = null;
+        this.currentNoteId = id;
         this.mode    = 'editor';
         // Push a hash entry so browser back returns to the grid
         if (location.hash !== '#editor') location.hash = 'editor';
