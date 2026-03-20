@@ -90,9 +90,13 @@ fn render_entry_card(
         r##"<div id="clip-{id}"
      data-clip-id="{id}"
      data-clip-content="{attr_content}"{truncated_attr}{kind_attr}
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;height:225px;user-select:none;"
+     draggable="true"
+     ondragstart="clipDragStart(event,'{id}')"
+     ondragend="this.style.opacity='1'"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='inline-flex');const pb=this.querySelector('.clip-pin-btn');if(pb)pb.style.opacity='1'"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='none');const pb=this.querySelector('.clip-pin-btn');if(pb)pb.style.opacity='0.55'"
+     oncontextmenu="clipboardContextMenu(event,this)"
      onclick="clipboardOpenPreview(this)">
   {pin_btn}
   {body_html}
@@ -161,14 +165,14 @@ fn render_trash_clip_card(id: &str, content: &str, deleted_at: i64, content_type
     <div style="display:flex;gap:6px;">
       <button class="btn btn-ghost btn-sm"
               style="font-size:11px;padding:2px 8px;color:var(--success);"
-              hx-post="/api/clipboard{id}/restore"
+              hx-post="/api/clipboard/{id}/restore"
               hx-target="#clip-{id}"
               hx-swap="outerHTML"
               hx-on::after-request="htmx.trigger(document.body,'clipboardRefresh')"
               onclick="event.stopPropagation()">Restore</button>
       <button class="btn btn-ghost btn-sm"
               style="font-size:11px;padding:2px 8px;color:var(--destructive);"
-              hx-delete="/api/clipboard{id}/purge"
+              hx-delete="/api/clipboard/{id}/purge"
               hx-target="#clip-{id}"
               hx-swap="outerHTML"
               hx-confirm="Permanently delete? This cannot be undone."

@@ -57,9 +57,10 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
      draggable="true"
      ondragstart="notesDragStart(event,'{id}')"
      ondragend="this.style.opacity='1'"
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;user-select:none;"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;user-select:none;height:225px;"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.display='inline-flex')"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.note-action').forEach(e=>e.style.display='none')"
+     oncontextmenu="notesContextMenu(event,this)"
      onclick="notesOpenEditor(this)">
   <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:6px;flex-shrink:0;">
     <h3 style="flex:1;font-size:13px;font-weight:600;color:var(--text-primary);margin:0;overflow:hidden;max-height:2.6em;line-height:1.3;">{pin_icon}{escaped_title}</h3>
@@ -79,7 +80,7 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
             hx-delete="/api/notes/{id}"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
-            hx-confirm="Delete this note?"
+            hx-confirm="Move to Trash?"
             onclick="event.stopPropagation()">✕</button>
   </div>
   <div style="position:absolute;bottom:0;left:0;right:0;height:38%;pointer-events:none;background:linear-gradient(to top, rgba(0,0,0,0.09) 0%, transparent 100%);border-radius:0 0 var(--radius-md) var(--radius-md);"></div>
@@ -1270,11 +1271,75 @@ pub async fn resolve_by_title_handler(
     }
 }
 
+pub async fn clear_notes_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    sqlx::query("UPDATE notes SET deleted_at = ? WHERE deleted_at IS NULL")
+        .bind(now)
+        .execute(&state.db)
+        .await
+        .ok();
+    ([("HX-Trigger", "noteUpdated")], Html(String::new()))
+}
+
+pub async fn duplicate_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let row: Option<(String, String, String)> = sqlx::query_as(
+        "SELECT title, content, tags FROM notes WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+
+    let Some((title, content, tags)) = row else {
+        return (StatusCode::NOT_FOUND, Html(String::new())).into_response();
+    };
+
+    let new_id = uuid::Uuid::new_v4().to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let new_title = format!("Copy of {title}");
+
+    let result = sqlx::query(
+        "INSERT INTO notes (id, title, content, content_fts, tags, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&new_id)
+    .bind(&new_title)
+    .bind(&content)
+    .bind(&content)
+    .bind(&tags)
+    .bind(now)
+    .bind(now)
+    .execute(&state.db)
+    .await;
+
+    match result {
+        Ok(_) => {
+            sync_note_tags(&state.db, &new_id, &new_title, &content).await;
+            sync_note_links(&state.db, &new_id, &content).await;
+            ([("HX-Trigger", "noteUpdated")],
+             Html(render_note_card(&new_id, &new_title, &content, 0, now))).into_response()
+        }
+        Err(e) => {
+            log::error!("Note duplicate failed: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Html(String::new())).into_response()
+        }
+    }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/api/notes", get(list_handler).post(create_handler))
+        .route("/api/notes", get(list_handler).post(create_handler).delete(clear_notes_handler))
         // Static paths must be declared before /:id (matchit static > param)
         .route("/api/notes/tags", get(tags_handler).delete(delete_tag_handler))
         .route("/api/notes/trash", get(trash_list_handler))
@@ -1288,6 +1353,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/notes/:id/retag", put(retag_handler))
         .route("/api/notes/:id/restore", post(restore_handler))
         .route("/api/notes/:id/purge", axum::routing::delete(purge_handler))
+        .route("/api/notes/:id/duplicate", post(duplicate_handler))
         .route("/api/notes/:id/links", get(links_handler))
 }
 
