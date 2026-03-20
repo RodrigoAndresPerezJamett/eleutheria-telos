@@ -7,6 +7,77 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7: Clipboard image support + card UI polish
+
+### Completed
+
+**`src-tauri/src/tools/clipboard.rs`**
+- Added `image` crate (`0.25`, PNG/JPEG/GIF/BMP features) and `png` crate (`0.17`) to `Cargo.toml`
+- `THUMB_W/H` set to 640×360 (16:9, up from 320×240)
+- `make_thumbnail(bytes, src_w, src_h)` — nearest-neighbour downsampler + PNG encoder → base64; takes raw RGBA bytes so both arboard and file-loaded images share the same path
+- `thumb_from_path(text)` — detects image file paths (plain path or `file://` URI with percent-decode); loads via `image::open`; returns `Some(base64_thumb)` or `None`
+- Clipboard monitor: checks `cb.get_image()` first each cycle (arboard); stores image entries as `content_type='image'`, `content='[image]'`, `image_thumb=base64`; text entries that look like image file paths are converted to image entries via `thumb_from_path`
+- `render_entry_card` signature extended: `(id, content, created_at, content_type, image_thumb)`; image cards render `<img src="data:image/png;base64,…">` with `flex:1;object-fit:cover`; text cards use `flex:1;overflow:hidden` (removed `max-height:6.5em` so footer sits at card bottom)
+- DB query updated: `SELECT id, content, created_at, image_thumb, content_type FROM clipboard`
+- Migration `007_clipboard_image.sql`: `ALTER TABLE clipboard ADD COLUMN image_thumb TEXT`
+
+**`ui/tools/clipboard/index.html`**
+- `hx-trigger` on grid: added `every 3s` for live auto-refresh
+- Grid: `grid-auto-rows:225px` (16:9 approximation for ~400px columns), replaces `210px`
+- Card body wrapper: object-form `:style` binding on blur wrapper (fixes Alpine string-form bug that wiped `flex:1;min-height:0` layout when `searchFocused || preview`)
+- `clipboardOpenPreview`: handles `data-clip-kind="image"` — dispatches `clipboard:preview` with `imageSrc` from `<img>` src; no fetch needed
+- Preview modal:
+  - `previewOpen` boolean added — controls `x-show` on outer modal; decoupled from `preview` object
+  - `closePreview()` method: sets `previewOpen = false` immediately (starts fade), then `preview = null` after 160ms (after animation); eliminates ghost-card flash on close
+  - All close triggers (✕, backdrop click, Escape) call `closePreview()` instead of `preview = null`
+  - Image wrapper uses `<template x-if>` instead of `x-show` — prevents Alpine's `el.style.display = ''` from wiping inline `display:flex` on reveal
+  - `:style` on content div changed from string form to object form `{ cursor: … }` — prevents cssText wipe
+  - Modal image: `max-width:100%;height:auto` with scrollable container for tall images
+- Search popup history: `@mousedown.prevent="selectHistory($event.currentTarget.querySelector('span').textContent)"` — prevents Alpine proxy → `[object Object]` bug
+- `applySearch()` uses `htmx.ajax()` directly (bypasses 300ms debounce that gets cancelled when popup closes via `x-show`)
+- `searchHistory` filtered on init: `.filter(s => typeof s === 'string' && s !== '[object Object]')`
+
+**`ui/tools/notes/index.html`**
+- Grid: `grid-auto-rows:225px` — matches clipboard 16:9 card height
+
+### Bugs fixed
+- **Footer in middle of card** — `<pre>` had `max-height:6.5em` preventing `flex:1` from filling space; removed.
+- **Image from file manager shows path instead of image** — `thumb_from_path` detects copied image paths and stores thumbnail.
+- **Image modal: left-corner alignment** — root cause was Alpine `x-show` calling `el.style.display = ''` which cleared inline `display:flex`. Fixed with `<template x-if>`.
+- **Ghost empty popup on modal close** — `preview = null` caused inner `x-show` conditions to flip (undefined !== 'image' = true) showing empty text skeleton during fade. Fixed with `previewOpen` + `closePreview()` delayed clear.
+- **Search bar wiping layout** — Alpine string-form `:style` was calling `el.style.cssText = ''` when expression evaluated to empty string. Fixed to object-form binding.
+- **`[object Object]` in search history** — Alpine x-for proxy returned `[object Object]` via `String(proxy)`. Fixed: read from DOM via `$event.currentTarget.querySelector('span').textContent`.
+- **Enter key not triggering search** — `htmx.trigger` with 300ms debounce was cancelled when `x-show` set display:none on popup close. Fixed: `htmx.ajax()` fires immediately.
+
+### Next session
+Implement **Clipboard: pin entries + content-type icons** (Phase 4.7 backlog item #4):
+- Add `is_pinned BOOLEAN DEFAULT 0` column to `clipboard` table (migration `008_clipboard_pin.sql`)
+- Pin button per card (star icon); `PUT /api/clipboard/:id/pin` toggle route
+- Pinned items float to top in `list_handler` (`ORDER BY is_pinned DESC, created_at DESC`)
+- Content-type badge per card: URL globe icon, image thumbnail chip, code `{}` badge — detected server-side from `content_type` + URL regex
+
+---
+
+## [2026-03-20] — Phase 4.7: DOM content truncation + on-demand fetch (Steps 1 & 2)
+
+### Completed
+- **`src-tauri/src/tools/clipboard.rs`** — Step 1: `render_entry_card` now truncates `data-clip-content` to 2 KB and `<pre>` preview to 300 bytes server-side; adds `data-clip-truncated="true"` flag when content exceeds limit. Added `truncate_bytes` helper (O(1), respects UTF-8 boundaries). Step 2: new `get_one_handler` → `GET /api/clipboard/:id` returns `{ "content": "..." }` JSON with full content.
+- **`src-tauri/src/tools/notes.rs`** — Same truncation pattern on `render_note_card` (2 KB attr / 300 bytes preview / `data-note-truncated`). New `get_content_handler` → `GET /api/notes/:id/content` returns `{ "content": "..." }` JSON.
+- **`ui/tools/clipboard/index.html`** — `clipboardOpenPreview` detects `data-clip-truncated`; opens modal immediately with truncated content + `loading: true`, then fetches full content via `GET /api/clipboard/:id` and dispatches `clipboard:content-loaded` to update the modal. Copy button blocked while loading.
+- **`ui/tools/notes/index.html`** — Same pattern: `notesOpenPreview` fetches full content via `GET /api/notes/:id/content` when truncated.
+- Fixed pre-existing test: `list_empty` text mismatch (`"Nothing copied yet."` → `"Lost something you copied?"`).
+
+### Performance impact
+- A 100 KB clipboard entry was ~200 KB in DOM (content duplicated in attribute + `<pre>`). Now: ~2.3 KB in DOM. Full content loads on-demand in ~1 HTMX round-trip only when the modal is opened.
+
+### Known remaining issue
+- `tools::translate::tests::test_langs_no_models` — pre-existing test text mismatch introduced in a prior session (empty state HTML changed but test string not updated). Not related to this session's work.
+
+### Next session (start here)
+If Step 1+2 are sufficient to fix the sluggishness, close the issue. Otherwise implement Step 3: DOM virtualisation (sliding window of ~30 visible cards). Test with 200+ clipboard entries.
+
+---
+
 ## [2026-03-20] — Phase 4.7: Notes + Clipboard card UI, lazy load, hover performance
 
 ### Completed

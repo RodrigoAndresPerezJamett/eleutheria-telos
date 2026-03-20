@@ -1,9 +1,11 @@
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     response::{Html, IntoResponse, Json},
-    routing::{delete, get, post},
+    routing::{get, post},
     Router,
 };
+use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::hash_map::DefaultHasher;
@@ -21,26 +23,56 @@ pub fn content_hash(text: &str) -> u64 {
     h.finish()
 }
 
-fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
+fn render_entry_card(
+    id: &str,
+    content: &str,
+    created_at: i64,
+    content_type: &str,
+    image_thumb: Option<&str>,
+) -> String {
     let ts = format_timestamp(created_at);
-    // data-clip-content carries full content; browser HTML-decodes dataset on read
+
+    let (body_html, attr_content, truncated_attr, kind_attr, copy_btn) =
+        if content_type == "image" {
+            let body = match image_thumb {
+                Some(thumb) => format!(
+                    r#"<img src="data:image/png;base64,{thumb}" alt="Image" style="flex:1;min-height:0;width:100%;object-fit:cover;border-radius:calc(var(--radius-md) - 4px);margin:0 0 10px;display:block;">"#
+                ),
+                None => r#"<div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted);margin:0 0 10px;">Image</div>"#.to_string(),
+            };
+            (body, String::new(), "", r#" data-clip-kind="image""#, "")
+        } else {
+            let truncated = content.len() > CONTENT_ATTR_MAX;
+            let attr = html_escape(truncate_bytes(content, CONTENT_ATTR_MAX));
+            let preview = html_escape(truncate_bytes(content, CONTENT_PREVIEW_MAX));
+            let trunc_attr = if truncated { r#" data-clip-truncated="true""# } else { "" };
+            let body = format!(
+                r#"<pre style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;word-break:break-all;font-family:inherit;line-height:1.5;margin:0 0 10px;flex:1;overflow:hidden;">{preview}</pre>"#
+            );
+            let copy = r#"<button class="clip-action btn btn-ghost btn-sm"
+              style="display:none;font-size:11px;padding:2px 6px;"
+              hx-post="/api/clipboard/{id}/recopy"
+              hx-swap="none"
+              onclick="event.stopPropagation()"
+              title="Copy to clipboard">Copy</button>"#;
+            (body, attr, trunc_attr, "", copy)
+        };
+
+    let copy_btn = copy_btn.replace("{id}", id);
+
     format!(
         r##"<div id="clip-{id}"
      data-clip-id="{id}"
-     data-clip-content="{escaped_content}"
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:100px;outline:1px solid transparent;outline-offset:-1px;"
+     data-clip-content="{attr_content}"{truncated_attr}{kind_attr}
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='inline-flex')"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='none')"
      onclick="clipboardOpenPreview(this)">
-  <pre style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;word-break:break-all;font-family:inherit;line-height:1.5;margin:0 0 10px;flex:1;overflow:hidden;max-height:5.5em;">{escaped_preview}</pre>
-  <div style="display:flex;align-items:center;justify-content:space-between;">
+  {body_html}
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:1;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
     <div style="display:flex;gap:4px;">
-      <button class="clip-action btn btn-ghost btn-sm"
-              style="display:none;font-size:11px;padding:2px 6px;"
-              hx-post="/api/clipboard/{id}/recopy"
-              onclick="event.stopPropagation()"
-              title="Copy to clipboard">Copy</button>
+      {copy_btn}
       <button class="clip-action btn btn-ghost btn-sm"
               style="display:none;font-size:11px;padding:2px 6px;color:var(--destructive);"
               hx-delete="/api/clipboard/{id}"
@@ -50,17 +82,25 @@ fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
               onclick="event.stopPropagation()">✕</button>
     </div>
   </div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:38%;pointer-events:none;background:linear-gradient(to top, rgba(0,0,0,0.09) 0%, transparent 100%);border-radius:0 0 var(--radius-md) var(--radius-md);"></div>
 </div>"##,
         id = id,
-        escaped_content = html_escape(content),
-        escaped_preview = html_escape(content), // CSS -webkit-line-clamp:4 handles visual truncation
+        attr_content = attr_content,
+        truncated_attr = truncated_attr,
+        kind_attr = kind_attr,
+        body_html = body_html,
         ts = ts,
+        copy_btn = copy_btn,
     )
 }
 
 const PAGE: i64 = 20;
 
-fn render_list(entries: &[(String, String, i64)], has_more: bool, next_offset: i64) -> String {
+fn render_list(
+    entries: &[(String, String, i64, Option<String>, String)],
+    has_more: bool,
+    next_offset: i64,
+) -> String {
     if entries.is_empty() {
         return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
   <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Lost something you copied?</p>
@@ -69,7 +109,9 @@ fn render_list(entries: &[(String, String, i64)], has_more: bool, next_offset: i
     }
     let mut html: String = entries
         .iter()
-        .map(|(id, content, ts)| render_entry_card(id, content, *ts))
+        .map(|(id, content, ts, image_thumb, content_type)| {
+            render_entry_card(id, content, *ts, content_type, image_thumb.as_deref())
+        })
         .collect();
     if has_more {
         html.push_str(&format!(
@@ -87,6 +129,110 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+// Max bytes stored in data-* attribute and shown in the card preview.
+// Full content is fetched on-demand via GET /api/clipboard/:id when truncated.
+const CONTENT_ATTR_MAX: usize = 2048;
+const CONTENT_PREVIEW_MAX: usize = 300;
+
+fn truncate_bytes(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+// Max thumbnail dimensions for image clipboard entries.
+const THUMB_W: u32 = 640;
+const THUMB_H: u32 = 360;
+
+/// Quick fingerprint for an image: dimensions + first 256 bytes.
+fn image_hash(img: &arboard::ImageData) -> u64 {
+    let mut h = DefaultHasher::new();
+    img.width.hash(&mut h);
+    img.height.hash(&mut h);
+    let n = img.bytes.len().min(256);
+    img.bytes[..n].hash(&mut h);
+    h.finish()
+}
+
+/// Nearest-neighbour downsample + PNG encode → base64 string.
+/// Takes raw RGBA bytes so both arboard images and file-loaded images share the same path.
+fn make_thumbnail(bytes: &[u8], src_w: usize, src_h: usize) -> String {
+    if src_w == 0 || src_h == 0 {
+        return String::new();
+    }
+
+    // Preserve aspect ratio, fit inside THUMB_W × THUMB_H
+    let scale_w = THUMB_W as f64 / src_w as f64;
+    let scale_h = THUMB_H as f64 / src_h as f64;
+    let scale = scale_w.min(scale_h).min(1.0); // never upscale
+    let dst_w = ((src_w as f64 * scale) as u32).max(1);
+    let dst_h = ((src_h as f64 * scale) as u32).max(1);
+
+    let mut out = vec![0u8; (dst_w * dst_h * 4) as usize];
+    for dy in 0..dst_h as usize {
+        for dx in 0..dst_w as usize {
+            let sx = dx * src_w / dst_w as usize;
+            let sy = dy * src_h / dst_h as usize;
+            let src_i = (sy * src_w + sx) * 4;
+            let dst_i = (dy * dst_w as usize + dx) * 4;
+            if src_i + 4 <= bytes.len() {
+                out[dst_i..dst_i + 4].copy_from_slice(&bytes[src_i..src_i + 4]);
+            }
+        }
+    }
+
+    let mut buf = Vec::new();
+    {
+        let mut enc = png::Encoder::new(std::io::Cursor::new(&mut buf), dst_w, dst_h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = match enc.write_header() {
+            Ok(w) => w,
+            Err(e) => {
+                log::warn!("clipboard: PNG header error: {e}");
+                return String::new();
+            }
+        };
+        if let Err(e) = writer.write_image_data(&out) {
+            log::warn!("clipboard: PNG data error: {e}");
+            return String::new();
+        }
+    }
+
+    base64::engine::general_purpose::STANDARD.encode(&buf)
+}
+
+/// If `text` is a local image file path (plain or file:// URI), load and thumbnail it.
+/// Returns Some(base64_thumb) if successful, None otherwise.
+fn thumb_from_path(text: &str) -> Option<String> {
+    let text = text.trim();
+    // Handle file:// URIs
+    let path_str = if let Some(rest) = text.strip_prefix("file://") {
+        rest.replace("%20", " ").replace("%28", "(").replace("%29", ")")
+    } else {
+        text.to_string()
+    };
+    let path = std::path::Path::new(&path_str);
+    let ext = path.extension()?.to_str()?.to_lowercase();
+    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp") {
+        return None;
+    }
+    if !path.exists() {
+        return None;
+    }
+    let img = image::open(path).ok()?;
+    let rgba = img.to_rgba8();
+    let w = rgba.width() as usize;
+    let h = rgba.height() as usize;
+    let thumb = make_thumbnail(rgba.as_raw(), w, h);
+    if thumb.is_empty() { None } else { Some(thumb) }
 }
 
 fn format_timestamp(ts: i64) -> String {
@@ -131,9 +277,9 @@ pub async fn list_handler(
 ) -> impl IntoResponse {
     // Fetch one extra row to detect whether a next page exists
     let fetch_limit = params.limit + 1;
-    let mut rows: Vec<(String, String, i64)> = if params.q.is_empty() {
+    let mut rows: Vec<(String, String, i64, Option<String>, String)> = if params.q.is_empty() {
         sqlx::query_as(
-            "SELECT id, content, created_at FROM clipboard
+            "SELECT id, content, created_at, image_thumb, content_type FROM clipboard
              ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(fetch_limit)
@@ -145,7 +291,7 @@ pub async fn list_handler(
         // Search returns all matches — no pagination when filtering
         let pattern = format!("%{}%", params.q);
         sqlx::query_as(
-            "SELECT id, content, created_at FROM clipboard
+            "SELECT id, content, created_at, image_thumb, content_type FROM clipboard
              WHERE content LIKE ?
              ORDER BY created_at DESC LIMIT 200 OFFSET 0",
         )
@@ -160,6 +306,25 @@ pub async fn list_handler(
     let next_offset = params.offset + params.limit;
 
     Html(render_list(&rows, has_more, next_offset))
+}
+
+pub async fn get_one_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let row: Option<(String,)> = sqlx::query_as("SELECT content FROM clipboard WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None);
+    match row {
+        Some((content,)) => Json(serde_json::json!({ "content": content })).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "not found" })),
+        )
+            .into_response(),
+    }
 }
 
 pub async fn recopy_handler(
@@ -222,7 +387,10 @@ pub fn router() -> Router<Arc<AppState>> {
             get(list_handler).delete(clear_all_handler),
         )
         .route("/api/clipboard/:id/recopy", post(recopy_handler))
-        .route("/api/clipboard/:id", delete(delete_one_handler))
+        .route(
+            "/api/clipboard/:id",
+            get(get_one_handler).delete(delete_one_handler),
+        )
 }
 
 // ── Clipboard monitor ─────────────────────────────────────────────────────────
@@ -242,6 +410,7 @@ pub async fn start_monitor(state: Arc<AppState>) {
             .as_ref()
             .map(|(c,)| content_hash(c))
             .unwrap_or(0);
+        let mut last_image_hash: u64 = 0;
 
         let mut suppress_rx = state_clone.clipboard_suppress_tx.subscribe();
 
@@ -262,6 +431,42 @@ pub async fn start_monitor(state: Arc<AppState>) {
                 continue;
             }
 
+            // ── Image detection ────────────────────────────────────────────
+            if let Ok(img) = cb.get_image() {
+                let hash = image_hash(&img);
+                if hash != last_image_hash {
+                    last_image_hash = hash;
+                    last_hash = 0; // reset text hash so next text copy registers
+
+                    let thumb = make_thumbnail(img.bytes.as_ref(), img.width, img.height);
+                    let id = uuid::Uuid::new_v4().to_string();
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    let insert_result = tauri::async_runtime::block_on(
+                        sqlx::query(
+                            "INSERT INTO clipboard (id, content, content_type, image_thumb, created_at)
+                             VALUES (?, '[image]', 'image', ?, ?)",
+                        )
+                        .bind(&id)
+                        .bind(&thumb)
+                        .bind(now)
+                        .execute(&state_clone.db),
+                    );
+                    if let Err(e) = insert_result {
+                        log::error!("Clipboard image insert failed: {e}");
+                    } else {
+                        state_clone.event_bus.publish(Event::ClipboardChanged {
+                            content: "[image]".to_string(),
+                            content_type: "image".to_string(),
+                        });
+                    }
+                }
+                continue; // clipboard contains an image — skip text check this cycle
+            }
+
+            // ── Text detection ─────────────────────────────────────────────
             let text = match cb.get_text() {
                 Ok(t) => t,
                 Err(_) => continue, // Normal on Wayland when no window has focus
@@ -276,12 +481,36 @@ pub async fn start_monitor(state: Arc<AppState>) {
                 continue;
             }
             last_hash = hash;
+            last_image_hash = 0; // reset image hash so next image copy registers
 
             let id = uuid::Uuid::new_v4().to_string();
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0);
+
+            // If text looks like a local image file path, store it as an image entry
+            if let Some(thumb) = thumb_from_path(&text) {
+                let insert_result = tauri::async_runtime::block_on(
+                    sqlx::query(
+                        "INSERT INTO clipboard (id, content, content_type, image_thumb, created_at)
+                         VALUES (?, '[image]', 'image', ?, ?)",
+                    )
+                    .bind(&id)
+                    .bind(&thumb)
+                    .bind(now)
+                    .execute(&state_clone.db),
+                );
+                if let Err(e) = insert_result {
+                    log::error!("Clipboard image-from-path insert failed: {e}");
+                } else {
+                    state_clone.event_bus.publish(Event::ClipboardChanged {
+                        content: "[image]".to_string(),
+                        content_type: "image".to_string(),
+                    });
+                }
+                continue;
+            }
 
             let insert_result = tauri::async_runtime::block_on(
                 sqlx::query(
@@ -385,7 +614,7 @@ mod tests {
         let state = make_test_state().await;
         let (status, body) = call(test_app(state), Method::GET, "/api/clipboard").await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.contains("Nothing copied yet."));
+        assert!(body.contains("Lost something you copied?"));
     }
 
     #[tokio::test]

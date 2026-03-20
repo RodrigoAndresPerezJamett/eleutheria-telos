@@ -1,4 +1,4 @@
-<div class="panel" style="display:flex;flex-direction:column;height:100%;padding:0;"
+<div class="panel" style="display:flex;flex-direction:column;height:100%;padding:0;position:relative;"
      x-data="clipboardApp()" x-init="init()">
 
   <!-- Header -->
@@ -17,66 +17,130 @@
     </button>
   </div>
 
-  <!-- Card grid — refreshes on load and when window regains focus (via custom event) -->
-  <div id="clipboard-grid"
-       style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;align-content:start;"
-       hx-get="/api/clipboard"
-       hx-trigger="load, clipboardRefresh from:body"
-       hx-swap="innerHTML">
-    <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
+  <!-- Content wrapper — blurred when search popup is open -->
+  <div :style="{ filter: (searchFocused || preview) ? 'blur(3px)' : '', 'pointer-events': (searchFocused || preview) ? 'none' : '', transition: 'filter 0.15s' }"
+       style="flex:1;min-height:0;position:relative;display:flex;flex-direction:column;">
+
+    <!-- Card grid -->
+    <div id="clipboard-grid"
+         style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(273px,1fr));grid-auto-rows:225px;gap:12px;align-content:start;"
+         hx-get="/api/clipboard"
+         hx-trigger="load, clipboardRefresh from:body, every 3s"
+         hx-swap="innerHTML">
+      <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
+    </div>
+
   </div>
 
-  <!-- Search bar pinned to bottom -->
-  <div style="flex-shrink:0;padding:10px 16px;border-top:1px solid var(--border);background:var(--bg-base);">
-    <input type="text"
-           name="q"
-           placeholder="Search clipboard…"
-           class="input"
-           style="width:100%;font-size:13px;"
-           hx-get="/api/clipboard"
-           hx-trigger="input changed delay:300ms"
-           hx-target="#clipboard-grid"
-           hx-swap="innerHTML" />
+  <!-- Search bar — enclosed box at bottom, opens popup on click -->
+  <div style="flex-shrink:0;border-top:1px solid var(--border);padding:8px 16px 12px;background:var(--bg-base);">
+    <button @click="openSearch()"
+            style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;cursor:text;text-align:left;color:var(--text-muted);">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.5;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <span x-text="searchQuery || 'Search clipboard…'"
+            :style="searchQuery ? 'color:var(--text-primary)' : ''"></span>
+    </button>
   </div>
 
-  <!-- Preview modal -->
-  <div x-show="preview"
-       x-transition:enter="transition ease-out duration-150"
-       x-transition:enter-start="opacity-0"
-       x-transition:enter-end="opacity-100"
-       x-transition:leave="transition ease-in duration-100"
-       x-transition:leave-start="opacity-100"
-       x-transition:leave-end="opacity-0"
-       style="position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;"
-       @click.self="preview = null"
-       @keydown.escape.window="preview = null">
+  <!-- Search popup overlay — x-show on outer, display:flex on inner (avoids Alpine display:none conflict) -->
+  <div x-show="searchFocused"
+       x-transition.opacity.duration.150ms
+       style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:100;">
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:0 24px;"
+         @click.self="closeSearch()"
+         @keydown.escape.window="closeSearch()">
+
+    <!-- Search card -->
+    <div style="background:var(--bg-elevated);border-radius:var(--radius-lg);width:100%;max-width:480px;box-shadow:0 12px 40px rgba(0,0,0,0.45);border:1px solid var(--border);overflow:hidden;"
+         @click.stop>
+
+      <!-- Input row -->
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-muted);opacity:0.6;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="clipboard-search-popup"
+               type="text"
+               x-model="searchQuery"
+               placeholder="Search clipboard…"
+               hx-get="/api/clipboard"
+               hx-trigger="input changed delay:300ms"
+               hx-target="#clipboard-grid"
+               hx-swap="innerHTML"
+               @keydown.escape="closeSearch()"
+               @keydown.enter="applySearch()"
+               style="flex:1;background:transparent;border:none;outline:none;font-size:15px;color:var(--text-primary);font-family:inherit;" />
+        <kbd @click="closeSearch()"
+             style="font-size:10px;color:var(--text-muted);border:1px solid var(--border);border-radius:4px;padding:2px 5px;cursor:pointer;flex-shrink:0;">Esc</kbd>
+      </div>
+
+      <!-- History list with bottom fade -->
+      <div style="position:relative;">
+        <div style="max-height:220px;overflow-y:auto;padding:4px 0;"
+             id="clipboard-search-history">
+          <template x-if="searchHistory.length === 0">
+            <p style="padding:12px 16px;font-size:12px;color:var(--text-muted);margin:0;">No recent searches yet — start typing</p>
+          </template>
+          <template x-for="q in searchHistory" :key="q">
+            <button @mousedown.prevent="selectHistory($event.currentTarget.querySelector('span').textContent)"
+                    style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 16px;background:transparent;border:none;cursor:pointer;font-size:13px;color:var(--text-primary);text-align:left;"
+                    onmouseenter="this.style.background='var(--bg-hover)'"
+                    onmouseleave="this.style.background='transparent'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.35;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+              <span x-text="q" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            </button>
+          </template>
+        </div>
+        <!-- Bottom fade on history list -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:36px;background:linear-gradient(to top, var(--bg-elevated), transparent);pointer-events:none;"></div>
+      </div>
+    </div>
+    </div><!-- /flex centering -->
+  </div><!-- /x-show -->
+
+  <!-- Preview modal — x-show on outer, display:flex on inner -->
+  <div x-show="previewOpen"
+       x-transition.opacity.duration.150ms
+       style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;">
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.55);"
+         @click.self="closePreview()"
+         @keydown.escape.window="closePreview()">
 
     <div style="background:var(--bg-elevated);border-radius:var(--radius-lg);max-width:640px;width:100%;max-height:85%;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
 
-      <!-- Modal header -->
       <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <span style="flex:1;font-size:12px;color:var(--text-muted);" x-text="preview?.ts || ''"></span>
-        <button class="btn btn-ghost btn-sm" @click="preview = null" style="padding:4px 7px;">✕</button>
+        <button class="btn btn-ghost btn-sm" @click="closePreview()" style="padding:4px 7px;">✕</button>
       </div>
 
-      <!-- Scrollable content — click to copy -->
-      <div style="flex:1;overflow-y:auto;padding:16px 20px;cursor:copy;"
-           @click="copyContent()"
-           title="Click anywhere to copy">
-        <pre x-text="preview?.content"
+      <div style="flex:1;overflow-y:auto;padding:16px 20px;"
+           :style="{ cursor: preview?.kind !== 'image' ? 'copy' : '' }"
+           @click="preview?.kind !== 'image' && copyContent()"
+           :title="preview?.kind !== 'image' ? 'Click anywhere to copy' : ''">
+        <!-- Image preview -->
+        <template x-if="preview?.kind === 'image'">
+          <div style="display:flex;align-items:center;justify-content:center;width:100%;">
+            <img :src="preview?.imageSrc || ''"
+                 alt="Clipboard image"
+                 style="max-width:100%;height:auto;border-radius:var(--radius-sm);display:block;" />
+          </div>
+        </template>
+        <!-- Text preview -->
+        <p x-show="preview?.kind !== 'image' && preview?.loading"
+           style="font-size:13px;color:var(--text-muted);margin:0;">Loading…</p>
+        <pre x-show="preview?.kind !== 'image' && !preview?.loading"
+             x-text="preview?.content"
              style="white-space:pre-wrap;word-break:break-all;font-size:13px;color:var(--text-primary);margin:0;font-family:inherit;line-height:1.65;"></pre>
       </div>
 
-      <!-- Footer -->
       <div style="display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;">
-        <button class="btn btn-primary btn-sm" @click="copyContent()">
+        <button x-show="preview?.kind !== 'image'" class="btn btn-primary btn-sm" @click="copyContent()">
           <i data-lucide="clipboard" style="width:12px;height:12px;margin-right:4px;"></i>
           <span x-text="copyFeedback ? 'Copied!' : 'Copy'"></span>
         </button>
         <span x-show="copyFeedback" x-transition style="font-size:12px;color:var(--success);">✓ Copied to clipboard</span>
       </div>
     </div>
-  </div>
+    </div><!-- /flex centering -->
+  </div><!-- /x-show -->
 
 </div>
 
@@ -84,33 +148,106 @@
 (function () {
 
   window.clipboardOpenPreview = function (el) {
+    const id = el.dataset.clipId;
+    const kind = el.dataset.clipKind || 'text';
+    const ts = el.querySelector('span')?.textContent || '';
+
+    if (kind === 'image') {
+      const imgEl = el.querySelector('img');
+      document.dispatchEvent(new CustomEvent('clipboard:preview', {
+        detail: { id, kind: 'image', imageSrc: imgEl ? imgEl.src : '', ts, loading: false }
+      }));
+      return;
+    }
+
+    const truncated = el.dataset.clipTruncated === 'true';
     document.dispatchEvent(new CustomEvent('clipboard:preview', {
-      detail: {
-        id:      el.dataset.clipId,
-        content: el.dataset.clipContent,
-        ts:      el.querySelector('span')?.textContent || '',
-      }
+      detail: { id, kind: 'text', content: el.dataset.clipContent, ts, loading: truncated }
     }));
+    if (truncated) {
+      fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/clipboard/' + id, {
+        headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
+      })
+        .then(r => r.json())
+        .then(data => document.dispatchEvent(new CustomEvent('clipboard:content-loaded', {
+          detail: { id, content: data.content }
+        })))
+        .catch(e => console.warn('clipboard: full content fetch failed', e));
+    }
   };
 
-  // Refresh grid when the window regains focus (user switches back to app)
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) htmx.trigger(document.body, 'clipboardRefresh');
   });
 
   window.clipboardApp = function () {
     return {
-      preview:      null,
-      copyFeedback: false,
+      preview:       null,
+      previewOpen:   false,
+      copyFeedback:  false,
+      searchFocused: false,
+      searchQuery:   '',
+      searchHistory: JSON.parse(localStorage.getItem('clipboard_search_history') || '[]').filter(s => typeof s === 'string' && s !== '[object Object]'),
 
       init() {
         document.addEventListener('clipboard:preview', e => {
           this.preview = e.detail;
+          this.previewOpen = true;
+        });
+        document.addEventListener('clipboard:content-loaded', e => {
+          if (this.preview?.id === e.detail.id) {
+            this.preview = { ...this.preview, content: e.detail.content, loading: false };
+          }
+        });
+      },
+
+      closePreview() {
+        this.previewOpen = false;
+        setTimeout(() => { this.preview = null; }, 160);
+      },
+
+      openSearch() {
+        this.searchFocused = true;
+        this.$nextTick(() => {
+          const input = document.getElementById('clipboard-search-popup');
+          if (input) input.focus();
+        });
+      },
+
+      closeSearch() {
+        this.saveSearch(this.searchQuery);
+        this.searchFocused = false;
+      },
+
+      applySearch() {
+        const q = this.searchQuery;
+        htmx.ajax('GET',
+          'http://127.0.0.1:' + window.__API_PORT__ + '/api/clipboard?q=' + encodeURIComponent(q || ''),
+          { target: '#clipboard-grid', swap: 'innerHTML',
+            headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } });
+        this.saveSearch(q);
+        this.searchFocused = false;
+      },
+
+      saveSearch(q) {
+        q = String(q).trim();
+        if (!q) return;
+        const h = this.searchHistory.filter(s => s !== q);
+        h.unshift(q);
+        this.searchHistory = h.slice(0, 8);
+        localStorage.setItem('clipboard_search_history', JSON.stringify(this.searchHistory));
+      },
+
+      selectHistory(q) {
+        this.searchQuery = String(q);
+        this.$nextTick(() => {
+          const input = document.getElementById('clipboard-search-popup');
+          if (input) { input.focus(); htmx.trigger(input, 'input'); }
         });
       },
 
       async copyContent() {
-        if (!this.preview?.content) return;
+        if (!this.preview?.content || this.preview?.loading) return;
         try {
           await navigator.clipboard.writeText(this.preview.content);
           this.copyFeedback = true;

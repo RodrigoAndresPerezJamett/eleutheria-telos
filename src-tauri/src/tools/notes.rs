@@ -21,22 +21,42 @@ fn html_escape(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
+// Max bytes stored in data-* attribute and shown in the card preview.
+// Full content is fetched on-demand via GET /api/notes/:id when truncated.
+const CONTENT_ATTR_MAX: usize = 2048;
+const CONTENT_PREVIEW_MAX: usize = 300;
+
+fn truncate_bytes(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_at: i64) -> String {
     let display_title = if title.is_empty() { "Untitled" } else { title };
     let pin_icon = if pinned == 1 { "📌 " } else { "" };
     let pin_btn_label = if pinned == 1 { "Unpin" } else { "Pin" };
     let ts = format_timestamp(updated_at);
-    // data-note-content embeds full content; browser HTML-decodes it when JS reads dataset
+    let truncated = content.len() > CONTENT_ATTR_MAX;
+    let attr_content = truncate_bytes(content, CONTENT_ATTR_MAX);
+    let preview_content = truncate_bytes(content, CONTENT_PREVIEW_MAX);
+    let truncated_attr = if truncated { r#" data-note-truncated="true""# } else { "" };
+    // padding-bottom:75% = 4:3 ratio (see clipboard.rs for full explanation).
     format!(
         r##"<div id="note-{id}"
      data-note-id="{id}"
      data-note-title="{escaped_title}"
-     data-note-content="{escaped_content}"
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:120px;outline:1px solid transparent;outline-offset:-1px;"
+     data-note-content="{escaped_content}"{truncated_attr}
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.display='inline-flex')"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.note-action').forEach(e=>e.style.display='none')"
      onclick="notesOpenPreview(this)">
-  <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:6px;">
+  <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:6px;flex-shrink:0;">
     <h3 style="flex:1;font-size:13px;font-weight:600;color:var(--text-primary);margin:0;overflow:hidden;max-height:2.6em;line-height:1.3;">{pin_icon}{escaped_title}</h3>
     <button class="note-action btn btn-ghost btn-sm"
             style="display:none;flex-shrink:0;padding:2px 5px;font-size:11px;"
@@ -46,8 +66,8 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
             onclick="event.stopPropagation()"
             title="{pin_btn_label}">{pin_btn_label}</button>
   </div>
-  <p style="font-size:12px;color:var(--text-muted);flex:1;margin:0 0 10px;overflow:hidden;max-height:4.5em;line-height:1.5;">{escaped_preview}</p>
-  <div style="display:flex;align-items:center;justify-content:space-between;">
+  <p style="font-size:12px;color:var(--text-muted);flex:1;margin:0 0 10px;overflow:hidden;line-height:1.5;">{escaped_preview}</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:1;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
     <button class="note-action btn btn-ghost btn-sm"
             style="display:none;padding:2px 5px;font-size:11px;color:var(--destructive);"
@@ -57,13 +77,15 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
             hx-confirm="Delete this note?"
             onclick="event.stopPropagation()">✕</button>
   </div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:38%;pointer-events:none;background:linear-gradient(to top, rgba(0,0,0,0.09) 0%, transparent 100%);border-radius:0 0 var(--radius-md) var(--radius-md);"></div>
 </div>"##,
         id = id,
         pin_icon = pin_icon,
         pin_btn_label = pin_btn_label,
         escaped_title = html_escape(display_title),
-        escaped_content = html_escape(content),
-        escaped_preview = html_escape(content), // CSS -webkit-line-clamp:3 handles visual truncation
+        escaped_content = html_escape(attr_content),
+        truncated_attr = truncated_attr,
+        escaped_preview = html_escape(preview_content),
         ts = ts,
     )
 }
@@ -312,6 +334,25 @@ pub async fn get_handler(State(state): State<Arc<AppState>>, Path(id): Path<Stri
     }
 }
 
+pub async fn get_content_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let row: Option<(String,)> = sqlx::query_as("SELECT content FROM notes WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None);
+    match row {
+        Some((content,)) => Json(serde_json::json!({ "content": content })).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "not found" })),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn update_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -425,6 +466,7 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/notes/:id",
             get(get_handler).put(update_handler).delete(delete_handler),
         )
+        .route("/api/notes/:id/content", get(get_content_handler))
         .route("/api/notes/:id/pin", post(pin_toggle_handler))
 }
 
