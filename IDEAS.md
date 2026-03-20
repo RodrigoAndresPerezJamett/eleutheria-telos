@@ -68,6 +68,9 @@ Claude Code: do not implement anything from this file unless it has been explici
   - **Visual timeline** — a minimal waveform + keyframe strip showing the video duration, with draggable in/out handles for the Trim operation. Eliminates manual `HH:MM:SS` typing. Could use `ffprobe` for duration metadata and `ffmpeg -vf thumbnail` for frame extraction.
 - **Audio Editor** — trim, fade, normalize audio. ffmpeg-based. Smaller scope than video editor.
 - **Batch Image Processing** — resize, convert, compress multiple images at once. rembg for batch background removal.
+- **Photo Editor: crop tool** — crop an image by dragging a selection box over the canvas, with aspect ratio lock options (free, 1:1, 16:9, 4:3). The crop applies non-destructively until confirmed; original is preserved until the user explicitly saves. Phase 5.
+- **Photo Editor: move image within layer** — pan the image inside the canvas/layer without resizing it. Useful for repositioning after scaling. Requires a transform matrix per layer (translateX, translateY, scale, rotation) stored separately from the canvas dimensions. Phase 5.
+- **Photo Editor: resize layer without affecting photo** — scale the canvas/layer bounding box independently of the image content, cropping or adding transparent/filled padding around the image. Equivalent to Photoshop "Canvas Size" vs "Image Size". Allows adding space around an image for text overlays or border effects. Phase 5.
 - **Screen Annotation** — draw, highlight, and annotate on top of live screen content. Overlay window using Tauri's transparent window capabilities.
 - **GIF Recorder** — record a short screen region as a GIF. ffmpeg can do this. High demand for sharing demos.
 - **MKV output format for Screen Recorder** — wf-recorder supports `-f output.mkv` natively. MKV is a recoverable container (mp4 is not — a crash loses the file). Add a format selector (mp4 / mkv) to the Screen Recorder panel. Low effort, high value for long recordings.
@@ -143,7 +146,63 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ---
 
-## AI / MCP Ideas
+## Intelligence & Cohesion — Making the App Feel "Smart"
+
+This section captures the result of a deliberate introspection: what would it take for Eleutheria Telos to feel genuinely *intelligent* — where each tool knows about the others, actions surface at the right moment, and the app competes with best-in-class specialized tools on their own ground?
+
+### Cross-tool awareness (the "context layer")
+
+The current architecture is tool-isolated (by design). But intelligence requires a shared context layer on top of that isolation. Ideas:
+
+- **Global recents feed** — a lightweight `captures` table records every tool output (OCR text, transcription, translation result, clipboard entry) with timestamps. Any tool can query "what was the user doing 5 minutes ago?" This enables: translate the last OCR result, save the last transcription to notes, re-use any recent capture as input to a new pipeline. The feed is *not* shown to the user as a standalone panel — it's the invisible backbone that makes other things possible.
+
+- **Context-aware Quick Actions suggestions** — when the user opens Quick Actions, the app surfaces *relevant* template suggestions based on what they just did. If the last tool used was OCR: show OCR-related templates first. If the clipboard top entry is a URL: surface "Open in Reader Mode" or "Translate this page". Requires the global recents feed + a tiny scoring heuristic (no ML needed).
+
+- **Tool output routing via drag** — drag a result card from OCR/Voice/Translation onto the sidebar icon of Notes, Clipboard, or Translation to trigger that tool with the result as input. No pipelines needed — discoverable, immediate, gestural. Requires Tauri drag-and-drop events between WebView elements and sidebar.
+
+### Proactive suggestions (non-intrusive)
+
+- **"Did you mean to…?" toast** — after OCR completes, if the text appears to be in a language that isn't the user's default, show a small non-blocking toast: "Looks like French — translate to English?" with Accept/Dismiss. Same pattern for "looks like a URL — save to Reader Mode?" or "looks like a phone number — copy to clipboard?". Detection is heuristic (lingua-rs or simple charset/regex), never network-dependent.
+
+- **Smart clipboard deduplication** — when a clipboard entry is captured that is very similar (Levenshtein distance < 10%) to an entry captured in the last 30 minutes, show a subtle indicator rather than adding a duplicate. Reduces noise in the history without losing anything.
+
+- **Pattern-based pipeline auto-suggestion** — if the user manually performs the same sequence of actions 3+ times (OCR → open translation → paste result), offer to create a pipeline for it. Requires action event logging in the DB. No ML — just frequency counting over a session window.
+
+### Competing with specialized apps
+
+Each core tool benchmarked against its best-in-class competitor:
+
+| Tool | Best-in-class competitor | Gap to close |
+|---|---|---|
+| Clipboard | Raycast, Maccy, Pasta | Smart deduplication, content-type icons, pinning, fast fuzzy search |
+| Notes | Bear, Obsidian | Backlinks between notes, inline tagging (`#tag`, `[[link]]`), markdown export |
+| OCR | TextSniper (macOS) | Click-to-capture (no file needed — screengrab from selection), table extraction |
+| Voice | Whisper.app, Speak AI | Real-time streaming transcription (Whisper streaming mode), speaker labels |
+| Translation | DeepL | Quality gap is in the model; mitigation: support multiple models (NLLB, Opus-MT-Big), let user pick |
+| Photo Editor | Canva, Photopea | Layer panel, blend modes, text on image, export to PNG/JPEG/WebP |
+| Video Processor | HandBrake | Preset system, batch queue, hardware acceleration (VAAPI) |
+| Screen Recorder | OBS, Kooha | Region selection resize, hotkey start/stop without clicking the UI |
+| Quick Actions | Raycast Workflows, n8n | Conditional branches, schedule triggers, webhook triggers |
+
+The fastest wins (low effort, high credibility impact):
+
+1. **Clipboard:** add pinning (`is_pinned` column, float to top), and content-type icons (URL globe, image thumbnail, code `{}` badge). Already have the data — just UI.
+2. **OCR:** click-to-capture (screengrab inline, no file dialog). Tauri screenshot API + Tesseract. Eliminates the #1 friction point.
+3. **Voice:** show a live waveform while recording (Web Audio API, no native code). Purely cosmetic but makes recording feel responsive.
+4. **Notes:** inline `#tag` extraction stored to a `tags` table. No backlinks yet — just tags. Enables "show all notes tagged #meeting".
+5. **Screen Recorder:** global hotkey to start/stop (`tauri-plugin-global-shortcut`). The current "click Start then click Stop" flow breaks the screencast use case.
+
+### "Intelligent" UI patterns
+
+- **Adaptive empty states** — empty states that change based on prior behavior. First session: onboarding hint. After 5 sessions: power-user tip. After the user has used OCR 3 times: "Try setting up a pipeline to auto-translate OCR results". Requires a `usage_count` per tool in `settings`.
+
+- **Command palette learns** — Ctrl+K results should surface the most recently and most frequently used items first. A `command_history` table with access counts and last-used timestamps. Already a near-zero effort add given the palette exists.
+
+- **Inline translation in any panel** — a right-click context menu on any selected text anywhere in the app (notes, OCR result, clipboard preview) with "Translate selection" → opens translation result inline below the selection without navigating away. Requires a context menu event listener at the shell level + a dedicated small `/api/tools/translate/inline` endpoint.
+
+- **Keyboard-first everything** — every action reachable without mouse. Focus moves logically through panels. Tool results are navigable with arrow keys. Escape always collapses. This is the deepest differentiator against Electron apps where keyboard navigation is bolted on.
+
+All of the above are Phase 5+ ideas. None require new architecture — they extend what's already in place. The intelligence is emergent from the data that already flows through the app.
 
 - **Local LLM integration** — connect to Ollama (already has a config entry in Claude Code's config) for AI-powered notes summarization, smart search, etc. Fully offline.
 - **AI-powered Quick Actions** — instead of user-defined pipelines, use a small local model to suggest "next action" after a tool completes (e.g., after OCR: "translate this? save to notes?").
