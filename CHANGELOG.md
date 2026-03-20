@@ -7,6 +7,52 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — UI Design System Overhaul (DESIGN.md / Ethereal Command Center)
+
+### Completed
+
+**Design direction:** `DESIGN.md` added to repo (Stitch/Google reference). Direction: "Ethereal Command Center" — lavender accent, mint glass, Space Grotesk editorial titles, pill buttons, tonal layering, no hard borders. Applied as hybrid (light + dark), not literal.
+
+**Themes (`ui/assets/themes/*.css`)**
+- Dark: accent shifted to lavender `#8b74d4`, `--accent-dim` added, `--shadow-accent` tinted glow token
+- Light: palette aligned to DESIGN.md — base `#f0f2f8`, mint glass `rgba(204,250,245,0.55)`, lavender `#7049b3` primary, lavender-tinted shadows
+- All themes: `--radius-lg` 14→20px, `--radius-xl` 18→28px, `--radius-pill: 9999px` added, `--shadow-accent` added
+
+**Typography (`ui/assets/fonts/`, `ui/assets/base.css`)**
+- Space Grotesk variable font downloaded and bundled offline (`space-grotesk-variable.woff2`)
+- `.panel-title` uses Space Grotesk, `letter-spacing: -0.02em` — editorial authority per DESIGN.md
+
+**Buttons (`base.css`)**
+- Pill shape (`border-radius: var(--radius-pill)`) on all `.btn` variants
+- `.btn-primary`: lavender gradient 135° + `--shadow-accent` glow, Telos Glow inset on `:active`
+- `.btn-secondary`: `accent-subtle` background, no border (mint-style per DESIGN.md), accent color text
+- `.btn-sm/.btn-lg` padding adjusted for pill shape
+
+**Cards (`base.css`)**
+- Padding increased to `16px 18px`
+- Hover: `--shadow-accent` tinted shadow instead of flat shadow
+- `.card-interactive:active`: inset accent glow (Telos Glow)
+
+**Inputs (`base.css`)**
+- `border-radius: var(--radius-lg)` (was `--radius-md`), padding `8px 14px`
+
+**Panel transitions (`base.css`, `ui/index.html`)**
+- `@keyframes panel-enter`: opacity 0→1 + `translateY(6px→0)`, 160ms `cubic-bezier(0.22,1,0.36,1)`
+- Applied via `htmx:afterSwap` on `#tool-panel` — every panel navigation now fades in
+
+**Ideas logged (`IDEAS.md`)**
+- Search: recent searches history below search bar
+- Clipboard: privacy blur mode
+- Clipboard: rich content preview (images/audio)
+- OCR/Translation: auto language detection
+- Resizable panel dividers (Notes, Quick Actions)
+- Keybindings section in Settings
+
+### Next
+Continue UI improvements — open `cargo tauri dev`, review every panel visually, identify what still feels "toy-like" now that the design system base is updated. Priority panels to audit: Notes editor, Clipboard list, Models, Settings form layout.
+
+---
+
 ## [2026-03-19] — Phase 4.6 Complete
 
 ### Completed
