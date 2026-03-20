@@ -7,6 +7,25 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7 H4: graph-aware execution engine
+
+### Completed
+- **`src-tauri/src/tools/quick_actions.rs`** — H4 graph execution engine:
+  - `GraphCtx` struct: nodes HashMap, adj HashMap (source→edges), `started_at` Instant, `warned` AtomicBool for one-shot 60s warning
+  - `GraphCtx::guard()`: at 60s logs a warning (once, via AtomicBool); at 120s returns `Err("Loop timed out")` to kill the pipeline
+  - `run_pipeline_graph()`: loads `pipeline_nodes` + `pipeline_edges` from DB, finds trigger node, builds `Arc<GraphCtx>`, dispatches `run_graph_from`; falls back to linear `run_pipeline_steps` if no graph nodes (backwards-compatible)
+  - `run_graph_from()`: `Pin<Box<dyn Future>>` boxed async fn for recursive fan-out; iterative traversal via `adj` HashMap; condition nodes branch on "true"/"false" edge labels; `__done__` signal from `for_each_file` short-circuits further traversal
+  - `execute_action()`: dispatches 8 tools — translate, copy_clipboard, save_note, read_file, write_file (overwrite/append/skip modes), append_file (custom separator), ocr_file (tesseract), for_each_file (recursive fan-out returning `__done__`)
+  - `evaluate_condition()`: always_true, not_empty, contains, length_gt, matches_regex (substring fallback if regex parse fails)
+  - `list_files()` / `file_matches_pattern()`: async `tokio::fs::read_dir` with recursive option; supports `*`, `*.ext`, exact name patterns
+  - `NodeRow` derives `Clone` (fixed noop_method_call warning)
+  - Both `run_handler` and `start_pipeline_engine` updated to call `run_pipeline_graph`
+
+### Next
+P1 — Pipeline folders: `pipeline_folders` table + sidebar grouping + collapse/expand + move pipeline into folder.
+
+---
+
 ## [2026-03-20] — Phase 4.7 canvas QoL + H3d + camera fixes
 
 ### Completed
