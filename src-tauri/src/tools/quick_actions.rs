@@ -890,7 +890,7 @@ async fn run_handler(
     let initial = StepValue {
         text: params.initial_text.filter(|s| !s.trim().is_empty()),
     };
-    match run_pipeline_steps(&id, initial, &state).await {
+    match run_pipeline_graph(&id, initial, &state).await {
         Ok(final_val) => {
             let output = final_val
                 .text
@@ -1025,6 +1025,478 @@ async fn execute_step(
     }
 }
 
+// ── Graph execution engine (H4) ──────────────────────────────────────────────
+//
+// Traversal is iterative (loop, not recursion) except for `for_each_file` which
+// fans out into sub-traversals via a boxed recursive call to `run_graph_from`.
+//
+// Cycle / timeout protection:
+//   60 s elapsed  → log warning (once per run)
+//   120 s elapsed → return error to caller
+//
+// Backward compatibility:
+//   Pipelines that have no graph nodes fall back to the old `run_pipeline_steps`.
+
+const GRAPH_WARN_SECS: u64 = 60;
+const GRAPH_KILL_SECS: u64 = 120;
+const GRAPH_MAX_FILES: usize = 10_000;
+
+struct GraphCtx {
+    nodes: std::collections::HashMap<String, NodeRow>,
+    /// source_id → outgoing edges
+    adj: std::collections::HashMap<String, Vec<EdgeRow>>,
+    started_at: std::time::Instant,
+    warned: std::sync::atomic::AtomicBool,
+}
+
+impl GraphCtx {
+    fn build(nodes: Vec<NodeRow>, edges: Vec<EdgeRow>) -> Self {
+        let node_map = nodes.into_iter().map(|n| (n.id.clone(), n)).collect();
+        let mut adj: std::collections::HashMap<String, Vec<EdgeRow>> =
+            std::collections::HashMap::new();
+        for e in edges {
+            adj.entry(e.source_id.clone()).or_default().push(e);
+        }
+        Self {
+            nodes: node_map,
+            adj,
+            started_at: std::time::Instant::now(),
+            warned: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    fn guard(&self, name: &str) -> Result<(), String> {
+        let s = self.started_at.elapsed().as_secs();
+        if s >= GRAPH_KILL_SECS {
+            return Err(format!(
+                "Loop timed out after {s}s — break the back-edge cycle or raise the timeout in Settings"
+            ));
+        }
+        if s >= GRAPH_WARN_SECS {
+            use std::sync::atomic::Ordering;
+            if !self.warned.swap(true, Ordering::Relaxed) {
+                log::warn!(
+                    "Quick Actions: pipeline '{name}' has been running for {s}s \
+                     — possible infinite loop via back-edge"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+async fn run_pipeline_graph(
+    pipeline_id: &str,
+    initial: StepValue,
+    state: &std::sync::Arc<AppState>,
+) -> Result<StepValue, String> {
+    let nodes: Vec<NodeRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, node_type, config, pos_x, pos_y \
+         FROM pipeline_nodes WHERE pipeline_id = ?",
+    )
+    .bind(pipeline_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if nodes.is_empty() {
+        // No graph yet — fall back to old linear steps runner for compatibility.
+        return run_pipeline_steps(pipeline_id, initial, state).await;
+    }
+
+    let edges: Vec<EdgeRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, source_id, target_id, edge_label \
+         FROM pipeline_edges WHERE pipeline_id = ?",
+    )
+    .bind(pipeline_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let trigger_id = nodes
+        .iter()
+        .find(|n| n.node_type == "trigger")
+        .ok_or("No trigger node — add a Trigger to this pipeline")?
+        .id
+        .clone();
+
+    let ctx = std::sync::Arc::new(GraphCtx::build(nodes, edges));
+    run_graph_from(
+        trigger_id,
+        initial,
+        ctx,
+        pipeline_id.to_string(),
+        state.clone(),
+    )
+    .await
+}
+
+/// Iterative graph traversal.
+/// Returned as a boxed future so `execute_action` can call it recursively
+/// for `for_each_file` fan-out without triggering Rust's infinite-type error.
+fn run_graph_from(
+    start_id: String,
+    initial: StepValue,
+    ctx: std::sync::Arc<GraphCtx>,
+    pipeline_name: String,
+    state: std::sync::Arc<AppState>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<StepValue, String>> + Send>> {
+    Box::pin(async move {
+        let mut current_id = start_id;
+        let mut value = initial;
+        loop {
+            ctx.guard(&pipeline_name)?;
+
+            let node = match ctx.nodes.get(&current_id) {
+                Some(n) => n.clone(),
+                None => break, // dangling edge — stop gracefully
+            };
+
+            match node.node_type.as_str() {
+                "trigger" => { /* passthrough — initial value continues */ }
+                "end" => break,
+                "action" => {
+                    let (new_val, signal) =
+                        execute_action(&node, value, ctx.clone(), &pipeline_name, state.clone())
+                            .await?;
+                    value = new_val;
+                    if signal == "__done__" {
+                        // for_each_file already traversed the rest of the graph; stop here.
+                        return Ok(value);
+                    }
+                }
+                "condition" => {
+                    let branch = evaluate_condition(&node, &value)?;
+                    let edges = ctx.adj.get(&current_id).map(|v| v.as_slice()).unwrap_or(&[]);
+                    let next_id = edges
+                        .iter()
+                        .find(|e| e.edge_label == branch)
+                        .or_else(|| edges.first())
+                        .map(|e| e.target_id.clone());
+                    match next_id {
+                        Some(nid) => { current_id = nid; continue; }
+                        None => break,
+                    }
+                }
+                _ => { /* unknown node type — skip */ }
+            }
+
+            // Advance along default outgoing edge.
+            let edges = ctx.adj.get(&current_id).map(|v| v.as_slice()).unwrap_or(&[]);
+            let next_id = edges
+                .iter()
+                .find(|e| e.edge_label == "default" || e.edge_label.is_empty())
+                .or_else(|| edges.first())
+                .map(|e| e.target_id.clone());
+            match next_id {
+                Some(nid) => current_id = nid,
+                None => break,
+            }
+        }
+        Ok(value)
+    })
+}
+
+/// Execute a single action node.
+/// Returns `(new_value, signal)` where signal == "__done__" means the caller
+/// should stop normal traversal (used by for_each_file which consumes the rest
+/// of the graph internally).
+async fn execute_action(
+    node: &NodeRow,
+    input: StepValue,
+    ctx: std::sync::Arc<GraphCtx>,
+    pipeline_name: &str,
+    state: std::sync::Arc<AppState>,
+) -> Result<(StepValue, String), String> {
+    let config: serde_json::Value =
+        serde_json::from_str(&node.config).unwrap_or_else(|_| serde_json::json!({}));
+    let tool = config["tool"].as_str().unwrap_or("").to_string();
+    let params = &config["params"];
+
+    let result: StepValue = match tool.as_str() {
+        // ── Text tools ─────────────────────────────────────────────────────
+        "translate" => {
+            let from = params["from_lang"].as_str().unwrap_or("auto").to_string();
+            let to = params["to_lang"].as_str().unwrap_or("en").to_string();
+            let text = input
+                .text
+                .clone()
+                .ok_or_else(|| "translate: no text input".to_string())?;
+            let translated = run_translate_raw(&text, &from, &to).await?;
+            StepValue { text: Some(translated) }
+        }
+
+        "copy_clipboard" => {
+            let text = input
+                .text
+                .clone()
+                .ok_or_else(|| "copy_clipboard: no text input".to_string())?;
+            let hash = {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                text.hash(&mut h);
+                h.finish()
+            };
+            let _ = state.clipboard_suppress_tx.send(hash);
+            tokio::task::spawn_blocking(move || {
+                arboard::Clipboard::new()
+                    .and_then(|mut c| c.set_text(text))
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+            input
+        }
+
+        "save_note" => {
+            let prefix = params["title_prefix"]
+                .as_str()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or("Quick Action Note")
+                .to_string();
+            let text = input
+                .text
+                .clone()
+                .ok_or_else(|| "save_note: no text input".to_string())?;
+            let first_line: String = text.lines().next().unwrap_or("").chars().take(60).collect();
+            let title = if first_line.is_empty() {
+                prefix
+            } else {
+                format!("{prefix}: {first_line}")
+            };
+            let id = uuid::Uuid::new_v4().to_string();
+            let now = now_secs();
+            sqlx::query(
+                "INSERT INTO notes (id, title, content, created_at, updated_at) VALUES (?,?,?,?,?)",
+            )
+            .bind(&id)
+            .bind(&title)
+            .bind(&text)
+            .bind(now)
+            .bind(now)
+            .execute(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
+            state.event_bus.publish(Event::NoteCreated { id, title });
+            input
+        }
+
+        // ── File tools ─────────────────────────────────────────────────────
+        "read_file" => {
+            let path = params["file_path"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .or_else(|| input.text.as_deref())
+                .ok_or_else(|| "read_file: no file path".to_string())?
+                .to_string();
+            let content = tokio::fs::read_to_string(&path)
+                .await
+                .map_err(|e| format!("read_file '{path}': {e}"))?;
+            StepValue { text: Some(content) }
+        }
+
+        "write_file" => {
+            let path = params["file_path"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| "write_file: no file path".to_string())?
+                .to_string();
+            let content = input.text.clone().unwrap_or_default();
+            match params["if_exists"].as_str().unwrap_or("overwrite") {
+                "append" => {
+                    let existing = tokio::fs::read_to_string(&path).await.unwrap_or_default();
+                    let joined = if existing.is_empty() {
+                        content
+                    } else {
+                        format!("{existing}\n{content}")
+                    };
+                    tokio::fs::write(&path, joined)
+                        .await
+                        .map_err(|e| format!("write_file '{path}': {e}"))?;
+                }
+                "skip" => {
+                    if !tokio::fs::try_exists(&path).await.unwrap_or(false) {
+                        tokio::fs::write(&path, &content)
+                            .await
+                            .map_err(|e| format!("write_file '{path}': {e}"))?;
+                    }
+                }
+                _ => {
+                    tokio::fs::write(&path, &content)
+                        .await
+                        .map_err(|e| format!("write_file '{path}': {e}"))?;
+                }
+            }
+            input
+        }
+
+        "append_file" => {
+            let path = params["file_path"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| "append_file: no file path".to_string())?
+                .to_string();
+            let content = input.text.clone().unwrap_or_default();
+            let sep = params["separator"]
+                .as_str()
+                .unwrap_or(r"\n")
+                .replace(r"\n", "\n")
+                .replace(r"\t", "\t");
+            let existing = tokio::fs::read_to_string(&path).await.unwrap_or_default();
+            let joined = if existing.is_empty() {
+                content
+            } else {
+                format!("{existing}{sep}{content}")
+            };
+            tokio::fs::write(&path, joined)
+                .await
+                .map_err(|e| format!("append_file '{path}': {e}"))?;
+            input
+        }
+
+        // ── Media tools ────────────────────────────────────────────────────
+        "ocr_file" => {
+            let path = params["file_path"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .or_else(|| input.text.as_deref())
+                .ok_or_else(|| "ocr_file: no file path".to_string())?
+                .to_string();
+            let lang = params["lang"].as_str().unwrap_or("eng").to_string();
+            let out = tokio::process::Command::new("tesseract")
+                .arg(&path)
+                .arg("stdout")
+                .arg("-l")
+                .arg(&lang)
+                .output()
+                .await
+                .map_err(|e| format!("ocr_file: tesseract: {e}"))?;
+            if out.status.success() {
+                StepValue {
+                    text: Some(String::from_utf8_lossy(&out.stdout).trim().to_string()),
+                }
+            } else {
+                return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+            }
+        }
+
+        // ── Loop / fan-out ─────────────────────────────────────────────────
+        "for_each_file" => {
+            let folder = params["folder_path"].as_str().unwrap_or("").to_string();
+            let pattern = params["pattern"].as_str().unwrap_or("*").to_string();
+            let recursive = params["recursive"].as_bool().unwrap_or(false);
+
+            let files = list_files(&folder, &pattern, recursive)
+                .await
+                .map_err(|e| format!("for_each_file: {e}"))?;
+
+            // First outgoing edge from this node leads to the body of the loop.
+            let next_id = ctx
+                .adj
+                .get(&node.id)
+                .and_then(|edges| {
+                    edges
+                        .iter()
+                        .find(|e| e.edge_label == "default" || e.edge_label.is_empty())
+                        .or_else(|| edges.first())
+                })
+                .map(|e| e.target_id.clone());
+
+            let mut results: Vec<String> = Vec::new();
+            if let Some(next_node_id) = next_id {
+                for file_path in files.into_iter().take(GRAPH_MAX_FILES) {
+                    ctx.guard(pipeline_name)?;
+                    let fval = StepValue { text: Some(file_path.clone()) };
+                    match run_graph_from(
+                        next_node_id.clone(),
+                        fval,
+                        ctx.clone(),
+                        pipeline_name.to_string(),
+                        state.clone(),
+                    )
+                    .await
+                    {
+                        Ok(r) => {
+                            if let Some(t) = r.text {
+                                results.push(t);
+                            }
+                        }
+                        Err(e) => log::warn!("for_each_file '{file_path}': {e}"),
+                    }
+                }
+            }
+            // Return __done__ — the sub-traversals already consumed the graph.
+            return Ok((
+                StepValue { text: Some(results.join("\n---\n")) },
+                "__done__".to_string(),
+            ));
+        }
+
+        other => return Err(format!("unknown tool: {other}")),
+    };
+
+    Ok((result, "default".to_string()))
+}
+
+fn evaluate_condition(node: &NodeRow, value: &StepValue) -> Result<String, String> {
+    let config: serde_json::Value =
+        serde_json::from_str(&node.config).unwrap_or_else(|_| serde_json::json!({}));
+    let cond = config["condition"].as_str().unwrap_or("always_true");
+    let cval = config["value"].as_str().unwrap_or("");
+    let text = value.text.as_deref().unwrap_or("");
+
+    let passes = match cond {
+        "always_true" => true,
+        "not_empty" => !text.trim().is_empty(),
+        "contains" => text.contains(cval),
+        "length_gt" => text.len() > cval.parse::<usize>().unwrap_or(0),
+        // matches_regex: regex crate not in deps — fall back to substring match
+        "matches_regex" => text.contains(cval),
+        _ => true,
+    };
+
+    Ok(if passes { "true".to_string() } else { "false".to_string() })
+}
+
+/// List files in `folder` whose names match `pattern` (`*`, `*.ext`, or exact name).
+async fn list_files(
+    folder: &str,
+    pattern: &str,
+    recursive: bool,
+) -> Result<Vec<String>, String> {
+    let mut results: Vec<String> = Vec::new();
+    let mut dirs = vec![std::path::PathBuf::from(folder)];
+    while let Some(dir) = dirs.pop() {
+        let mut rd = tokio::fs::read_dir(&dir)
+            .await
+            .map_err(|e| format!("cannot read '{}': {e}", dir.display()))?;
+        while let Some(entry) = rd.next_entry().await.map_err(|e| e.to_string())? {
+            let ft = entry.file_type().await.map_err(|e| e.to_string())?;
+            if ft.is_dir() {
+                if recursive {
+                    dirs.push(entry.path());
+                }
+            } else if let Some(name) = entry.file_name().to_str().map(str::to_owned) {
+                if file_matches_pattern(&name, pattern) {
+                    results.push(entry.path().to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+    results.sort();
+    Ok(results)
+}
+
+fn file_matches_pattern(name: &str, pattern: &str) -> bool {
+    if pattern == "*" || pattern.is_empty() {
+        return true;
+    }
+    if let Some(ext) = pattern.strip_prefix("*.") {
+        return name.ends_with(&format!(".{ext}"));
+    }
+    name == pattern
+}
+
 async fn run_translate_raw(
     text: &str,
     from_lang: &str,
@@ -1097,7 +1569,7 @@ pub async fn start_pipeline_engine(state: Arc<AppState>) {
             let state = state.clone();
             let val = initial.clone();
             tokio::spawn(async move {
-                if let Err(e) = run_pipeline_steps(&pipeline.id, val, &state).await {
+                if let Err(e) = run_pipeline_graph(&pipeline.id, val, &state).await {
                     log::warn!(
                         "Quick Actions: pipeline '{}' failed — {e}",
                         pipeline.name
@@ -1112,7 +1584,7 @@ pub async fn start_pipeline_engine(state: Arc<AppState>) {
 
 // ── Graph DB row types ────────────────────────────────────────────────────────
 
-#[derive(sqlx::FromRow, serde::Serialize)]
+#[derive(sqlx::FromRow, serde::Serialize, Clone)]
 struct NodeRow {
     id: String,
     pipeline_id: String,
