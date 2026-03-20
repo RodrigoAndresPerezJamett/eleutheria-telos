@@ -28,21 +28,21 @@ fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
         r##"<div id="clip-{id}"
      data-clip-id="{id}"
      data-clip-content="{escaped_content}"
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:100px;transition:box-shadow 150ms;"
-     onmouseenter="this.style.boxShadow='0 0 0 1px var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.opacity=1)"
-     onmouseleave="this.style.boxShadow='';this.querySelectorAll('.clip-action').forEach(e=>e.style.opacity=0)"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:100px;outline:1px solid transparent;outline-offset:-1px;"
+     onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='inline-flex')"
+     onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='none')"
      onclick="clipboardOpenPreview(this)">
-  <pre style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;word-break:break-all;font-family:inherit;line-height:1.5;margin:0 0 10px;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">{escaped_preview}</pre>
+  <pre style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;word-break:break-all;font-family:inherit;line-height:1.5;margin:0 0 10px;flex:1;overflow:hidden;max-height:5.5em;">{escaped_preview}</pre>
   <div style="display:flex;align-items:center;justify-content:space-between;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
     <div style="display:flex;gap:4px;">
       <button class="clip-action btn btn-ghost btn-sm"
-              style="opacity:0;transition:opacity 150ms;font-size:11px;padding:2px 6px;"
+              style="display:none;font-size:11px;padding:2px 6px;"
               hx-post="/api/clipboard/{id}/recopy"
               onclick="event.stopPropagation()"
               title="Copy to clipboard">Copy</button>
       <button class="clip-action btn btn-ghost btn-sm"
-              style="opacity:0;transition:opacity 150ms;font-size:11px;padding:2px 6px;color:var(--destructive);"
+              style="display:none;font-size:11px;padding:2px 6px;color:var(--destructive);"
               hx-delete="/api/clipboard/{id}"
               hx-target="#clip-{id}"
               hx-swap="outerHTML"

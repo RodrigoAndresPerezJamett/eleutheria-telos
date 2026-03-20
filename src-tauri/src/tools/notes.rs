@@ -32,25 +32,25 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
      data-note-id="{id}"
      data-note-title="{escaped_title}"
      data-note-content="{escaped_content}"
-     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:120px;transition:box-shadow 150ms;"
-     onmouseenter="this.style.boxShadow='0 0 0 1px var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=1)"
-     onmouseleave="this.style.boxShadow='';this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=0)"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:120px;outline:1px solid transparent;outline-offset:-1px;"
+     onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.display='inline-flex')"
+     onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.note-action').forEach(e=>e.style.display='none')"
      onclick="notesOpenPreview(this)">
   <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:6px;">
-    <h3 style="flex:1;font-size:13px;font-weight:600;color:var(--text-primary);margin:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{pin_icon}{escaped_title}</h3>
+    <h3 style="flex:1;font-size:13px;font-weight:600;color:var(--text-primary);margin:0;overflow:hidden;max-height:2.6em;line-height:1.3;">{pin_icon}{escaped_title}</h3>
     <button class="note-action btn btn-ghost btn-sm"
-            style="flex-shrink:0;opacity:0;transition:opacity 150ms;padding:2px 5px;font-size:11px;"
+            style="display:none;flex-shrink:0;padding:2px 5px;font-size:11px;"
             hx-post="/api/notes/{id}/pin"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
             onclick="event.stopPropagation()"
             title="{pin_btn_label}">{pin_btn_label}</button>
   </div>
-  <p style="font-size:12px;color:var(--text-muted);flex:1;margin:0 0 10px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;line-height:1.5;">{escaped_preview}</p>
+  <p style="font-size:12px;color:var(--text-muted);flex:1;margin:0 0 10px;overflow:hidden;max-height:4.5em;line-height:1.5;">{escaped_preview}</p>
   <div style="display:flex;align-items:center;justify-content:space-between;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
     <button class="note-action btn btn-ghost btn-sm"
-            style="opacity:0;transition:opacity 150ms;padding:2px 5px;font-size:11px;color:var(--destructive);"
+            style="display:none;padding:2px 5px;font-size:11px;color:var(--destructive);"
             hx-delete="/api/notes/{id}"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
