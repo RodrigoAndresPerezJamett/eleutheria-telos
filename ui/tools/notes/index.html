@@ -647,7 +647,13 @@
       clearCurrentNote() {
         if (!this.currentNoteId) return;
         if (!confirm('Clear note content? This will erase the text and save immediately.')) return;
-        document.dispatchEvent(new CustomEvent('notes:clear-content'));
+        // Set the textarea value directly and fire a native input event so Alpine's
+        // x-model picks it up and the debounced autosave fires automatically.
+        const textarea = document.querySelector('#note-editor-inner textarea');
+        if (textarea) {
+          textarea.value = '';
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       },
 
       handleClearAll() {
