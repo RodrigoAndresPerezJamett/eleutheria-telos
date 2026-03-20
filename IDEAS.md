@@ -8,6 +8,8 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ## UI / UX Ideas
 
+- **Search: recent searches history** — below the search bar, show the last 5–8 searches as clickable chips. Dismissable individually or all at once. Persisted in SQLite (`search_history` table). Helps users re-run common queries without retyping. Phase 5.
+
 - **Clipboard: privacy blur mode** — a toggle in Settings (or directly in the Clipboard panel header) that blurs all clipboard history items. Useful when screen sharing or recording. When enabled, items show a blurred overlay that reveals on hover/click. State persisted in `settings` table (`clipboard_blur: bool`). Phase 5.
 
 - **Clipboard: rich content preview** — beyond plain text, show a thumbnail if the copied item is an image (arboard already supports `get_image()`), and a waveform or file icon if the source is an audio file path. Requires clipboard content-type detection at capture time and storing a `content_type` column alongside `content` in the `clipboard` table. Text remains the default; images and audio are opt-in previews. Phase 5.

@@ -100,6 +100,13 @@
       if (evt.detail.target && evt.detail.target.id === 'tool-panel') {
         htmx.process(evt.detail.target);
         if (window.lucide) lucide.createIcons({ node: evt.detail.target });
+        // Panel enter animation
+        const first = evt.detail.target.firstElementChild;
+        if (first) {
+          first.classList.remove('panel-animate');
+          void first.offsetWidth; // force reflow
+          first.classList.add('panel-animate');
+        }
       }
     });
 

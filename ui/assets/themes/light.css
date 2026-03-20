@@ -1,30 +1,34 @@
 /* Eleutheria Telos — Light Theme */
+/* Palette inspired by DESIGN.md: soft off-whites, Mint-Glass, Lavender accent */
 :root {
-  --bg-base:        #f0f2f7;
-  --bg-surface:     #ffffff;
-  --bg-elevated:    #f7f9fc;
-  --bg-overlay:     rgba(255, 255, 255, 0.72);
-  --text-primary:   #1e293b;
+  --bg-base:        #f0f2f8;
+  --bg-surface:     #f8f9fb;
+  --bg-elevated:    #ffffff;
+  --bg-overlay:     rgba(255, 255, 255, 0.80);
+  --text-primary:   #1e2433;
   --text-secondary: #475569;
   --text-muted:     #94a3b8;
-  --accent:         #5b6af0;
-  --accent-subtle:  rgba(91, 106, 240, 0.1);
-  --accent-hover:   rgba(91, 106, 240, 0.18);
-  --border:         rgba(0, 0, 0, 0.09);
-  --border-focus:   rgba(91, 106, 240, 0.6);
-  --shadow:         rgba(0, 0, 0, 0.08);
-  --shadow-lg:      rgba(0, 0, 0, 0.16);
-  --glass-bg:       rgba(255, 255, 255, 0.65);
+  --accent:         #7049b3;
+  --accent-dim:     #633ca6;
+  --accent-subtle:  rgba(112, 73, 179, 0.09);
+  --accent-hover:   rgba(112, 73, 179, 0.15);
+  --border:         rgba(0, 0, 0, 0.07);
+  --border-focus:   rgba(112, 73, 179, 0.45);
+  --shadow:         rgba(112, 73, 179, 0.06);
+  --shadow-lg:      rgba(0, 0, 0, 0.14);
+  --shadow-accent:  rgba(112, 73, 179, 0.10);
+  --glass-bg:       rgba(204, 250, 245, 0.55);
   --glass-blur:     blur(20px);
-  --glass-border:   rgba(255, 255, 255, 0.9);
-  --destructive:    #ef4444;
-  --destructive-subtle: rgba(239, 68, 68, 0.1);
-  --success:        #22c55e;
-  --success-subtle: rgba(34, 197, 94, 0.1);
-  --warning:        #f59e0b;
-  --warning-subtle: rgba(245, 158, 11, 0.1);
+  --glass-border:   rgba(255, 255, 255, 0.85);
+  --destructive:    #dc2626;
+  --destructive-subtle: rgba(220, 38, 38, 0.08);
+  --success:        #16a34a;
+  --success-subtle: rgba(22, 163, 74, 0.09);
+  --warning:        #d97706;
+  --warning-subtle: rgba(217, 119, 6, 0.09);
   --radius-sm:      6px;
   --radius-md:      10px;
-  --radius-lg:      14px;
-  --radius-xl:      18px;
+  --radius-lg:      20px;
+  --radius-xl:      28px;
+  --radius-pill:    9999px;
 }

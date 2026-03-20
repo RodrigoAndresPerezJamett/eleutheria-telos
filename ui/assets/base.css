@@ -2,7 +2,7 @@
    Uses CSS custom properties defined in themes/*.css
    All color decisions live here; no Tailwind color utilities for branding.  */
 
-/* ── Font ─────────────────────────────────────────────────────────────────── */
+/* ── Fonts ────────────────────────────────────────────────────────────────── */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
@@ -17,6 +17,14 @@
   font-weight: 100 900;
   font-display: swap;
   src: url('/assets/fonts/inter-variable-italic.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/assets/fonts/space-grotesk-variable.woff2') format('woff2-variations');
 }
 
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
@@ -245,8 +253,10 @@ html.no-glass #sidebar-tablet {
 }
 
 .panel-title {
-  font-size: 19px;
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
   line-height: 1.2;
 }
@@ -254,7 +264,7 @@ html.no-glass #sidebar-tablet {
 .panel-subtitle {
   font-size: 13px;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
@@ -262,8 +272,8 @@ html.no-glass #sidebar-tablet {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-md);
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
@@ -276,18 +286,23 @@ html.no-glass #sidebar-tablet {
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim, var(--accent)) 100%);
   color: #fff;
+  box-shadow: 0 2px 8px var(--shadow-accent, transparent);
 }
-.btn-primary:hover { filter: brightness(1.1); }
-.btn-primary:active { filter: brightness(0.95); }
+.btn-primary:hover { filter: brightness(1.08); box-shadow: 0 4px 14px var(--shadow-accent, transparent); }
+.btn-primary:active {
+  filter: brightness(0.96);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.15);
+}
 
 .btn-secondary {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: none;
 }
-.btn-secondary:hover { background: var(--bg-overlay); border-color: var(--text-muted); }
+.btn-secondary:hover { background: var(--accent-hover); }
+.btn-secondary:active { box-shadow: inset 0 2px 4px rgba(0,0,0,0.08); }
 
 .btn-ghost {
   background: transparent;
@@ -301,8 +316,8 @@ html.no-glass #sidebar-tablet {
 }
 .btn-danger:hover { background: var(--destructive-subtle); }
 
-.btn-sm { padding: 5px 10px; font-size: 12px; }
-.btn-lg { padding: 10px 20px; font-size: 14px; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-lg { padding: 10px 24px; font-size: 14px; }
 
 .btn:disabled,
 .btn-disabled { opacity: 0.45; pointer-events: none; }
@@ -327,8 +342,8 @@ option {
 /* ── Inputs ───────────────────────────────────────────────────────────────── */
 .input {
   width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--text-primary);
@@ -352,7 +367,7 @@ textarea.input { resize: vertical; min-height: 100px; line-height: 1.5; }
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 16px 18px;
   transition: box-shadow 150ms ease, transform 150ms ease, border-color 150ms ease;
 }
 
@@ -362,7 +377,7 @@ textarea.input { resize: vertical; min-height: 100px; line-height: 1.5; }
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 
 html.no-glass .card-glass {
@@ -372,13 +387,24 @@ html.no-glass .card-glass {
   border: 1px solid var(--border);
 }
 
-.card:hover, .card-interactive:hover {
-  box-shadow: 0 4px 16px var(--shadow);
-  border-color: rgba(255, 255, 255, 0.12);
+.card:hover {
+  box-shadow: 0 4px 20px var(--shadow-accent, var(--shadow));
+  border-color: rgba(255, 255, 255, 0.10);
   transform: translateY(-1px);
 }
 
-.card-interactive { cursor: pointer; }
+.card-interactive {
+  cursor: pointer;
+}
+.card-interactive:hover {
+  box-shadow: 0 4px 20px var(--shadow-accent, var(--shadow));
+  border-color: rgba(255, 255, 255, 0.10);
+  transform: translateY(-1px);
+}
+.card-interactive:active {
+  box-shadow: inset 0 2px 8px var(--accent-subtle);
+  transform: translateY(0);
+}
 
 /* ── Badge / chip ─────────────────────────────────────────────────────────── */
 .badge {
@@ -433,6 +459,15 @@ html.no-glass .card-glass {
 /* ── HTMX indicator ───────────────────────────────────────────────────────── */
 .htmx-indicator { display: none; }
 .htmx-indicator.htmx-request { display: inline-flex; align-items: center; }
+
+/* ── Panel transition ─────────────────────────────────────────────────────── */
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel-animate {
+  animation: panel-enter 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
 /* Spinning loader icon */
 @keyframes spin { to { transform: rotate(360deg); } }

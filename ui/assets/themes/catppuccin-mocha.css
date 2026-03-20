@@ -14,6 +14,7 @@
   --border-focus:   rgba(203, 166, 247, 0.5);
   --shadow:         rgba(0, 0, 0, 0.45);
   --shadow-lg:      rgba(0, 0, 0, 0.65);
+  --shadow-accent:  rgba(203, 166, 247, 0.08);
   --glass-bg:       rgba(24, 24, 37, 0.68);
   --glass-blur:     blur(20px);
   --glass-border:   rgba(205, 214, 244, 0.08);
@@ -25,6 +26,7 @@
   --warning-subtle: rgba(249, 226, 175, 0.14);
   --radius-sm:      6px;
   --radius-md:      10px;
-  --radius-lg:      14px;
-  --radius-xl:      18px;
+  --radius-lg:      20px;
+  --radius-xl:      28px;
+  --radius-pill:    9999px;
 }
