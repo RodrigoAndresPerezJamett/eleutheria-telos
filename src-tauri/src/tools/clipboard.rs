@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json},
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use base64::Engine as _;
@@ -29,8 +29,34 @@ fn render_entry_card(
     created_at: i64,
     content_type: &str,
     image_thumb: Option<&str>,
+    is_pinned: bool,
 ) -> String {
     let ts = format_timestamp(created_at);
+
+    // Pin button — absolute top-right; always visible when pinned, hover-only when not
+    let pin_btn = if is_pinned {
+        format!(
+            r#"<button class="btn btn-ghost btn-sm"
+              style="position:absolute;top:6px;right:6px;z-index:2;display:inline-flex;padding:3px;color:#f59e0b;background:transparent;border:none;cursor:pointer;"
+              hx-put="/api/clipboard/{id}/pin"
+              hx-swap="none"
+              hx-on::after-request="htmx.trigger(document.body, 'clipboardRefresh')"
+              onclick="event.stopPropagation()"
+              title="Unpin"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>"#,
+            id = id
+        )
+    } else {
+        format!(
+            r#"<button class="clip-pin-btn btn btn-ghost btn-sm"
+              style="position:absolute;top:6px;right:6px;z-index:2;display:inline-flex;padding:3px;color:#f59e0b;opacity:0.55;background:transparent;border:none;cursor:pointer;"
+              hx-put="/api/clipboard/{id}/pin"
+              hx-swap="none"
+              hx-on::after-request="htmx.trigger(document.body, 'clipboardRefresh')"
+              onclick="event.stopPropagation()"
+              title="Pin"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>"#,
+            id = id
+        )
+    };
 
     let (body_html, attr_content, truncated_attr, kind_attr, copy_btn) =
         if content_type == "image" {
@@ -65,9 +91,10 @@ fn render_entry_card(
      data-clip-id="{id}"
      data-clip-content="{attr_content}"{truncated_attr}{kind_attr}
      style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
-     onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='inline-flex')"
-     onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='none')"
+     onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='inline-flex');const pb=this.querySelector('.clip-pin-btn');if(pb)pb.style.opacity='1'"
+     onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.clip-action').forEach(e=>e.style.display='none');const pb=this.querySelector('.clip-pin-btn');if(pb)pb.style.opacity='0.55'"
      onclick="clipboardOpenPreview(this)">
+  {pin_btn}
   {body_html}
   <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:1;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
@@ -88,6 +115,7 @@ fn render_entry_card(
         attr_content = attr_content,
         truncated_attr = truncated_attr,
         kind_attr = kind_attr,
+        pin_btn = pin_btn,
         body_html = body_html,
         ts = ts,
         copy_btn = copy_btn,
@@ -96,8 +124,9 @@ fn render_entry_card(
 
 const PAGE: i64 = 20;
 
+#[allow(clippy::type_complexity)]
 fn render_list(
-    entries: &[(String, String, i64, Option<String>, String)],
+    entries: &[(String, String, i64, Option<String>, String, bool)],
     has_more: bool,
     next_offset: i64,
 ) -> String {
@@ -109,8 +138,8 @@ fn render_list(
     }
     let mut html: String = entries
         .iter()
-        .map(|(id, content, ts, image_thumb, content_type)| {
-            render_entry_card(id, content, *ts, content_type, image_thumb.as_deref())
+        .map(|(id, content, ts, image_thumb, content_type, is_pinned)| {
+            render_entry_card(id, content, *ts, content_type, image_thumb.as_deref(), *is_pinned)
         })
         .collect();
     if has_more {
@@ -277,10 +306,10 @@ pub async fn list_handler(
 ) -> impl IntoResponse {
     // Fetch one extra row to detect whether a next page exists
     let fetch_limit = params.limit + 1;
-    let mut rows: Vec<(String, String, i64, Option<String>, String)> = if params.q.is_empty() {
+    let mut rows: Vec<(String, String, i64, Option<String>, String, bool)> = if params.q.is_empty() {
         sqlx::query_as(
-            "SELECT id, content, created_at, image_thumb, content_type FROM clipboard
-             ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            "SELECT id, content, created_at, image_thumb, content_type, is_pinned FROM clipboard
+             ORDER BY is_pinned DESC, created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(fetch_limit)
         .bind(params.offset)
@@ -291,9 +320,9 @@ pub async fn list_handler(
         // Search returns all matches — no pagination when filtering
         let pattern = format!("%{}%", params.q);
         sqlx::query_as(
-            "SELECT id, content, created_at, image_thumb, content_type FROM clipboard
+            "SELECT id, content, created_at, image_thumb, content_type, is_pinned FROM clipboard
              WHERE content LIKE ?
-             ORDER BY created_at DESC LIMIT 200 OFFSET 0",
+             ORDER BY is_pinned DESC, created_at DESC LIMIT 200 OFFSET 0",
         )
         .bind(&pattern)
         .fetch_all(&state.db)
@@ -378,6 +407,20 @@ pub async fn clear_all_handler(State(state): State<Arc<AppState>>) -> impl IntoR
     Json(json!({ "ok": true }))
 }
 
+pub async fn pin_toggle_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    sqlx::query(
+        "UPDATE clipboard SET is_pinned = CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END WHERE id = ?",
+    )
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .ok();
+    StatusCode::NO_CONTENT
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -387,6 +430,7 @@ pub fn router() -> Router<Arc<AppState>> {
             get(list_handler).delete(clear_all_handler),
         )
         .route("/api/clipboard/:id/recopy", post(recopy_handler))
+        .route("/api/clipboard/:id/pin", put(pin_toggle_handler))
         .route(
             "/api/clipboard/:id",
             get(get_one_handler).delete(delete_one_handler),
@@ -695,6 +739,70 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count.0, 0);
+    }
+
+    #[tokio::test]
+    async fn pin_toggle() {
+        let state = make_test_state().await;
+        sqlx::query(
+            "INSERT INTO clipboard (id, content, content_type, created_at) VALUES (?, ?, 'text', ?)",
+        )
+        .bind("pin-id")
+        .bind("pinnable item")
+        .bind(1000i64)
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+        // Toggle on
+        pin_toggle_handler(State(state.clone()), Path("pin-id".to_string())).await;
+        let pinned: (bool,) =
+            sqlx::query_as("SELECT is_pinned FROM clipboard WHERE id = 'pin-id'")
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+        assert!(pinned.0, "should be pinned after first toggle");
+
+        // Toggle off
+        pin_toggle_handler(State(state.clone()), Path("pin-id".to_string())).await;
+        let unpinned: (bool,) =
+            sqlx::query_as("SELECT is_pinned FROM clipboard WHERE id = 'pin-id'")
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+        assert!(!unpinned.0, "should be unpinned after second toggle");
+    }
+
+    #[tokio::test]
+    async fn pinned_items_float_to_top() {
+        let state = make_test_state().await;
+        sqlx::query(
+            "INSERT INTO clipboard (id, content, content_type, created_at) VALUES (?, ?, 'text', ?)",
+        )
+        .bind("id-old")
+        .bind("older item")
+        .bind(1000i64)
+        .execute(&state.db)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO clipboard (id, content, content_type, created_at) VALUES (?, ?, 'text', ?)",
+        )
+        .bind("id-new")
+        .bind("newer item")
+        .bind(2000i64)
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+        // Pin the older item
+        pin_toggle_handler(State(state.clone()), Path("id-old".to_string())).await;
+
+        let (status, body) = call(test_app(state), Method::GET, "/api/clipboard").await;
+        assert_eq!(status, StatusCode::OK);
+        let pos_old = body.find("older item").unwrap();
+        let pos_new = body.find("newer item").unwrap();
+        assert!(pos_old < pos_new, "pinned older item should appear before newer item");
     }
 
     #[tokio::test]

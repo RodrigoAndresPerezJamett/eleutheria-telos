@@ -7,6 +7,79 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7: Notes Bear-style inline tags
+
+### Completed
+
+**`src-tauri/migrations/009_note_tags.sql`** (created)
+- `note_tags (note_id, tag)` join table — `ON DELETE CASCADE`, two indexes
+- Source of truth is `notes.tags` JSON blob; this table is the read index, rebuilt on every save
+
+**`src-tauri/src/tools/notes.rs`**
+- `extract_tags(content)` — byte-scan parser (no regex crate); finds `#tagname` / `#parent/child`; must start with ASCII letter; returns unique lowercase tags
+- `sync_note_tags(db, note_id, content)` — deletes old rows, inserts fresh rows, updates `notes.tags` JSON blob; called after every create and content-touching update
+- `render_tag_tree(rows)` — builds collapsible sidebar HTML from flat `(tag, count)` rows; 2-level hierarchy derived by splitting on `/`; Alpine `x-data="{{ open: true }}"` per root; chevron rotates on collapse; "All Notes" reset button; `hx-get="/api/notes?tag=…"` on each tag button
+- `tags_handler` — `GET /api/notes/tags` → queries `note_tags GROUP BY tag ORDER BY tag` → returns sidebar HTML
+- `list_handler` — added `tag: String` to `ListQuery`; new tag-filter branch joins `note_tags` to filter by tag with pagination
+- `create_handler` — calls `sync_note_tags` after successful insert
+- `update_handler` — saves `content_for_tags` clone before query builder consumes it; calls `sync_note_tags` after successful update when content was provided
+- Router: `/api/notes/tags` declared before `/api/notes/:id` (static wins over param in matchit)
+- 6 new tests: `extract_tags_basic`, `extract_tags_nested`, `extract_tags_dedup`, `extract_tags_must_start_with_letter`, `tag_filter_route`, `tags_handler_returns_tree`
+- All 12 notes tests pass
+
+**`ui/tools/notes/index.html`**
+- Grid mode content area changed from `flex-direction:column` to `flex-direction:row`
+- `#notes-tag-sidebar` added: 168px wide, `border-right`, `hx-get="/api/notes/tags"`, `hx-trigger="load, noteUpdated from:body"` — refreshes on any note save
+- `#notes-grid` `grid-template-columns` changed from `minmax(273px,1fr)` to `minmax(220px,1fr)` to accommodate narrower space
+
+### Known pre-existing failures (not from this session)
+- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
+- `clippy::unnecessary_closure` in `quick_actions.rs` — pre-existing
+
+### Known open bug (GitHub issue #3)
+- Clipboard search history shows `[object Object]` when selecting a past search. Root cause unclear after 4 fix attempts. Needs DevTools inspection.
+
+### Next session
+Phase 4.7 — remaining backlog items or start Phase 5. Consider:
+- Tag badges on note cards (small `#tag` pills at card bottom)
+- Tag sidebar highlight on active filter (visual active state)
+- Clipboard search history bug (#3) — if DevTools data becomes available
+
+---
+
+## [2026-03-20] — Phase 4.7: Clipboard pin entries + content-type icons
+
+### Completed
+
+**`src-tauri/migrations/008_clipboard_pin.sql`**
+- `ALTER TABLE clipboard ADD COLUMN is_pinned BOOLEAN NOT NULL DEFAULT 0`
+
+**`src-tauri/src/tools/clipboard.rs`**
+- `detect_content_kind(content)` helper — returns `"url"` (starts with `http://`/`https://`), `"code"` (multiline with `{` and `}`), or `"text"`
+- `render_entry_card` — new `is_pinned: bool` param; pin button (⭐ star SVG, absolute top-right): filled amber when pinned (always visible), outline muted when unpinned (hover-only via `clip-action`); triggers `clipboardRefresh` on body via `hx-on::after-request` after PUT
+- Content-type badge in card footer: URL entries show globe SVG + "URL" pill; code entries show `{}` monospace pill; plain text and image entries show no badge
+- `render_list` — tuple extended to 6-element `(id, content, ts, image_thumb, content_type, is_pinned)`; `#[allow(clippy::type_complexity)]` added
+- `list_handler` — `SELECT` extended with `is_pinned`; both queries now `ORDER BY is_pinned DESC, created_at DESC`
+- `pin_toggle_handler` — `PUT /api/clipboard/:id/pin` toggles with SQL `CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END`; returns `204 No Content`
+- Route added: `PUT /api/clipboard/:id/pin`
+- 2 new tests: `pin_toggle` (on→off round-trip), `pinned_items_float_to_top` (ORDER BY verified)
+- All 7 clipboard tests pass
+
+### Known pre-existing failures (not from this session)
+- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
+- `clippy::type_complexity` + `unnecessary_closure` in `quick_actions.rs` — pre-existing
+
+### Known open bug (GitHub issue #3)
+- Clipboard search history shows `[object Object]` when selecting a past search. Root cause unclear after 4 fix attempts. Needs DevTools inspection. Workaround: manually type searches.
+
+### Next session
+Implement **Notes tags** (Phase 4.7 backlog item #5 / next highest-impact):
+- `tags TEXT` column on `notes` table (comma-separated or JSON array)
+- Tag input in create/edit flow
+- Filter chips above notes grid
+
+---
+
 ## [2026-03-20] — Phase 4.7: Clipboard image support + card UI polish
 
 ### Completed

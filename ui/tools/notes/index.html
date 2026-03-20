@@ -34,11 +34,20 @@
 
       <!-- Content wrapper — blurred when search popup or preview is open -->
       <div :style="{ filter: (searchFocused || preview) ? 'blur(3px)' : '', 'pointer-events': (searchFocused || preview) ? 'none' : '', transition: 'filter 0.15s' }"
-           style="flex:1;min-height:0;display:flex;flex-direction:column;">
+           style="flex:1;min-height:0;display:flex;flex-direction:row;">
+
+        <!-- Tag sidebar -->
+        <div id="notes-tag-sidebar"
+             style="width:168px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px 0;"
+             hx-get="/api/notes/tags"
+             hx-trigger="load, noteUpdated from:body"
+             hx-swap="innerHTML">
+          <p style="padding:12px 10px;font-size:11px;color:var(--text-muted);margin:0;">Loading…</p>
+        </div>
 
         <!-- Scrollable card grid -->
         <div id="notes-grid"
-             style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(273px,1fr));grid-auto-rows:225px;gap:12px;align-content:start;"
+             style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));grid-auto-rows:225px;gap:12px;align-content:start;"
              hx-get="/api/notes"
              hx-trigger="load, noteUpdated from:body"
              hx-swap="innerHTML">
@@ -74,8 +83,9 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-muted);opacity:0.6;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input id="notes-search-popup"
                    type="text"
+                   name="q"
                    x-model="searchQuery"
-                   placeholder="Search notes…"
+                   placeholder="Search notes… or type #tag"
                    hx-get="/api/notes"
                    hx-trigger="input changed delay:300ms"
                    hx-target="#notes-grid"
@@ -117,7 +127,7 @@
 
       <!-- Editor top bar -->
       <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-elevated);">
-        <button class="btn btn-ghost btn-sm" @click="mode = 'grid'">
+        <button class="btn btn-ghost btn-sm" @click="mode = 'grid'; if(location.hash==='#editor') history.replaceState(null,'',location.pathname)">
           <i data-lucide="arrow-left" style="width:13px;height:13px;margin-right:4px;"></i>Notes
         </button>
       </div>
@@ -177,7 +187,76 @@
 <script>
 (function () {
 
-  // Global hook called by server-rendered note cards (data attributes → preview modal)
+  // ── Drag-and-drop: move notes between tags ────────────────────────────────
+  window.notesDragStart = function (event, noteId) {
+    event.dataTransfer.setData('text/plain', noteId);
+    event.dataTransfer.effectAllowed = 'move';
+  };
+
+  window.notesDrop = async function (event, toTag) {
+    event.preventDefault();
+    const noteId = event.dataTransfer.getData('text/plain');
+    const fromTag = window.notesActiveTag || '';
+    // Normalise: empty string means "All Notes" (clear tags)
+    const to = toTag || '';
+    if (!noteId || to === fromTag) return;
+    try {
+      await fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/notes/' + noteId + '/retag', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + window.__SESSION_TOKEN__,
+        },
+        body: JSON.stringify({ from_tag: fromTag, to_tag: to }),
+      });
+      // Refresh sidebar and grid
+      htmx.trigger(document.body, 'noteUpdated');
+      // If filtering by a tag, re-apply the filter so the moved note disappears from current view
+      if (fromTag) {
+        htmx.ajax('GET',
+          'http://127.0.0.1:' + window.__API_PORT__ + '/api/notes?tag=' + encodeURIComponent(fromTag),
+          { target: '#notes-grid', swap: 'innerHTML',
+            headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ } });
+      }
+    } catch (e) {
+      console.error('notes: retag failed', e);
+    }
+  };
+
+  // ── Active tag sidebar highlight ───────────────────────────────────────────
+  window.notesActiveTag = null;
+
+  window.notesSetActiveTag = function (tag) {
+    window.notesActiveTag = tag || null;
+    _applyActiveTag();
+  };
+
+  function _applyActiveTag() {
+    const active = window.notesActiveTag;
+    document.querySelectorAll('#notes-tag-sidebar button[data-tag]').forEach(btn => {
+      const isActive = active !== null && btn.dataset.tag === active;
+      // Use outline so it doesn't conflict with onmouseenter/leave background changes
+      btn.style.outline = isActive ? '2px solid var(--accent)' : '';
+      btn.style.outlineOffset = isActive ? '-2px' : '';
+      btn.style.fontWeight = isActive ? '700' : '';
+      btn.style.color = isActive ? 'var(--accent)' : '';
+    });
+  }
+
+  // Re-apply active state after sidebar HTMX refreshes (e.g. on noteUpdated)
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target && e.detail.target.id === 'notes-tag-sidebar') {
+      _applyActiveTag();
+    }
+  });
+
+  // Called by server-rendered note cards — opens editor directly on click
+  window.notesOpenEditor = function (el) {
+    const id = el.dataset.noteId;
+    document.dispatchEvent(new CustomEvent('notes:open-editor', { detail: { id } }));
+  };
+
+  // Kept for backwards-compatibility (Copy button in preview modal still dispatches this)
   window.notesOpenPreview = function (el) {
     const id = el.dataset.noteId;
     const truncated = el.dataset.noteTruncated === 'true';
@@ -211,6 +290,15 @@
       searchHistory: JSON.parse(localStorage.getItem('notes_search_history') || '[]').filter(s => typeof s === 'string' && s !== '[object Object]'),
 
       init() {
+        document.addEventListener('notes:open-editor', e => {
+          this.openEditor(e.detail.id);
+        });
+        // Browser back button returns to notes grid (hash-based history entry)
+        window.addEventListener('hashchange', () => {
+          if (location.hash === '' && this.mode === 'editor') {
+            this.mode = 'grid';
+          }
+        });
         document.addEventListener('notes:preview', e => {
           this.preview = e.detail;
         });
@@ -296,6 +384,8 @@
       async openEditor(id) {
         this.preview = null;
         this.mode    = 'editor';
+        // Push a hash entry so browser back returns to the grid
+        if (location.hash !== '#editor') location.hash = 'editor';
         const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
         try {
           const res = await fetch('http://127.0.0.1:' + port + '/api/notes/' + id, {

@@ -12,6 +12,22 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ---
 
+## Notes — Future Features (Phase 5+)
+
+- **Notes: drag-and-drop note between tags** — drag a note card from the grid and drop it onto a sidebar tag node. Dropping re-tags the note: adds the target tag to its content (or a frontmatter field) and removes the previous tag. Multi-note drag (from multi-select) supported. Requires HTML5 drag-and-drop API + a `PUT /api/notes/:id/tags` endpoint that atomically updates tags. (Surfaced 2026-03-20.)
+
+- **Notes: multi-select notes** — Ctrl+click or checkbox on note cards to select multiple notes. Toolbar appears at top with actions: "Move to tag", "Delete all", "Export". Move action calls `sync_note_tags` for each selected note. Requires Alpine state for `selectedIds: Set` + batch endpoints `DELETE /api/notes/batch` and `PUT /api/notes/batch/tags`. (Surfaced 2026-03-20.)
+
+- **Notes: delete entire tag** — right-click or context menu on a sidebar tag node → "Delete tag". Removes the `#tagname` token from all notes that have it (content + title), deletes all `note_tags` rows for that tag, and refreshes the grid. Cascade: if a parent tag is deleted, child tags remain (they become orphan roots). (Surfaced 2026-03-20.)
+
+- **Notes: drag notes to "All Notes" to clear tags** — dragging a note to the "All Notes" node strips all inline `#tags` from its title and content and rebuilds `note_tags`. Effectively untags a note. Part of the broader drag-and-drop feature above. (Surfaced 2026-03-20.)
+
+- **Notes: browser back-button returns to grid view** — currently the editor opens via Alpine state change (no HTMX navigation), so the Tauri window `<` back arrow navigates to the previous tool panel (e.g. clipboard), not back to the notes grid. Fix: when `openEditor()` is called, push a `history.pushState` entry and handle `popstate` to reset `mode = 'grid'`. Requires careful coordination with HTMX's own history management. The in-panel `← Notes` button already works correctly. (Surfaced 2026-03-20.)
+
+## Open Design Questions
+
+- **Notes: multi-format support strategy** — Notes currently assumes Markdown. The `#tag` inline tag system conflicts with Markdown `#` headings (e.g., `##Subtitle` is parsed as a tag). Future formats (rich text, plain text, reStructuredText) would need their own tag extraction strategies. Decision deferred: before adding a second format, decide whether inline tags remain Markdown-specific or become a first-class layer above the format (e.g., a `---tags: work, project---` frontmatter block that format parsers can strip). Do not add a second format without resolving this. (Surfaced 2026-03-20.)
+
 ## UI / UX Ideas
 
 - **Search: recent searches history** — below the search bar, show the last 5–8 searches as clickable chips. Dismissable individually or all at once. Persisted in SQLite (`search_history` table). Helps users re-run common queries without retyping. Phase 5.

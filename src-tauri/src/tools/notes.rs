@@ -2,9 +2,10 @@ use axum::{
     extract::{Form, Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
+use sqlx::SqlitePool;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
@@ -38,7 +39,8 @@ fn truncate_bytes(s: &str, max: usize) -> &str {
 }
 
 fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_at: i64) -> String {
-    let display_title = if title.is_empty() { "Untitled" } else { title };
+    let clean_title = strip_inline_tags(title);
+    let display_title = if clean_title.is_empty() { "Untitled".to_string() } else { clean_title };
     let pin_icon = if pinned == 1 { "📌 " } else { "" };
     let pin_btn_label = if pinned == 1 { "Unpin" } else { "Pin" };
     let ts = format_timestamp(updated_at);
@@ -52,10 +54,12 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
      data-note-id="{id}"
      data-note-title="{escaped_title}"
      data-note-content="{escaped_content}"{truncated_attr}
+     draggable="true"
+     ondragstart="notesDragStart(event,'{id}')"
      style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;outline:1px solid transparent;outline-offset:-1px;position:relative;"
      onmouseenter="this.style.outlineColor='var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.display='inline-flex')"
      onmouseleave="this.style.outlineColor='transparent';this.querySelectorAll('.note-action').forEach(e=>e.style.display='none')"
-     onclick="notesOpenPreview(this)">
+     onclick="notesOpenEditor(this)">
   <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:6px;flex-shrink:0;">
     <h3 style="flex:1;font-size:13px;font-weight:600;color:var(--text-primary);margin:0;overflow:hidden;max-height:2.6em;line-height:1.3;">{pin_icon}{escaped_title}</h3>
     <button class="note-action btn btn-ghost btn-sm"
@@ -82,7 +86,7 @@ fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_a
         id = id,
         pin_icon = pin_icon,
         pin_btn_label = pin_btn_label,
-        escaped_title = html_escape(display_title),
+        escaped_title = html_escape(&display_title),
         escaped_content = html_escape(attr_content),
         truncated_attr = truncated_attr,
         escaped_preview = html_escape(preview_content),
@@ -120,21 +124,34 @@ fn render_editor(id: &str, title: &str, content: &str) -> String {
     let escaped_content = html_escape(content);
     format!(
         r#"<div x-data="notesEditor('{id}')" style="display:flex;flex-direction:column;height:100%;">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px;flex-shrink:0;">
+  <!-- Title row: title | saving/saved | preview -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;border-bottom:1px solid var(--border);padding-bottom:10px;flex-shrink:0;">
     <input type="text"
            x-model="title"
+           @input="saved = false"
            @input.debounce.800ms="save()"
            placeholder="Note title…"
            style="flex:1;background:transparent;font-size:16px;font-weight:600;color:var(--text-primary);outline:none;border:none;font-family:inherit;"/>
+    <span x-show="saving" style="font-size:11px;color:var(--text-muted);flex-shrink:0;">Saving…</span>
+    <span x-show="saved && !saving" x-transition style="font-size:11px;color:var(--success);flex-shrink:0;">Saved ✓</span>
     <button @click="preview = !preview"
-            class="btn btn-secondary btn-sm">
+            class="btn btn-secondary btn-sm"
+            style="flex-shrink:0;">
       Preview
     </button>
-    <span x-show="saving" style="font-size:12px;color:var(--text-muted);">Saving…</span>
-    <span x-show="saved && !saving" x-transition style="font-size:12px;color:var(--success);">Saved</span>
+  </div>
+  <!-- Tag pills row — shows parsed inline tags, or a hint if none -->
+  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-height:20px;margin-bottom:8px;flex-shrink:0;">
+    <template x-if="parsedTags().length === 0">
+      <span style="font-size:11px;color:var(--text-muted);opacity:0.55;font-style:italic;">Type #tag or #folder/tag in your note to organize it</span>
+    </template>
+    <template x-for="tag in parsedTags()" :key="tag">
+      <span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid var(--accent);color:var(--accent);opacity:0.75;line-height:1.4;" x-text="'#' + tag"></span>
+    </template>
   </div>
   <div x-show="!preview" style="flex:1;min-height:0;">
     <textarea x-model="content"
+              @input="saved = false"
               @input.debounce.800ms="save()"
               placeholder="Start writing…"
               style="width:100%;height:100%;background:transparent;font-size:13px;color:var(--text-primary);resize:none;outline:none;border:none;line-height:1.6;font-family:monospace;box-sizing:border-box;">{escaped_content}</textarea>
@@ -153,7 +170,6 @@ function notesEditor(noteId) {{
     preview: false,
     async save() {{
       this.saving = true;
-      this.saved = false;
       try {{
         await fetch('http://127.0.0.1:' + window.__API_PORT__ + '/api/notes/' + this.noteId, {{
           method: 'PUT',
@@ -168,6 +184,11 @@ function notesEditor(noteId) {{
       }} finally {{
         this.saving = false;
       }}
+    }},
+    parsedTags() {{
+      const combined = (this.title || '') + ' ' + (this.content || '');
+      const m = [...combined.matchAll(/(?:^|\s)#([a-zA-Z][a-zA-Z0-9_/]*)/g)];
+      return [...new Set(m.map(x => x[1].toLowerCase()))];
     }},
     renderMarkdown() {{
       if (typeof marked !== 'undefined') return marked.parse(this.content || '');
@@ -200,12 +221,263 @@ fn format_timestamp(ts: i64) -> String {
     }
 }
 
+// ── Tag extraction ────────────────────────────────────────────────────────────
+
+/// Removes inline `#tag` tokens from a string for clean display.
+/// Uses the same word-boundary rule as `extract_tags` (preceded by whitespace or start).
+fn strip_inline_tags(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    let mut prev_ws = true; // treat start-of-string as whitespace boundary
+
+    while let Some(ch) = chars.next() {
+        if ch == '#' && prev_ws {
+            if let Some(&next) = chars.peek() {
+                if next.is_ascii_alphabetic() {
+                    // Skip the whole tag token (alphanumeric + _ + /)
+                    while let Some(&c) = chars.peek() {
+                        if c.is_ascii_alphanumeric() || c == '_' || c == '/' {
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    // Remove the trailing space that preceded the tag (if any)
+                    let trimmed = result.trim_end_matches(' ');
+                    let trim_len = trimmed.len();
+                    result.truncate(trim_len);
+                    prev_ws = true;
+                    continue;
+                }
+            }
+        }
+        prev_ws = ch.is_whitespace();
+        result.push(ch);
+    }
+    result.trim().to_string()
+}
+
+/// Scans note content for Bear-style inline tags: `#tagname` or `#parent/child`.
+/// Tag must start with an ASCII letter. Returns unique lowercase tags.
+/// No regex crate — hand-parsed byte scan.
+fn extract_tags(content: &str) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    let bytes = content.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'#' {
+            // Require word boundary: `#` must be at start or preceded by whitespace.
+            // This prevents `##MarkdownHeading` from being picked up as a tag.
+            if i > 0 && !bytes[i - 1].is_ascii_whitespace() {
+                i += 1;
+                continue;
+            }
+            let start = i + 1;
+            if start < len && bytes[start].is_ascii_alphabetic() {
+                let mut end = start;
+                while end < len
+                    && (bytes[end].is_ascii_alphanumeric()
+                        || bytes[end] == b'_'
+                        || bytes[end] == b'/')
+                {
+                    end += 1;
+                }
+                // Strip trailing slashes
+                while end > start && bytes[end - 1] == b'/' {
+                    end -= 1;
+                }
+                if end > start {
+                    let tag = content[start..end].to_lowercase();
+                    if !tags.contains(&tag) {
+                        tags.push(tag);
+                    }
+                }
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    tags
+}
+
+/// Rebuilds the note_tags join table for one note and updates the JSON blob.
+/// Scans both title and content so tags in the title field are indexed too.
+async fn sync_note_tags(db: &SqlitePool, note_id: &str, title: &str, content: &str) {
+    let combined = format!("{title} {content}");
+    let tags = extract_tags(&combined);
+    let _ = sqlx::query("DELETE FROM note_tags WHERE note_id = ?")
+        .bind(note_id)
+        .execute(db)
+        .await;
+    for tag in &tags {
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO note_tags (note_id, tag) VALUES (?, ?)",
+        )
+        .bind(note_id)
+        .bind(tag)
+        .execute(db)
+        .await;
+    }
+    let json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
+    let _ = sqlx::query("UPDATE notes SET tags = ? WHERE id = ?")
+        .bind(&json)
+        .bind(note_id)
+        .execute(db)
+        .await;
+}
+
+/// Renders the tag sidebar HTML from flat (tag, count) rows.
+/// Hierarchy is derived at render time by splitting on '/'.
+fn render_tag_tree(rows: &[(String, i64)]) -> String {
+    if rows.is_empty() {
+        return r#"<p style="padding:12px 10px;font-size:11px;color:var(--text-muted);margin:0;line-height:1.6;">No tags yet.<br>Type #tag in a note.</p>"#.to_string();
+    }
+
+    // Separate roots and children
+    let mut roots: Vec<(&str, i64)> = Vec::new();
+    let mut children: std::collections::HashMap<&str, Vec<(&str, i64)>> =
+        std::collections::HashMap::new();
+
+    for (tag, count) in rows {
+        match tag.find('/') {
+            None => roots.push((tag.as_str(), *count)),
+            Some(slash) => {
+                let parent = &tag[..slash];
+                children.entry(parent).or_default().push((tag.as_str(), *count));
+            }
+        }
+    }
+
+    // Add implicit parents (child exists but parent has no own row)
+    let child_parents: Vec<&str> = children.keys().copied().collect();
+    for parent in child_parents {
+        if !roots.iter().any(|(r, _)| *r == parent) {
+            roots.push((parent, 0));
+        }
+    }
+    roots.sort_by_key(|(r, _)| *r);
+
+    let chevron_down = r#"<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>"#;
+
+    // "All Notes" reset — small uppercase section label
+    let mut html = String::from(
+        r##"<div style="padding:6px 10px 4px;">
+  <button data-tag=""
+          onclick="notesSetActiveTag('')"
+          style="width:100%;text-align:left;padding:5px 8px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);background:transparent;border:none;cursor:pointer;border-radius:5px;display:flex;align-items:center;gap:5px;"
+          onmouseenter="this.style.color='var(--text-primary)';this.style.background='var(--bg-hover)'"
+          onmouseleave="this.style.color='var(--text-muted)';this.style.background='transparent'"
+          ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
+          ondragleave="this.style.background='transparent'"
+          ondrop="this.style.background='transparent';notesDrop(event,'')"
+          hx-get="/api/notes" hx-target="#notes-grid" hx-swap="innerHTML">
+    All Notes
+  </button>
+</div>
+<div style="height:1px;background:var(--border);margin:2px 10px 6px;"></div>
+"##,
+    );
+
+    for (root, root_count) in &roots {
+        let kids = children.get(root).cloned().unwrap_or_default();
+        let has_kids = !kids.is_empty();
+        let count_badge = if *root_count > 0 {
+            format!(r#"<span style="margin-left:auto;font-size:9px;padding:1px 5px;border-radius:8px;background:var(--bg-base);color:var(--text-muted);font-weight:500;">{root_count}</span>"#)
+        } else {
+            String::new()
+        };
+
+        if has_kids {
+            html.push_str(&format!(
+                r##"<div x-data="{{ open: true }}" style="margin:0 6px 4px;">
+  <div style="display:flex;align-items:center;background:var(--bg-elevated);border-radius:6px;border-left:2px solid var(--accent);"
+       ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
+       ondragleave="this.style.background='var(--bg-elevated)'"
+       ondrop="this.style.background='var(--bg-elevated)';notesDrop(event,'{root}')">
+    <div @click.stop="open=!open"
+         style="flex-shrink:0;cursor:pointer;padding:6px 10px 6px 8px;color:var(--text-muted);display:flex;align-items:center;align-self:stretch;transition:color 0.1s;user-select:none;"
+         :style="open ? '' : 'transform:rotate(-90deg)'"
+         onmouseenter="this.style.color='var(--text-primary)'"
+         onmouseleave="this.style.color='var(--text-muted)'">
+      {chevron}
+    </div>
+    <button data-tag="{root}"
+            onclick="notesSetActiveTag(this.dataset.tag)"
+            hx-get="/api/notes?tag={root}" hx-target="#notes-grid" hx-swap="innerHTML"
+            style="flex:1;min-width:0;text-align:left;background:transparent;border:none;cursor:pointer;padding:6px 8px 6px 2px;display:flex;align-items:center;gap:5px;"
+            onmouseenter="this.style.background='var(--bg-hover)';this.style.borderRadius='0 4px 4px 0'"
+            onmouseleave="this.style.background='transparent';this.style.borderRadius=''">
+      <span style="color:var(--accent);font-size:11px;font-weight:700;flex-shrink:0;">#</span>
+      <span style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{root}</span>
+      {count_badge}
+    </button>
+  </div>
+  <div x-show="open" style="margin-top:2px;margin-left:10px;border-left:1px solid var(--border);padding-left:4px;">
+"##,
+                chevron = chevron_down,
+                root = root,
+                count_badge = count_badge,
+            ));
+            for (child_tag, child_count) in &kids {
+                let child_label = child_tag.find('/').map(|s| &child_tag[s + 1..]).unwrap_or(child_tag);
+                html.push_str(&format!(
+                    r##"    <button data-tag="{child_tag}"
+            onclick="notesSetActiveTag(this.dataset.tag)"
+            style="width:100%;text-align:left;padding:3px 6px;font-size:11px;color:var(--text-muted);background:transparent;border:none;cursor:pointer;display:flex;align-items:center;gap:4px;border-radius:4px;"
+            onmouseenter="this.style.background='var(--bg-hover)';this.style.color='var(--text-primary)'"
+            onmouseleave="this.style.background='transparent';this.style.color='var(--text-muted)'"
+            ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
+            ondragleave="this.style.background='transparent'"
+            ondrop="this.style.background='transparent';notesDrop(event,this.dataset.tag)"
+            hx-get="/api/notes?tag={child_tag_enc}" hx-target="#notes-grid" hx-swap="innerHTML">
+      <span style="color:var(--accent);opacity:0.5;font-size:10px;flex-shrink:0;">›</span>
+      <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{child_label}</span>
+      <span style="font-size:9px;color:var(--text-muted);opacity:0.7;flex-shrink:0;">{child_count}</span>
+    </button>
+"##,
+                    child_tag = child_tag,
+                    child_tag_enc = child_tag.replace('/', "%2F"),
+                    child_label = child_label,
+                    child_count = child_count,
+                ));
+            }
+            html.push_str("  </div>\n</div>\n");
+        } else {
+            html.push_str(&format!(
+                r##"<div style="margin:0 6px 4px;">
+  <button data-tag="{root}"
+          onclick="notesSetActiveTag(this.dataset.tag)"
+          hx-get="/api/notes?tag={root}" hx-target="#notes-grid" hx-swap="innerHTML"
+          style="width:100%;text-align:left;background:var(--bg-elevated);border:none;cursor:pointer;padding:6px 9px;border-radius:6px;display:flex;align-items:center;gap:5px;border-left:2px solid var(--accent);"
+          onmouseenter="this.style.background='var(--bg-hover)'"
+          onmouseleave="this.style.background='var(--bg-elevated)'"
+          ondragover="event.preventDefault();this.style.background='var(--bg-hover)'"
+          ondragleave="this.style.background='var(--bg-elevated)'"
+          ondrop="this.style.background='var(--bg-elevated)';notesDrop(event,this.dataset.tag)">
+    <span style="color:var(--accent);font-size:11px;font-weight:700;flex-shrink:0;">#</span>
+    <span style="font-size:12px;font-weight:600;color:var(--text-primary);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{root}</span>
+    {count_badge}
+  </button>
+</div>
+"##,
+                root = root,
+                count_badge = count_badge,
+            ));
+        }
+    }
+    html
+}
+
 // ── Query/body params ─────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct ListQuery {
     #[serde(default)]
     pub q: String,
+    #[serde(default)]
+    pub tag: String,
     #[serde(default = "default_limit")]
     pub limit: i64,
     #[serde(default)]
@@ -240,20 +512,43 @@ pub async fn list_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ListQuery>,
 ) -> impl IntoResponse {
+    // Detect #tag prefix in free-text search — route to tag filter instead of FTS5
+    let tag_from_q: Option<String> = if params.q.starts_with('#') {
+        let t = params.q[1..].trim().to_lowercase();
+        if !t.is_empty() { Some(t) } else { None }
+    } else {
+        None
+    };
+    // Effective tag: explicit ?tag= param wins, else derived from #prefix in q
+    let effective_tag = if !params.tag.is_empty() {
+        Some(params.tag.as_str())
+    } else {
+        tag_from_q.as_deref()
+    };
+
     // Fetch one extra row to detect whether a next page exists
     let fetch_limit = params.limit + 1;
-    let mut rows: Vec<(String, String, String, i64, i64)> = if params.q.is_empty() {
+    let browsing = params.q.is_empty() && effective_tag.is_none();
+    let mut rows: Vec<(String, String, String, i64, i64)> = if let Some(tag) = effective_tag {
+        // Tag filter: exact match OR any tag whose last segment matches (e.g. #rod → work/rod).
+        // GROUP BY deduplicates notes matching multiple tags; MIN(t.tag) orders by tree path.
+        let like_pattern = format!("%/{}", tag);
         sqlx::query_as(
-            "SELECT id, title, content, pinned, updated_at FROM notes
-             ORDER BY pinned DESC, updated_at DESC LIMIT ? OFFSET ?",
+            "SELECT n.id, n.title, n.content, n.pinned, n.updated_at
+             FROM notes n
+             JOIN note_tags t ON t.note_id = n.id
+             WHERE t.tag = ? OR t.tag LIKE ?
+             GROUP BY n.id
+             ORDER BY n.pinned DESC, MIN(t.tag), n.updated_at DESC
+             LIMIT 200",
         )
-        .bind(fetch_limit)
-        .bind(params.offset)
+        .bind(tag)
+        .bind(&like_pattern)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
-    } else {
-        // FTS5 search returns all matches — no pagination when filtering
+    } else if !params.q.is_empty() {
+        // FTS5 full-text search
         sqlx::query_as(
             "SELECT n.id, n.title, n.content, n.pinned, n.updated_at
              FROM notes n
@@ -266,9 +561,19 @@ pub async fn list_handler(
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
+    } else {
+        sqlx::query_as(
+            "SELECT id, title, content, pinned, updated_at FROM notes
+             ORDER BY pinned DESC, updated_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(fetch_limit)
+        .bind(params.offset)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
     };
 
-    let has_more = rows.len() > params.limit as usize && params.q.is_empty();
+    let has_more = rows.len() > params.limit as usize && browsing;
     rows.truncate(params.limit as usize);
     let next_offset = params.offset + params.limit;
 
@@ -302,6 +607,7 @@ pub async fn create_handler(
 
     match result {
         Ok(_) => {
+            sync_note_tags(&state.db, &id, &body.title, &body.content).await;
             state.event_bus.publish(Event::NoteCreated {
                 id: id.clone(),
                 title: body.title.clone(),
@@ -363,6 +669,10 @@ pub async fn update_handler(
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
+    // Track whether title or content changed — needed to decide if tag sync is required
+    let title_changed = body.title.is_some();
+    let content_changed = body.content.is_some();
+
     // Build SET clause dynamically — raw query (no macros), with comment per CLAUDE.md.
     // This is the one place dynamic SQL is used; fields are bound parameters, not interpolated.
     let mut set_parts = vec!["updated_at = ?"];
@@ -409,6 +719,19 @@ pub async fn update_handler(
 
     match q.execute(&state.db).await {
         Ok(_) => {
+            if title_changed || content_changed {
+                // Fetch the post-update values so tags are always in sync with actual DB state
+                if let Some((t, c)) = sqlx::query_as::<_, (String, String)>(
+                    "SELECT title, content FROM notes WHERE id = ?",
+                )
+                .bind(&id)
+                .fetch_optional(&state.db)
+                .await
+                .unwrap_or(None)
+                {
+                    sync_note_tags(&state.db, &id, &t, &c).await;
+                }
+            }
             state.event_bus.publish(Event::NoteUpdated { id });
             Json(json!({ "ok": true }))
         }
@@ -457,17 +780,148 @@ pub async fn pin_toggle_handler(
     }
 }
 
+/// Replaces or removes `#from_tag` (and `#from_tag/child`) tokens in `text`.
+/// Returns `(new_text, was_found)`. Uses the same word-boundary rule as `extract_tags`.
+fn replace_tag_in_text(text: &str, from_tag: &str, to_tag: &str) -> (String, bool) {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut prev_ws = true;
+    let mut found = false;
+
+    while let Some(ch) = chars.next() {
+        if ch == '#' && prev_ws {
+            if let Some(&next) = chars.peek() {
+                if next.is_ascii_alphabetic() {
+                    let mut tag_buf = String::new();
+                    while let Some(&c) = chars.peek() {
+                        if c.is_ascii_alphanumeric() || c == '_' || c == '/' {
+                            tag_buf.push(chars.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    let tag_lower = tag_buf.to_lowercase();
+                    let child_suffix = if tag_lower == from_tag {
+                        Some(String::new())
+                    } else if from_tag.is_empty() {
+                        None // empty from_tag means "add" mode, not replace
+                    } else if tag_lower.starts_with(&format!("{}/", from_tag)) {
+                        Some(tag_lower[from_tag.len()..].to_string()) // includes leading '/'
+                    } else {
+                        None
+                    };
+
+                    if let Some(suffix) = child_suffix {
+                        found = true;
+                        let trimmed_len = result.trim_end_matches(' ').len();
+                        result.truncate(trimmed_len);
+                        if !to_tag.is_empty() {
+                            if !result.is_empty() { result.push(' '); }
+                            result.push('#');
+                            result.push_str(to_tag);
+                            result.push_str(&suffix); // e.g. "/child" or ""
+                        }
+                        prev_ws = true;
+                        continue;
+                    } else {
+                        result.push('#');
+                        result.push_str(&tag_buf);
+                        prev_ws = false;
+                        continue;
+                    }
+                }
+            }
+        }
+        prev_ws = ch.is_whitespace();
+        result.push(ch);
+    }
+    (result.trim().to_string(), found)
+}
+
+#[derive(Deserialize)]
+pub struct RetagBody {
+    pub from_tag: String,
+    pub to_tag: String,
+}
+
+pub async fn retag_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<RetagBody>,
+) -> impl IntoResponse {
+    let row: Option<(String, String)> =
+        sqlx::query_as("SELECT title, content FROM notes WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+
+    let (title, content) = match row {
+        Some(r) => r,
+        None => return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" }))).into_response(),
+    };
+
+    let from = body.from_tag.to_lowercase();
+    let to = body.to_tag.to_lowercase();
+
+    let (mut new_title, found_title) = replace_tag_in_text(&title, &from, &to);
+    let (new_content, found_content) = replace_tag_in_text(&content, &from, &to);
+
+    // If the tag wasn't found anywhere and we have a destination, append to title
+    if !found_title && !found_content && !to.is_empty() {
+        if new_title.is_empty() {
+            new_title = format!("#{to}");
+        } else {
+            new_title = format!("{new_title} #{to}");
+        }
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    sqlx::query(
+        "UPDATE notes SET title = ?, content = ?, content_fts = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(&new_title)
+    .bind(&new_content)
+    .bind(&new_content)
+    .bind(now)
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .ok();
+
+    sync_note_tags(&state.db, &id, &new_title, &new_content).await;
+    state.event_bus.publish(Event::NoteUpdated { id });
+    Json(json!({ "ok": true })).into_response()
+}
+
+pub async fn tags_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT tag, COUNT(*) AS count FROM note_tags GROUP BY tag ORDER BY tag",
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    Html(render_tag_tree(&rows))
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/notes", get(list_handler).post(create_handler))
+        // /api/notes/tags must be declared before /api/notes/:id (matchit static > param)
+        .route("/api/notes/tags", get(tags_handler))
         .route(
             "/api/notes/:id",
             get(get_handler).put(update_handler).delete(delete_handler),
         )
         .route("/api/notes/:id/content", get(get_content_handler))
         .route("/api/notes/:id/pin", post(pin_toggle_handler))
+        .route("/api/notes/:id/retag", put(retag_handler))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -710,6 +1164,100 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(row.0, 1);
+    }
+
+    // ── Strip inline tags unit tests ───────────────────────────────────────
+
+    #[test]
+    fn strip_tags_from_title() {
+        assert_eq!(strip_inline_tags("List of pendings #newfolder"), "List of pendings");
+        assert_eq!(strip_inline_tags("#work project notes"), "project notes");
+        assert_eq!(strip_inline_tags("clean title"), "clean title");
+        assert_eq!(strip_inline_tags("Meeting #work/client recap"), "Meeting recap");
+    }
+
+    // ── Tag extraction unit tests ──────────────────────────────────────────
+
+    #[test]
+    fn extract_tags_basic() {
+        let tags = extract_tags("Hello #world and #rust are great");
+        assert!(tags.contains(&"world".to_string()));
+        assert!(tags.contains(&"rust".to_string()));
+        assert_eq!(tags.len(), 2);
+    }
+
+    #[test]
+    fn extract_tags_nested() {
+        let tags = extract_tags("Note about #work/project/alpha tasks");
+        assert!(tags.contains(&"work/project/alpha".to_string()));
+    }
+
+    #[test]
+    fn extract_tags_dedup() {
+        let tags = extract_tags("#rust is great, #rust is awesome");
+        assert_eq!(tags.iter().filter(|t| t.as_str() == "rust").count(), 1);
+    }
+
+    #[test]
+    fn extract_tags_must_start_with_letter() {
+        let tags = extract_tags("Number #123 is not a tag, but #valid is");
+        assert!(!tags.contains(&"123".to_string()));
+        assert!(tags.contains(&"valid".to_string()));
+    }
+
+    #[test]
+    fn extract_tags_ignores_markdown_headings() {
+        // ##Heading and ###Heading must NOT produce tags (no whitespace before `#`)
+        let tags = extract_tags("##Subtítulo\n### Heading Three\n#valid tag here");
+        assert!(!tags.iter().any(|t| t.starts_with("subt")), "##Heading should not produce a tag");
+        assert!(!tags.contains(&"heading".to_string()), "### Heading should not produce a tag");
+        assert!(tags.contains(&"valid".to_string()), "#valid (preceded by whitespace/newline) should be a tag");
+    }
+
+    // ── Tag route integration tests ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn tag_filter_route() {
+        let state = make_test_state().await;
+        let now = 1000i64;
+        // Insert note with #work tag
+        sqlx::query(
+            "INSERT INTO notes (id, title, content, content_fts, tags, created_at, updated_at)
+             VALUES ('n-work', 'Work Note', 'content #work task', 'content #work task', '[]', ?, ?)",
+        )
+        .bind(now).bind(now).execute(&state.db).await.unwrap();
+        sync_note_tags(&state.db, "n-work", "", "content #work task").await;
+
+        // Insert note WITHOUT #work tag
+        sqlx::query(
+            "INSERT INTO notes (id, title, content, content_fts, tags, created_at, updated_at)
+             VALUES ('n-other', 'Other', 'no tags here', 'no tags here', '[]', ?, ?)",
+        )
+        .bind(now).bind(now).execute(&state.db).await.unwrap();
+
+        let (status, body) = get(test_app(state), "/api/notes?tag=work").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("note-n-work"), "tagged note should appear");
+        assert!(!body.contains("note-n-other"), "untagged note should be excluded");
+    }
+
+    #[tokio::test]
+    async fn tags_handler_returns_tree() {
+        let state = make_test_state().await;
+        let now = 1000i64;
+        sqlx::query(
+            "INSERT INTO notes (id, title, content, content_fts, tags, created_at, updated_at)
+             VALUES ('nt1', 'T1', '#alpha #beta/sub', '#alpha #beta/sub', '[]', ?, ?)",
+        )
+        .bind(now).bind(now).execute(&state.db).await.unwrap();
+        sync_note_tags(&state.db, "nt1", "", "#alpha #beta/sub").await;
+
+        let (status, body) = get(test_app(state), "/api/notes/tags").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("alpha"), "root tag alpha should appear");
+        assert!(body.contains("beta"), "root tag beta should appear");
+        assert!(body.contains("sub"), "child tag sub should appear");
+        assert!(body.contains("All Notes"), "reset button should appear");
     }
 
     #[tokio::test]
