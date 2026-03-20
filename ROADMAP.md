@@ -158,15 +158,16 @@
 - [ ] **Translation model index 404** — Models panel returns `HTTP Error 404: Not Found` when fetching the argostranslate model index. Root cause: argostranslate index URL changed or is down; also blocked by Python 3.14 incompatibility (see D-036). Fix: replace argostranslate with ctranslate2 + Opus-MT (Phase 4.6 decision, deferred). Pipeline actions using `translate` will fail until this is resolved.
 
 ### Remaining backlog items (ordered by impact)
-- [ ] **Notes: grid card UI** — replace narrow sidebar list with responsive card grid (auto-fill columns, min 200px); search bar pinned to bottom; click card → modal preview with full text + copy-on-click; Edit button in modal opens inline editor; card shows title + 3-line preview + timestamp. *(in progress)*
+- [x] **Notes: grid card UI** — responsive card grid (auto-fill columns, min 210px); search bar pinned to bottom; click card → modal preview with copy-on-click; Edit opens inline editor. ✓
+- [x] **Clipboard: lazy load content** — paginate clipboard list (20/page); IntersectionObserver sentinel triggers next page; avoids DOM bloat. ✓
+- [x] **Notes: lazy load content** — paginate notes grid (24/page); IntersectionObserver sentinel; search bypasses pagination (200 max). ✓
+- [ ] **Clipboard + Notes: full content in DOM attributes (NEXT SESSION PRIORITY)** — each card currently embeds the full copied/note content twice in the DOM (`data-*` attribute + `<pre>` body). Causes sluggish scroll + hover in WebKitGTK with large entries. Fix: (1) truncate to 2KB attr / 300 char preview server-side, add `data-clip-truncated` flag; (2) add `GET /api/clipboard/:id` and `GET /api/notes/:id/content` routes; modal fetches on demand when truncated; (3) DOM sliding-window virtualization if needed. Files: `clipboard.rs`, `notes.rs`, both index.html modal handlers.
 - [ ] **Notes: inline #tag extraction** — `#tag` tokens parsed at save time → `tags` table → clickable chips in notes list → filter by tag. Touches: `notes.rs`, SQLite migration, notes list UI, search.
 - [ ] **Quick Actions: opt-in/opt-out for auto-triggered pipelines** — small non-blocking toast bottom-right when a pipeline trigger fires; Accept / Dismiss; auto-dismissed after 8s; "Don't ask again for this pipeline" checkbox. Touches: `event_bus.rs`, `quick_actions.rs`, result cards (OCR/Voice).
 - [ ] **Quick Actions: pipeline tree visualizer** — read-only collapsible tree view of the pipeline graph (nodes + edges) as an alternative to the canvas; useful for large pipelines or keyboard-only users. Toggle button in canvas toolbar.
 - [ ] **Command palette learns** — `command_history` table with access counts and last-used timestamps; Ctrl+K surfaces most-used items first.
 - [ ] **Voice: live recording waveform** — Web Audio API `AnalyserNode` + canvas waveform while mic is active. Frontend only.
 - [ ] **Clipboard: pin entries + content-type icons** — `is_pinned` column, pinned items float to top; content-type badge (URL, image, code) per item.
-- [ ] **Clipboard: lazy load content** — paginate clipboard list (20 items at a time); `load more` trigger at bottom of list; avoids DOM bloat on large clipboard histories.
-- [ ] **Notes: lazy load content** — paginate notes grid (24 cards at a time); infinite scroll or `load more` button; avoid embedding full content in data attributes when note count is large.
 - [ ] **Name sanity check (folders + pipelines)** — strip or reject invalid characters (`/`, `\`, `<`, `>`, `"`, null bytes) from pipeline and folder name inputs on both client (input validation) and server (trim + sanitise before INSERT/UPDATE). Currently `/` can be stored, which breaks YAML filenames and future file-backed features.
 - [ ] **Video: multi-track NLE** — audio + video tracks, trim handles, concatenate clips. Major feature; deferred to end of sprint.
 

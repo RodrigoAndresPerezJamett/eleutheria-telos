@@ -7,6 +7,48 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7: Notes + Clipboard card UI, lazy load, hover performance
+
+### Completed
+- **`src-tauri/src/tools/notes.rs`** — full rewrite of card rendering + pagination:
+  - `const PAGE: i64 = 24` — infinite scroll page size
+  - `render_note_card`: `data-note-id`, `data-note-title`, `data-note-content` (HTML-escaped); `onclick="notesOpenPreview(this)"`; hover via `onmouseenter/leave` toggling `outline` + `display:none/inline-flex` on `.note-action` buttons (no CSS transitions); `max-height` replaces `-webkit-line-clamp`
+  - `render_note_list`: appends IntersectionObserver sentinel div when `has_more`; empty state spans full grid width
+  - `list_handler`: fetches `limit+1` rows; search bypasses pagination (200 max); computes `has_more` and `next_offset`
+- **`ui/tools/notes/index.html`** — full rewrite:
+  - Two modes: `'grid'` and `'editor'` (Alpine `mode` state)
+  - Grid: `repeat(auto-fill, minmax(210px, 1fr))`; `hx-trigger="load, noteUpdated from:body"`; search bar pinned to bottom
+  - Editor: `← Notes` back button + `#note-editor-inner`; loaded via fetch + innerHTML + script re-execution + `Alpine.initTree()` + `lucide.createIcons()`
+  - Preview modal: `position:absolute` overlay; `@click.self` / `@keydown.escape.window` close; Copy + Edit buttons
+  - `notesOpenPreview(el)`: dispatches `notes:preview` custom event (decouples server HTML from Alpine scope)
+  - `createNote()`: POST → parse `data-note-id` from response body HTML (not headers — CORS doesn't expose custom headers cross-origin); wrapped in try/catch; `openEditor(id)` called on success
+- **`src-tauri/src/tools/clipboard.rs`** — full rewrite of card rendering + pagination:
+  - `const PAGE: i64 = 20`
+  - `render_entry_card`: same hover pattern as notes (outline + display toggle, no transitions); `max-height:5.5em` replaces `-webkit-line-clamp:4`
+  - `render_list`: sentinel div for infinite scroll; search bypasses pagination
+- **`ui/tools/clipboard/index.html`** — full rewrite:
+  - Removed `hx-trigger="every 3s"` polling — was root cause of scroll momentum interruption in WebKitGTK (full innerHTML swap breaks scroll state)
+  - `hx-trigger="load, clipboardRefresh from:body"` + `visibilitychange` listener fires `clipboardRefresh` when window regains focus
+  - Preview modal: `position:fixed`; `clipboardOpenPreview(el)` dispatches `clipboard:preview` event
+- **`4d4b227`** — hover fix commit: instant `outline` color + `display:none/inline-flex` toggle replaces `box-shadow` + `opacity` CSS transitions
+
+### Bugs fixed
+- `createNote()` silently did nothing — `res.headers.get('X-Note-Id')` returns `null` because CORS doesn't expose custom headers. Fixed: parse `data-note-id` from response body HTML via regex.
+- Clipboard slow scroll — `every 3s` full innerHTML swap interrupts WebKitGTK scroll momentum. Fixed: removed polling, use `visibilitychange` refresh.
+- Slow hover on cards — `box-shadow` + `transition` + `opacity` on child elements forces WebKitGTK repaint on every hover. Fixed: instant `outline` + `display` toggle.
+
+### Known issue (NOT YET FIXED — next session priority)
+- **Clipboard (and Notes) still feel sluggish** — root cause identified: each card embeds full content **twice** in the DOM: once in `data-clip-content="..."` attribute and once in the `<pre>` body. Large clipboard entries (code, articles) = 100+ KB per card. WebKitGTK parses all of it even when hidden. Fix plan:
+  1. Truncate `data-clip-content` to 2 KB and `<pre>` preview to 300 chars server-side; add `data-clip-truncated` flag
+  2. Add `GET /api/clipboard/:id` route; modal fetches full content on demand when truncated
+  3. DOM virtualization (sliding window) if 1+2 aren't enough
+  - Files: `clipboard.rs` `render_entry_card`, `notes.rs` `render_note_card`, new `get_entry_handler`, `clipboard/index.html` modal, `notes/index.html` modal
+
+### Next session (start here)
+Fix the content-in-DOM-attribute performance issue described above. Start with Step 1 (pure Rust, no API change needed). Test with a large clipboard entry before and after.
+
+---
+
 ## [2026-03-20] — Phase 4.7 P1/P2/P3: pipeline folders + YAML export/import
 
 ### Completed
