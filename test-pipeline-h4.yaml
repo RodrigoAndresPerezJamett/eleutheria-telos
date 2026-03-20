@@ -1,0 +1,120 @@
+# H4 Test Pipeline — "OCR → Condition → Translate or Note"
+#
+# Graph layout:
+#
+#   [Trigger: Manual]
+#        |
+#        v (default)
+#   [Action: read_file  (reads ./test-input.txt)]
+#        |
+#        v (default)
+#   [Condition: not_empty]
+#       / \
+#  true/   \false
+#    /       \
+#   v         v
+# [Action:  [Action: save_note
+#  translate  title="Empty file"]
+#  to=es]
+#   |
+#   v (default)
+# [Action: save_note
+#  title="Translation result"]
+#   |
+#   v (default)
+# [End]         [End]
+#
+# To test:
+#   1. Import this file via Quick Actions → Import button
+#   2. Open the pipeline — you should see 7 nodes laid out in the canvas
+#   3. Create test-input.txt in any folder with some English text
+#   4. Update the read_file node config to point to your file
+#   5. Click Run — the condition branches on whether text is non-empty
+#   6. Try with an empty file to verify the false branch fires
+
+name: "H4 Test — Condition Branch"
+trigger: "Manual"
+nodes:
+  - id: "trigger-1"
+    type: "trigger"
+    config: {"trigger": "Manual"}
+    pos_x: 60
+    pos_y: 300
+
+  - id: "action-read"
+    type: "action"
+    config: {"tool": "read_file", "params": {"path": "/tmp/test-input.txt"}}
+    pos_x: 300
+    pos_y: 300
+
+  - id: "cond-empty"
+    type: "condition"
+    config: {"condition": "not_empty", "value": ""}
+    pos_x: 540
+    pos_y: 300
+
+  - id: "action-translate"
+    type: "action"
+    config: {"tool": "translate", "params": {"from": "auto", "to": "es"}}
+    pos_x: 780
+    pos_y: 180
+
+  - id: "action-save-translated"
+    type: "action"
+    config: {"tool": "save_note", "params": {"title": "Translated result", "tag": "h4-test"}}
+    pos_x: 1020
+    pos_y: 180
+
+  - id: "action-save-empty"
+    type: "action"
+    config: {"tool": "save_note", "params": {"title": "Empty file — nothing to translate", "tag": "h4-test"}}
+    pos_x: 780
+    pos_y: 420
+
+  - id: "end-1"
+    type: "end"
+    config: {}
+    pos_x: 1260
+    pos_y: 180
+
+  - id: "end-2"
+    type: "end"
+    config: {}
+    pos_x: 1020
+    pos_y: 420
+
+edges:
+  - id: "e1"
+    source: "trigger-1"
+    target: "action-read"
+    label: "default"
+
+  - id: "e2"
+    source: "action-read"
+    target: "cond-empty"
+    label: "default"
+
+  - id: "e3"
+    source: "cond-empty"
+    target: "action-translate"
+    label: "true"
+
+  - id: "e4"
+    source: "cond-empty"
+    target: "action-save-empty"
+    label: "false"
+
+  - id: "e5"
+    source: "action-translate"
+    target: "action-save-translated"
+    label: "default"
+
+  - id: "e6"
+    source: "action-save-translated"
+    target: "end-1"
+    label: "default"
+
+  - id: "e7"
+    source: "action-save-empty"
+    target: "end-2"
+    label: "default"

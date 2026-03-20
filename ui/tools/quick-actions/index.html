@@ -12,13 +12,22 @@
     <!-- ── Left: pipeline list ───────────────────────────────────────────── -->
     <div style="width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;">
 
-      <!-- Create form -->
-      <div style="padding:12px;border-bottom:1px solid var(--border);"
-           x-data="{open:false,name:'',trigger:'{&quot;type&quot;:&quot;Manual&quot;}'}"
+      <!-- Create pipeline / folder controls -->
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border);"
+           x-data="{open:false,name:'',trigger:'{&quot;type&quot;:&quot;Manual&quot;}',folderOpen:false,folderName:''}"
            x-init="if(window.__qaPreTrigger){trigger=JSON.stringify({type:window.__qaPreTrigger});open=true;delete window.__qaPreTrigger;}">
-        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;" @click="open=!open">
-          + New Pipeline
-        </button>
+        <!-- Action row -->
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center;font-size:11px;" @click="open=!open;folderOpen=false">
+            + Pipeline
+          </button>
+          <button class="btn btn-secondary btn-sm" style="flex:1;justify-content:center;font-size:11px;" @click="folderOpen=!folderOpen;open=false"
+                  title="New folder">
+            <i data-lucide="folder-plus" style="width:12px;height:12px;margin-right:3px;"></i>Folder
+          </button>
+        </div>
+
+        <!-- New pipeline form -->
         <form x-show="open" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"
               hx-post="/api/pipelines" hx-target="#pipeline-list" hx-swap="outerHTML"
               @htmx:after-request="open=false;name=''">
@@ -32,6 +41,19 @@
           </select>
           <button type="submit" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">Create</button>
         </form>
+
+        <!-- New folder form -->
+        <form x-show="folderOpen" style="margin-top:8px;display:flex;gap:6px;"
+              hx-post="/api/pipeline-folders" hx-target="#pipeline-list" hx-swap="outerHTML"
+              @htmx:after-request="folderOpen=false;folderName=''">
+          <input x-model="folderName" name="name" type="text" placeholder="Folder name" required
+                 class="input" style="font-size:12px;padding:5px 8px;flex:1;" />
+          <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;">Add</button>
+        </form>
+
+        <!-- Import YAML -->
+        <input type="file" id="qa-import-input" accept=".yaml,.yml" style="display:none;"
+               @change="importYaml($event)" />
       </div>
 
       <!-- Pipeline list (HTMX) -->
@@ -75,6 +97,13 @@
                     @click="undo()" :disabled="!undoStack.length" title="Undo (Ctrl+Z)">↩</button>
             <button class="btn btn-ghost btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:14px;"
                     @click="redo()" :disabled="!redoStack.length" title="Redo (Ctrl+Shift+Z)">↪</button>
+            <div style="width:1px;height:18px;background:var(--border);margin:0 2px;"></div>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;" @click="exportYaml()" title="Export pipeline as YAML">
+              <i data-lucide="download" style="width:12px;height:12px;margin-right:3px;"></i>Export
+            </button>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;" @click="document.getElementById('qa-import-input').click()" title="Import pipeline from YAML">
+              <i data-lucide="upload" style="width:12px;height:12px;margin-right:3px;"></i>Import
+            </button>
             <div style="width:1px;height:18px;background:var(--border);margin:0 2px;"></div>
             <button x-show="selectedEdge" class="btn btn-sm"
                     style="font-size:11px;color:var(--destructive);border-color:var(--destructive);"
@@ -1173,6 +1202,61 @@
             this.configDraft = { ...this.configDraft, [key]: result[0] };
           }
         } catch(e) { console.warn('pickPath cancelled or failed:', e); }
+      },
+
+      // ── Export / Import ──────────────────────────────────────────────────
+      async exportYaml() {
+        if (!this.pipelineId) return;
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          const res = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/export', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (!res.ok) { alert('Export failed: ' + await res.text()); return; }
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href     = url;
+          a.download = (this.pipelineName || 'pipeline') + '.yaml';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch(e) { alert('Export error: ' + e.message); }
+      },
+
+      async importYaml(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        event.target.value = ''; // reset so same file can be re-imported
+        const yaml  = await file.text();
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          const res = await fetch('http://127.0.0.1:' + port + '/api/pipelines/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ yaml })
+          });
+          const data = await res.json();
+          if (data.error) { alert('Import failed: ' + data.error); return; }
+          // Refresh pipeline list and open the imported pipeline
+          const listRes = await fetch('http://127.0.0.1:' + port + '/api/pipelines', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          const listHtml = await listRes.text();
+          const plist = document.getElementById('pipeline-list');
+          if (plist) { plist.outerHTML = listHtml; htmx.process(document.getElementById('pipeline-list') || document.body); }
+          // Small delay to let Lucide re-init folder icons
+          await new Promise(r => setTimeout(r, 60));
+          if (window.lucide) lucide.createIcons();
+          // Open the imported pipeline
+          const trigLabel = data.trigger || 'Manual';
+          this.pipelineId   = data.id;
+          this.pipelineName = data.name;
+          this.triggerLabel = trigLabel;
+          this.isManual     = true;
+          await this.loadGraph();
+        } catch(e) { alert('Import error: ' + e.message); }
       },
 
       // ── Run ─────────────────────────────────────────────────────────────

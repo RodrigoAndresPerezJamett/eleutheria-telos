@@ -38,6 +38,7 @@ tower-http = { version = "0.5", features = ["cors"] }              # Used for: C
 reqwest    = { version = "0.12", features = ["stream", "json"] }   # Used for: streaming model downloads + JSON response parsing (MCP binary) | pinned: 2026-03-18
 base64     = "0.22"                                                # Used for: decode canvas PNG dataURL for photo export | pinned: 2026-03-19
 tokio-stream = { version = "0.1" }                                 # Used for: ReceiverStream wrapping mpsc channel for MCP SSE transport | pinned: 2026-03-19
+serde_yaml = "0.9"                                                 # Used for: pipeline YAML export/import (P2/P3) | pinned: 2026-03-20
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }                    # Used for: ServiceExt::oneshot() in route integration tests | pinned: 2026-03-18

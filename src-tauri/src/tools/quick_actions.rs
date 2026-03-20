@@ -14,10 +14,12 @@
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     extract::{Path, State},
-    response::{Html, IntoResponse},
+    http::{header, StatusCode},
+    response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
-    Form, Router,
+    Form, Json, Router,
 };
 use serde::Deserialize;
 
@@ -123,6 +125,53 @@ struct PipelineRow {
     enabled: i64,
     #[allow(dead_code)]
     created_at: i64,
+    folder_id: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct FolderRow {
+    id: String,
+    name: String,
+    #[allow(dead_code)]
+    sort_order: i64,
+}
+
+// ── YAML structs (export / import) ────────────────────────────────────────────
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PipelineYaml {
+    name: String,
+    trigger: String,
+    #[serde(default)]
+    nodes: Vec<NodeYaml>,
+    #[serde(default)]
+    edges: Vec<EdgeYaml>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct NodeYaml {
+    id: String,
+    #[serde(rename = "type")]
+    node_type: String,
+    #[serde(default)]
+    config: serde_json::Value,
+    #[serde(default)]
+    pos_x: f64,
+    #[serde(default)]
+    pos_y: f64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct EdgeYaml {
+    id: String,
+    source: String,
+    target: String,
+    #[serde(default = "default_edge_label")]
+    label: String,
+}
+
+fn default_edge_label() -> String {
+    "default".to_string()
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -137,70 +186,145 @@ struct StepRow {
 
 // ── HTML renderers ────────────────────────────────────────────────────────────
 
-fn render_pipeline_list(pipelines: &[PipelineRow]) -> String {
-    let items: String = pipelines
-        .iter()
-        .map(|p| {
-            let name = html_escape(&p.name);
-            let tlabel = trigger_label(&p.trigger);
-            let enabled_dot = if p.enabled != 0 {
-                r#"<span style="width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0;" title="Enabled"></span>"#
-            } else {
-                r#"<span style="width:7px;height:7px;border-radius:50%;background:var(--border);flex-shrink:0;" title="Disabled"></span>"#
-            };
-            let is_manual = p.trigger.contains("Manual");
-            let run_btn = if is_manual {
-                format!(
-                    r##"<button class="btn btn-ghost btn-sm"
-                             hx-post="/api/pipelines/{id}/run"
-                             hx-target="#qa-run-result"
-                             hx-swap="innerHTML"
-                             title="Run pipeline">
-                      <i data-lucide="play" style="width:12px;height:12px;"></i>
-                    </button>"##,
-                    id = p.id
-                )
-            } else {
-                String::new()
-            };
-            format!(
-                r##"<li style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-elevated);border-radius:var(--radius-md);margin-bottom:4px;cursor:pointer;" class="group">
-  {enabled_dot}
-  <div style="flex:1;min-width:0;cursor:pointer;"
-       onclick="qaLoadPipeline('{id}', '{name_js}', '{tlabel}')">
-    <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
-    <p style="font-size:11px;color:var(--text-muted);margin:2px 0 0;">{tlabel}</p>
-  </div>
-  {run_btn}
-  <button class="btn btn-danger btn-sm"
-          style="opacity:0;transition:opacity 150ms;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0"
-          hx-delete="/api/pipelines/{id}"
-          hx-target="#pipeline-list"
-          hx-swap="outerHTML"
-          hx-confirm="Delete pipeline «{name}»?">✕</button>
-</li>"##,
-                id = p.id,
-                name = name,
-                name_js = name.replace('\'', "\\'"),
-                tlabel = tlabel,
-                enabled_dot = enabled_dot,
-                run_btn = run_btn,
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+/// Render a single pipeline `<li>` row, with a folder `<select>` for moving.
+fn render_pipeline_item(p: &PipelineRow, folders: &[FolderRow]) -> String {
+    let name = html_escape(&p.name);
+    let name_js = name.replace('\'', "\\'");
+    let tlabel = trigger_label(&p.trigger);
+    let dot_color = if p.enabled != 0 { "var(--success)" } else { "var(--border)" };
 
-    let empty = if pipelines.is_empty() {
-        r#"<p style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No pipelines yet — pick a template on the right or create one above.</p>"#
+    let run_btn = if p.trigger.contains("Manual") {
+        format!(
+            r##"<button class="btn btn-ghost btn-sm" style="padding:3px;opacity:0;transition:opacity 150ms;"
+                     onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0"
+                     hx-post="/api/pipelines/{id}/run" hx-target="#qa-run-result" hx-swap="innerHTML"
+                     title="Run pipeline">
+              <i data-lucide="play" style="width:11px;height:11px;"></i>
+            </button>"##,
+            id = p.id
+        )
     } else {
-        ""
+        String::new()
     };
 
+    // Folder <select> — shows on hover; on change, PUTs folder_id
+    let none_sel = if p.folder_id.is_none() { " selected" } else { "" };
+    let mut folder_opts = format!("<option value=''{none_sel}>No folder</option>", none_sel = none_sel);
+    for f in folders {
+        let sel = if p.folder_id.as_deref() == Some(f.id.as_str()) { " selected" } else { "" };
+        folder_opts.push_str(&format!(
+            "<option value='{fid}'{sel}>{fname}</option>",
+            fid = f.id,
+            fname = html_escape(&f.name),
+            sel = sel
+        ));
+    }
+
     format!(
-        r#"<ul id="pipeline-list" style="list-style:none;margin:0;padding:0;">{items}{empty}</ul>"#,
-        items = items,
-        empty = empty
+        r##"<li style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:var(--radius-md);margin-bottom:3px;"
+     onmouseenter="this.querySelectorAll('.qa-hover').forEach(e=>e.style.opacity='1')"
+     onmouseleave="this.querySelectorAll('.qa-hover').forEach(e=>e.style.opacity='0')">
+  <span style="width:7px;height:7px;border-radius:50%;background:{dot};flex-shrink:0;"></span>
+  <div style="flex:1;min-width:0;cursor:pointer;" onclick="qaLoadPipeline('{id}','{name_js}','{tlabel}')">
+    <p style="font-size:13px;font-weight:500;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:1px 0 0;">{tlabel}</p>
+  </div>
+  {run_btn}
+  <select name="folder_id" class="qa-hover"
+          style="font-size:10px;padding:2px 3px;border-radius:4px;border:1px solid var(--border);background:var(--bg-base);color:var(--text-muted);opacity:0;transition:opacity 150ms;max-width:72px;"
+          title="Move to folder"
+          hx-put="/api/pipelines/{id}/folder"
+          hx-target="#pipeline-list"
+          hx-swap="outerHTML"
+          hx-trigger="change">
+    {folder_opts}
+  </select>
+  <button class="qa-hover btn btn-ghost btn-sm"
+          style="padding:3px;opacity:0;transition:opacity 150ms;color:var(--destructive);"
+          hx-delete="/api/pipelines/{id}" hx-target="#pipeline-list" hx-swap="outerHTML"
+          hx-confirm="Delete pipeline «{name}»?" title="Delete">✕</button>
+</li>"##,
+        dot = dot_color,
+        id = p.id,
+        name = name,
+        name_js = name_js,
+        tlabel = tlabel,
+        run_btn = run_btn,
+        folder_opts = folder_opts
     )
+}
+
+fn render_pipeline_list(pipelines: &[PipelineRow], folders: &[FolderRow]) -> String {
+    // Group pipelines by folder
+    let mut by_folder: std::collections::HashMap<String, Vec<&PipelineRow>> = std::collections::HashMap::new();
+    let mut uncategorised: Vec<&PipelineRow> = Vec::new();
+    for p in pipelines {
+        match &p.folder_id {
+            Some(fid) => by_folder.entry(fid.clone()).or_default().push(p),
+            None => uncategorised.push(p),
+        }
+    }
+
+    let mut html = String::from(r#"<ul id="pipeline-list" style="list-style:none;margin:0;padding:0;">"#);
+
+    // Render folders (collapsible via <details>/<summary>)
+    for f in folders {
+        let fps = by_folder.get(&f.id).map(|v| v.as_slice()).unwrap_or(&[]);
+        let items: String = fps.iter().map(|p| render_pipeline_item(p, folders)).collect();
+        html.push_str(&format!(
+            r##"<li style="margin-bottom:2px;">
+  <details open style="margin:0;">
+    <summary style="display:flex;align-items:center;gap:5px;padding:6px 10px;cursor:pointer;list-style:none;border-radius:var(--radius-md);"
+             onmouseenter="this.style.background='var(--bg-elevated)'" onmouseleave="this.style.background='transparent'">
+      <i data-lucide="folder" style="width:12px;height:12px;color:var(--text-muted);flex-shrink:0;"></i>
+      <span style="flex:1;font-size:12px;font-weight:600;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{fname}</span>
+      <span style="font-size:10px;color:var(--text-muted);margin-right:4px;">{count}</span>
+      <button class="btn btn-ghost btn-sm" style="padding:2px 4px;font-size:10px;color:var(--text-muted);"
+              hx-delete="/api/pipeline-folders/{fid}"
+              hx-target="#pipeline-list" hx-swap="outerHTML"
+              hx-confirm="Delete folder «{fname_esc}»? Pipelines will become uncategorised."
+              title="Delete folder" onclick="event.stopPropagation()">✕</button>
+    </summary>
+    <ul style="list-style:none;margin:0;padding:0 0 0 10px;">{items}</ul>
+  </details>
+</li>"##,
+            fid = f.id,
+            fname = html_escape(&f.name),
+            fname_esc = html_escape(&f.name),
+            count = fps.len(),
+            items = items
+        ));
+    }
+
+    // Uncategorised pipelines
+    for p in &uncategorised {
+        html.push_str(&render_pipeline_item(p, folders));
+    }
+
+    if folders.is_empty() && uncategorised.is_empty() {
+        html.push_str(r#"<li style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No pipelines yet — pick a template or create one above.</li>"#);
+    }
+
+    html.push_str("</ul>");
+    html
+}
+
+async fn load_and_render_list(state: &Arc<AppState>) -> String {
+    let folders: Vec<FolderRow> = sqlx::query_as(
+        "SELECT id, name, sort_order FROM pipeline_folders ORDER BY sort_order ASC, name ASC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let pipelines: Vec<PipelineRow> = sqlx::query_as(
+        "SELECT id, name, trigger, enabled, created_at, folder_id FROM pipelines ORDER BY created_at ASC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    render_pipeline_list(&pipelines, &folders)
 }
 
 fn render_steps(pipeline_id: &str, steps: &[StepRow]) -> String {
@@ -585,12 +709,7 @@ async fn use_template_handler(
     }
 
     // Updated list (main swap target)
-    let pipelines: Vec<PipelineRow> =
-        sqlx::query_as("SELECT id, name, trigger, enabled, created_at FROM pipelines ORDER BY created_at ASC")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    let list_html = render_pipeline_list(&pipelines);
+    let list_html = load_and_render_list(&state).await;
 
     // Kept for legacy compatibility; graph-based pipelines no longer use steps
     let _steps: Vec<StepRow> = sqlx::query_as(
@@ -634,6 +753,21 @@ struct UpdateParams {
 }
 
 #[derive(Deserialize)]
+struct CreateFolderParams {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct MoveFolderParams {
+    folder_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ImportParams {
+    yaml: String,
+}
+
+#[derive(Deserialize)]
 struct AddStepParams {
     tool: String,
     config: Option<String>,
@@ -652,12 +786,7 @@ struct RunParams {
 // ── CRUD handlers ─────────────────────────────────────────────────────────────
 
 async fn list_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let pipelines: Vec<PipelineRow> =
-        sqlx::query_as("SELECT id, name, trigger, enabled, created_at FROM pipelines ORDER BY created_at ASC")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    Html(render_pipeline_list(&pipelines))
+    Html(load_and_render_list(&state).await)
 }
 
 async fn create_handler(
@@ -679,13 +808,7 @@ async fn create_handler(
     .bind(now)
     .execute(&state.db)
     .await;
-
-    let pipelines: Vec<PipelineRow> =
-        sqlx::query_as("SELECT id, name, trigger, enabled, created_at FROM pipelines ORDER BY created_at ASC")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    Html(render_pipeline_list(&pipelines))
+    Html(load_and_render_list(&state).await)
 }
 
 async fn update_handler(
@@ -704,13 +827,7 @@ async fn update_handler(
     .bind(&id)
     .execute(&state.db)
     .await;
-
-    let pipelines: Vec<PipelineRow> =
-        sqlx::query_as("SELECT id, name, trigger, enabled, created_at FROM pipelines ORDER BY created_at ASC")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    Html(render_pipeline_list(&pipelines))
+    Html(load_and_render_list(&state).await)
 }
 
 async fn delete_handler(
@@ -721,13 +838,221 @@ async fn delete_handler(
         .bind(&id)
         .execute(&state.db)
         .await;
+    Html(load_and_render_list(&state).await)
+}
 
-    let pipelines: Vec<PipelineRow> =
-        sqlx::query_as("SELECT id, name, trigger, enabled, created_at FROM pipelines ORDER BY created_at ASC")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    Html(render_pipeline_list(&pipelines))
+// ── Folder handlers ───────────────────────────────────────────────────────────
+
+async fn create_folder_handler(
+    State(state): State<Arc<AppState>>,
+    Form(params): Form<CreateFolderParams>,
+) -> impl IntoResponse {
+    let name = params.name.trim().to_string();
+    if name.is_empty() {
+        return Html(load_and_render_list(&state).await);
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    let _ = sqlx::query(
+        "INSERT INTO pipeline_folders (id, name, sort_order) VALUES (?, ?, (SELECT COALESCE(MAX(sort_order),0)+1 FROM pipeline_folders))",
+    )
+    .bind(&id)
+    .bind(&name)
+    .execute(&state.db)
+    .await;
+    Html(load_and_render_list(&state).await)
+}
+
+async fn delete_folder_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    // Detach pipelines from folder first
+    let _ = sqlx::query("UPDATE pipelines SET folder_id = NULL WHERE folder_id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await;
+    let _ = sqlx::query("DELETE FROM pipeline_folders WHERE id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await;
+    Html(load_and_render_list(&state).await)
+}
+
+async fn move_to_folder_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Form(params): Form<MoveFolderParams>,
+) -> impl IntoResponse {
+    let folder_id: Option<String> = params.folder_id.filter(|s| !s.is_empty());
+    let _ = sqlx::query("UPDATE pipelines SET folder_id = ? WHERE id = ?")
+        .bind(folder_id)
+        .bind(&id)
+        .execute(&state.db)
+        .await;
+    Html(load_and_render_list(&state).await)
+}
+
+// ── Export / Import handlers ──────────────────────────────────────────────────
+
+async fn export_handler(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Response {
+    let pipeline: Option<PipelineRow> = sqlx::query_as(
+        "SELECT id, name, trigger, enabled, created_at, folder_id FROM pipelines WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+
+    let Some(pipeline) = pipeline else {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Pipeline not found"))
+            .unwrap();
+    };
+
+    let nodes: Vec<NodeRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, node_type, config, pos_x, pos_y FROM pipeline_nodes WHERE pipeline_id = ? ORDER BY pos_x ASC",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let edges: Vec<EdgeRow> = sqlx::query_as(
+        "SELECT id, pipeline_id, source_id, target_id, edge_label FROM pipeline_edges WHERE pipeline_id = ?",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // Extract trigger type string for the top-level field
+    let trigger_type = serde_json::from_str::<serde_json::Value>(&pipeline.trigger)
+        .ok()
+        .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(|s| s.to_string()))
+        .unwrap_or_else(|| "Manual".to_string());
+
+    let yaml_nodes: Vec<NodeYaml> = nodes
+        .iter()
+        .map(|n| NodeYaml {
+            id: n.id.clone(),
+            node_type: n.node_type.clone(),
+            config: serde_json::from_str(&n.config).unwrap_or(serde_json::Value::Object(Default::default())),
+            pos_x: n.pos_x,
+            pos_y: n.pos_y,
+        })
+        .collect();
+
+    let yaml_edges: Vec<EdgeYaml> = edges
+        .iter()
+        .map(|e| EdgeYaml {
+            id: e.id.clone(),
+            source: e.source_id.clone(),
+            target: e.target_id.clone(),
+            label: e.edge_label.clone(),
+        })
+        .collect();
+
+    let pipeline_yaml = PipelineYaml {
+        name: pipeline.name.clone(),
+        trigger: trigger_type,
+        nodes: yaml_nodes,
+        edges: yaml_edges,
+    };
+
+    let yaml_str = match serde_yaml::to_string(&pipeline_yaml) {
+        Ok(s) => s,
+        Err(e) => {
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(format!("Serialization error: {}", e)))
+                .unwrap()
+        }
+    };
+
+    let safe_name: String = pipeline
+        .name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let filename = format!("{}.yaml", safe_name);
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/x-yaml; charset=utf-8")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(Body::from(yaml_str))
+        .unwrap()
+}
+
+async fn import_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ImportParams>,
+) -> impl IntoResponse {
+    let parsed: PipelineYaml = match serde_yaml::from_str(&body.yaml) {
+        Ok(p) => p,
+        Err(e) => {
+            return Json(serde_json::json!({ "error": format!("Invalid YAML: {}", e) }));
+        }
+    };
+
+    let pipeline_id = uuid::Uuid::new_v4().to_string();
+    let trigger_json = serde_json::json!({ "type": parsed.trigger }).to_string();
+    let now = now_secs();
+
+    let _ = sqlx::query(
+        "INSERT INTO pipelines (id, name, trigger, enabled, created_at) VALUES (?, ?, ?, 1, ?)",
+    )
+    .bind(&pipeline_id)
+    .bind(&parsed.name)
+    .bind(&trigger_json)
+    .bind(now)
+    .execute(&state.db)
+    .await;
+
+    // Insert nodes — generate new UUIDs but store YAML id as a slug map for edge remapping
+    let mut id_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for node in &parsed.nodes {
+        let new_id = uuid::Uuid::new_v4().to_string();
+        id_map.insert(node.id.clone(), new_id.clone());
+        let config_str = serde_json::to_string(&node.config).unwrap_or_else(|_| "{}".to_string());
+        let _ = sqlx::query(
+            "INSERT INTO pipeline_nodes (id, pipeline_id, node_type, config, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&new_id)
+        .bind(&pipeline_id)
+        .bind(&node.node_type)
+        .bind(&config_str)
+        .bind(node.pos_x)
+        .bind(node.pos_y)
+        .execute(&state.db)
+        .await;
+    }
+
+    // Insert edges — remap source/target through id_map
+    for edge in &parsed.edges {
+        let Some(src) = id_map.get(&edge.source) else { continue; };
+        let Some(tgt) = id_map.get(&edge.target) else { continue; };
+        let edge_id = uuid::Uuid::new_v4().to_string();
+        let _ = sqlx::query(
+            "INSERT INTO pipeline_edges (id, pipeline_id, source_id, target_id, edge_label) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&edge_id)
+        .bind(&pipeline_id)
+        .bind(src)
+        .bind(tgt)
+        .bind(&edge.label)
+        .execute(&state.db)
+        .await;
+    }
+
+    Json(serde_json::json!({ "id": pipeline_id, "name": parsed.name }))
 }
 
 async fn editor_handler(
@@ -735,7 +1060,7 @@ async fn editor_handler(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let pipeline: Option<PipelineRow> = sqlx::query_as(
-        "SELECT id, name, trigger, enabled, created_at FROM pipelines WHERE id = ?",
+        "SELECT id, name, trigger, enabled, created_at, folder_id FROM pipelines WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&state.db)
@@ -1766,6 +2091,12 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/pipeline-templates", get(templates_handler))
         .route("/api/pipeline-templates/use", post(use_template_handler))
+        // Folders
+        .route("/api/pipeline-folders", post(create_folder_handler))
+        .route("/api/pipeline-folders/:id", delete(delete_folder_handler))
+        // Import must be registered before /:id to avoid capture
+        .route("/api/pipelines/import", post(import_handler))
+        // Pipeline CRUD
         .route("/api/pipelines", get(list_handler).post(create_handler))
         .route(
             "/api/pipelines/:id",
@@ -1773,6 +2104,8 @@ pub fn router() -> Router<Arc<AppState>> {
         )
         .route("/api/pipelines/:id/editor", get(editor_handler))
         .route("/api/pipelines/:id/run", post(run_handler))
+        .route("/api/pipelines/:id/folder", put(move_to_folder_handler))
+        .route("/api/pipelines/:id/export", get(export_handler))
         .route("/api/pipelines/:id/steps", post(add_step_handler))
         .route(
             "/api/pipelines/:id/steps/:step_id",
