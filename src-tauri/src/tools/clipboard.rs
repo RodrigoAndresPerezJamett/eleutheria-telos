@@ -22,42 +22,47 @@ pub fn content_hash(text: &str) -> u64 {
 }
 
 fn render_entry_card(id: &str, content: &str, created_at: i64) -> String {
-    let preview = if content.len() > 200 {
-        format!("{}…", &content[..200])
-    } else {
-        content.to_string()
-    };
-    let escaped = html_escape(&preview);
     let ts = format_timestamp(created_at);
-    // r##"..."## used because the HTML contains "# sequences (HTMX target="#clip-id")
+    // data-clip-content carries full content; browser HTML-decodes dataset on read
     format!(
-        r##"<div id="clip-{id}" style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px;margin-bottom:8px;"
-             onmouseenter="this.querySelector('.clip-actions').style.opacity=1"
-             onmouseleave="this.querySelector('.clip-actions').style.opacity=0">
-  <pre style="font-size:13px;color:var(--text-primary);white-space:pre-wrap;word-break:break-words;font-family:inherit;line-height:1.5;margin:0 0 8px;">{escaped}</pre>
+        r##"<div id="clip-{id}"
+     data-clip-id="{id}"
+     data-clip-content="{escaped_content}"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:100px;transition:box-shadow 150ms;"
+     onmouseenter="this.style.boxShadow='0 0 0 1px var(--accent)';this.querySelectorAll('.clip-action').forEach(e=>e.style.opacity=1)"
+     onmouseleave="this.style.boxShadow='';this.querySelectorAll('.clip-action').forEach(e=>e.style.opacity=0)"
+     onclick="clipboardOpenPreview(this)">
+  <pre style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;word-break:break-all;font-family:inherit;line-height:1.5;margin:0 0 10px;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">{escaped_preview}</pre>
   <div style="display:flex;align-items:center;justify-content:space-between;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
-    <div class="clip-actions" style="display:flex;gap:6px;opacity:0;transition:opacity 150ms;">
-      <button class="btn btn-ghost btn-sm"
+    <div style="display:flex;gap:4px;">
+      <button class="clip-action btn btn-ghost btn-sm"
+              style="opacity:0;transition:opacity 150ms;font-size:11px;padding:2px 6px;"
               hx-post="/api/clipboard/{id}/recopy"
+              onclick="event.stopPropagation()"
               title="Copy to clipboard">Copy</button>
-      <button class="btn btn-danger btn-sm"
+      <button class="clip-action btn btn-ghost btn-sm"
+              style="opacity:0;transition:opacity 150ms;font-size:11px;padding:2px 6px;color:var(--destructive);"
               hx-delete="/api/clipboard/{id}"
               hx-target="#clip-{id}"
               hx-swap="outerHTML"
               hx-confirm="Delete this entry?"
-              title="Delete">Delete</button>
+              onclick="event.stopPropagation()">✕</button>
     </div>
   </div>
-</div>"##
+</div>"##,
+        id = id,
+        escaped_content = html_escape(content),
+        escaped_preview = html_escape(content), // CSS -webkit-line-clamp:4 handles visual truncation
+        ts = ts,
     )
 }
 
 fn render_list(entries: &[(String, String, i64)]) -> String {
     if entries.is_empty() {
-        return r#"<div style="padding:32px 0;text-align:center;">
-  <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 6px;">Lost something you copied?</p>
-  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.5;">Everything you copy appears here automatically.<br>Start copying and it will show up.</p>
+        return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
+  <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Lost something you copied?</p>
+  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Everything you copy appears here automatically.<br>Start copying and it will show up.</p>
 </div>"#.to_string();
     }
     entries
