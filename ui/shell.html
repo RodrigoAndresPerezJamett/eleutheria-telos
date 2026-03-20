@@ -23,6 +23,83 @@
     if (!window.__SESSION_TOKEN__) window.__SESSION_TOKEN__ = 'dev-token';
     if (!window.__API_PORT__)      window.__API_PORT__      = 47821;
 
+    // ── Panel navigation history (browser-style back/forward) ──────────────
+    // Only full #tool-panel swaps are tracked; sub-panel swaps are ignored.
+    function _navLabelFromUrl(url) {
+      // /tools/clipboard → "Clipboard", /tools/quick-actions → "Quick Actions"
+      const parts = url.split('/').filter(Boolean);
+      const seg = parts[parts.length - 1] || parts[parts.length - 2] || 'Page';
+      return seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, ' ');
+    }
+
+    window.__navHistory = (function () {
+      var stack  = [];   // [{url, label}, ...]
+      var cursor = -1;
+      var _skip  = false; // suppress push during back/forward navigation
+
+      function updateUI() {
+        var back = document.getElementById('nav-back');
+        var fwd  = document.getElementById('nav-forward');
+        var lbl  = document.getElementById('nav-label');
+        if (back) {
+          back.disabled = cursor <= 0;
+          back.style.opacity = cursor <= 0 ? '0.35' : '1';
+          back.style.cursor  = cursor <= 0 ? 'not-allowed' : 'pointer';
+        }
+        if (fwd) {
+          fwd.disabled = cursor >= stack.length - 1;
+          fwd.style.opacity = cursor >= stack.length - 1 ? '0.35' : '1';
+          fwd.style.cursor  = cursor >= stack.length - 1 ? 'not-allowed' : 'pointer';
+        }
+        if (lbl) lbl.textContent = stack[cursor] ? stack[cursor].label : '';
+      }
+
+      function syncActiveTool(url) {
+        // Extract tool name from /tools/<name> for Alpine sidebar highlight.
+        var m = url.match(/\/tools\/([^/?#]+)/);
+        if (m) {
+          window.dispatchEvent(new CustomEvent('nav-active-tool', { detail: { tool: m[1] } }));
+        }
+      }
+
+      function navigate(entry) {
+        _skip = true;
+        htmx.ajax('GET', entry.url, {
+          target: '#tool-panel',
+          swap: 'innerHTML',
+          headers: { 'Authorization': 'Bearer ' + window.__SESSION_TOKEN__ }
+        });
+        // _skip is cleared in htmx:afterSwap after the swap completes.
+        updateUI();
+        syncActiveTool(entry.url);
+      }
+
+      return {
+        push: function (url, label) {
+          if (_skip) { _skip = false; return; }
+          // Truncate forward history when a new navigation happens.
+          stack = stack.slice(0, cursor + 1);
+          stack.push({ url: url, label: label || _navLabelFromUrl(url) });
+          cursor = stack.length - 1;
+          updateUI();
+        },
+        back: function () {
+          if (cursor <= 0) return;
+          cursor--;
+          navigate(stack[cursor]);
+        },
+        forward: function () {
+          if (cursor >= stack.length - 1) return;
+          cursor++;
+          navigate(stack[cursor]);
+        }
+      };
+    }());
+
+    // Capture the pending URL + label before each request to #tool-panel.
+    var __pendingNavUrl   = null;
+    var __pendingNavLabel = null;
+
     // Always send the session token and rewrite relative paths to Axum (D-017, D-019).
     document.addEventListener('htmx:configRequest', function (evt) {
       evt.detail.headers['Authorization'] = 'Bearer ' + window.__SESSION_TOKEN__;
@@ -30,12 +107,40 @@
       if (!p || p.startsWith('http://127.0.0.1:')) return;
       const apiPath = p.startsWith('/') ? p : new URL(p).pathname + (new URL(p).search || '');
       evt.detail.path = 'http://127.0.0.1:' + window.__API_PORT__ + apiPath;
+
+      // Track navigations that target #tool-panel for history.
+      if (evt.detail.target && evt.detail.target.id === 'tool-panel') {
+        __pendingNavUrl   = evt.detail.path;
+        var label = evt.detail.elt && evt.detail.elt.getAttribute('data-nav-label');
+        __pendingNavLabel = label || _navLabelFromUrl(evt.detail.path);
+      }
     });
 
     document.addEventListener('htmx:afterSwap', function (evt) {
       if (evt.detail.target && evt.detail.target.id === 'tool-panel') {
         htmx.process(evt.detail.target);
+        if (__pendingNavUrl) {
+          window.__navHistory.push(__pendingNavUrl, __pendingNavLabel);
+          __pendingNavUrl   = null;
+          __pendingNavLabel = null;
+        }
       }
+    });
+
+    // Alt+← / Alt+→ keyboard shortcuts for back/forward.
+    document.addEventListener('keydown', function (evt) {
+      if (evt.altKey && evt.key === 'ArrowLeft')  { evt.preventDefault(); window.__navHistory.back(); }
+      if (evt.altKey && evt.key === 'ArrowRight') { evt.preventDefault(); window.__navHistory.forward(); }
+    });
+
+    // Mouse side buttons: button 3 = back, button 4 = forward.
+    // mousedown preventDefault stops WebKitGTK from handling them natively.
+    document.addEventListener('mousedown', function (evt) {
+      if (evt.button === 3 || evt.button === 4) evt.preventDefault();
+    });
+    document.addEventListener('mouseup', function (evt) {
+      if (evt.button === 3) { evt.preventDefault(); window.__navHistory.back(); }
+      if (evt.button === 4) { evt.preventDefault(); window.__navHistory.forward(); }
     });
 
     // Plugin sidebar entries are pre-loaded by Tauri's initialization_script into
@@ -79,7 +184,7 @@
   </style>
 </head>
 
-<body class="h-full flex" x-data="{ activeTool: 'clipboard' }">
+<body class="h-full flex" x-data="{ activeTool: 'clipboard' }" @nav-active-tool.window="activeTool = $event.detail.tool">
 
   <!-- ── Sidebar (desktop ≥1024px) ──────────────────────────────────────── -->
   <nav id="sidebar"
@@ -97,6 +202,7 @@
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
                 hx-push-url="false"
+                data-nav-label="Clipboard"
                 @click="activeTool = 'clipboard'">
           <span class="text-lg">📋</span>
           <span>Clipboard</span>
@@ -108,6 +214,7 @@
                 hx-get="/tools/notes"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Notes"
                 @click="activeTool = 'notes'">
           <span class="text-lg">📝</span>
           <span>Notes</span>
@@ -119,6 +226,7 @@
                 hx-get="/tools/voice"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Voice"
                 @click="activeTool = 'voice'">
           <span class="text-lg">🎙️</span>
           <span>Voice</span>
@@ -130,6 +238,7 @@
                 hx-get="/tools/ocr"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="OCR"
                 @click="activeTool = 'ocr'">
           <span class="text-lg">🔤</span>
           <span>OCR</span>
@@ -141,6 +250,7 @@
                 hx-get="/tools/translate"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Translate"
                 @click="activeTool = 'translate'">
           <span class="text-lg">🌐</span>
           <span>Translate</span>
@@ -152,6 +262,7 @@
                 hx-get="/tools/search"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Search"
                 @click="activeTool = 'search'">
           <span class="text-lg">🔍</span>
           <span>Search</span>
@@ -168,6 +279,7 @@
               hx-get="/tools/settings"
               hx-target="#tool-panel"
               hx-swap="innerHTML"
+              data-nav-label="Settings"
               @click="activeTool = 'settings'">
         <span class="text-lg">⚙️</span>
         <span>Settings</span>
@@ -185,6 +297,7 @@
                 hx-get="/tools/clipboard"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Clipboard"
                 @click="activeTool = 'clipboard'">📋</button>
       </li>
       <li>
@@ -193,6 +306,7 @@
                 hx-get="/tools/notes"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Notes"
                 @click="activeTool = 'notes'">📝</button>
       </li>
       <li>
@@ -201,6 +315,7 @@
                 hx-get="/tools/voice"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Voice"
                 @click="activeTool = 'voice'">🎙️</button>
       </li>
       <li>
@@ -209,6 +324,7 @@
                 hx-get="/tools/ocr"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="OCR"
                 @click="activeTool = 'ocr'">🔤</button>
       </li>
       <li>
@@ -217,6 +333,7 @@
                 hx-get="/tools/translate"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Translate"
                 @click="activeTool = 'translate'">🌐</button>
       </li>
       <li>
@@ -225,6 +342,7 @@
                 hx-get="/tools/search"
                 hx-target="#tool-panel"
                 hx-swap="innerHTML"
+                data-nav-label="Search"
                 @click="activeTool = 'search'">🔍</button>
       </li>
     </ul>
@@ -237,11 +355,46 @@
             hx-get="/tools/settings"
             hx-target="#tool-panel"
             hx-swap="innerHTML"
+            data-nav-label="Settings"
             @click="activeTool = 'settings'">⚙️</button>
   </nav>
 
   <!-- ── Main content ───────────────────────────────────────────────────── -->
   <main class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Navigation bar: back / forward + current panel label -->
+    <div class="flex items-center gap-1 px-3 py-2 border-b border-gray-700 shrink-0"
+         style="background:#111827;">
+      <button id="nav-back"
+              onclick="window.__navHistory.back()"
+              disabled
+              title="Back (Alt+←)"
+              style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid #374151;background:#1f2937;color:#9ca3af;cursor:pointer;transition:all 150ms;flex-shrink:0;"
+              onmouseenter="if(!this.disabled)this.style.background='#374151'"
+              onmouseleave="this.style.background='#1f2937'"
+              onfocus="this.style.outline='2px solid #6b7280'"
+              onblur="this.style.outline='none'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+      <button id="nav-forward"
+              onclick="window.__navHistory.forward()"
+              disabled
+              title="Forward (Alt+→)"
+              style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid #374151;background:#1f2937;color:#9ca3af;cursor:pointer;transition:all 150ms;flex-shrink:0;"
+              onmouseenter="if(!this.disabled)this.style.background='#374151'"
+              onmouseleave="this.style.background='#1f2937'"
+              onfocus="this.style.outline='2px solid #6b7280'"
+              onblur="this.style.outline='none'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </button>
+      <span id="nav-label" class="ml-2 text-xs select-none" style="color:#6b7280;"></span>
+    </div>
 
     <!-- Tool panel: HTMX swaps content here -->
     <div id="tool-panel"

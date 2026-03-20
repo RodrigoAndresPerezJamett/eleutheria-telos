@@ -7,6 +7,71 @@ Format per entry:
 
 ---
 
+## [2026-03-20] — Phase 4.7 canvas QoL + H3d + camera fixes
+
+### Completed
+- **`ui/tools/quick-actions/index.html`** — camera centering + cascade clamp (second pass):
+  - **Camera on pipeline open:** New `_centerCanvas()` method sets `panX = vw×0.4 − 2000`, `panY = vh×0.5 − 1500`, placing the canvas midpoint (2000, 1500) at 40/50% of the viewport. Previously started at (0,0) = top-left corner, leaving no room to pan up/left. Now called on empty pipeline load; existing pipelines with nodes still use `fitNodes()`.
+  - **Cascade overflow fixed:** Base x for new nodes is clamped to `min(anchor.pos_x + NODE_W + 60, 3360)`. With 3 columns of 200px each and 40px margin, the rightmost spawn point is 3760px — always inside the 4000px canvas regardless of where the anchor was dragged.
+  - **Pipeline switch cleanup:** `loadGraph()` now resets `selectedEdge`, `configOpen`, `undoStack`, `redoStack` on every pipeline switch so state never bleeds between pipelines.
+
+- **`ui/tools/quick-actions/index.html`** — spawn position + H3d undo/redo:
+  - **Spawn position (revised):** Empty canvas → centre of visible viewport. Trigger exists → new nodes spawn to the right of the rightmost trigger, cascading in a 3-col grid (col × (NODE_W+20), row × (NODE_H+16)) per non-trigger/non-end node count. No trigger → rightmost existing node as anchor.
+  - **Config panel smooth close:** Panel animates `width 280px→0 + opacity 1→0` (180ms ease) on close. Closing on delete is instant-state, animation plays automatically via CSS transition.
+  - **H3d — Undo/redo:** 50-op stack. Keyboard: Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo). Toolbar ↩↪ buttons with `:disabled` binding. Covers: `add_node` (undo = delete), `delete_node` (undo = re-create node + all connected edges with original IDs), `move_node` (undo = restore old position), `add_edge` (undo = delete), `delete_edge` (undo = re-create with original ID). Guard flag `_inUndoRedo` prevents undo/redo actions from pushing onto the stack. Redo is cleared on any new user action.
+- **`src-tauri/src/tools/quick_actions.rs`** — `AddNodeParams` and `AddEdgeParams` now accept optional `id` field; if provided, the server uses it verbatim (enables undo to restore deleted items with original DB IDs).
+
+### Next
+H4 — Graph-aware execution engine: graph traversal, condition node evaluation, cycle detection (60s warn / 120s kill).
+
+---
+
+## [2026-03-20] — Phase 4.7 H3b + H3c: Connect nodes + Node config panel
+
+### Completed
+- **`ui/tools/quick-actions/index.html`** — H3b + H3c implemented:
+  - **H3b (Connect nodes):** Input port (left) + output port (right) circles on each node. Condition nodes have two output ports (true = green, false = red). Drag from any output port to any input port to create a bezier edge. Back-edges (loops) allowed. Click edge to select (highlighted in accent colour); Delete/Backspace deletes selected edge. SVG managed via `_renderEdges()` + `g.innerHTML` (Alpine `x-for` inside SVG crashes WebKit — D-024). Edges redrawn on RAF during node drag for 60fps responsiveness. Zoom-aware hit detection in screen space.
+  - **H3c (Node config panel):** Clicking a node opens a 280px right-side panel. Per-node-type forms: trigger type selector (Manual, OcrCompleted, TranscriptionCompleted, ClipboardChanged, FolderWatch with folder_path + pattern); action tool selector with full param forms for 8 tools (translate, copy_clipboard, save_note, read_file, write_file, append_file, ocr_file, for_each_file); condition type + value input. Browse "…" buttons call `window.__TAURI__.dialog.open()` if dialog plugin is available (graceful fallback to text input). Save PUTs to `/api/pipelines/{id}/nodes/{nid}`, updates node card summary in canvas.
+  - Fixed 2 missing closing `</div>` tags left from previous session's partial H3c restructure.
+  - Fixed `x-show` + `display:flex` on config panel using `:style="{ display: configOpen ? 'flex' : 'none' }"`.
+- **`src-tauri/src/tools/quick_actions.rs`** — renamed unused `steps` → `_steps` to silence Rust warning.
+- **`ROADMAP.md`** — marked H3b, H3c complete; added FolderWatch to trigger types.
+
+### Bugs fixed
+- SVG `x-for` WebKit crash (importNode) → D-024: all Alpine removed from SVG, content via `g.innerHTML`
+- Draft edge reactivity: spread-assign `self.draftEdge = { ...draft }` on each mousemove
+- Edge click in WebKit: `pointer-events:all` + `rgba(0,0,0,0.01)` stroke + direct listeners after innerHTML
+- Node drag not zoom-aware: divide delta by captured zoom at drag start
+- Edge labels floating 90px off: removed erroneous `+ NODE_W/2` offset in `edgeMidX`
+
+### Next
+H3d — Undo/redo: operation stack (add node, delete node, move node, add edge, delete edge); Ctrl+Z / Ctrl+Shift+Z.
+
+---
+
+## [2026-03-19] — Phase 4.7 H2: Quick Actions visual canvas
+
+### Completed
+- **`ui/tools/quick-actions/index.html`** — complete rewrite with Alpine `qaApp()` canvas component:
+  - Loads graph from `/api/pipelines/:id/graph` on pipeline selection
+  - Nodes rendered as absolutely positioned divs on 3000×2000 dot-grid canvas
+  - SVG bezier edges with arrowheads and edge labels (true/false, body/done)
+  - 5 node types: Trigger (green) / Action (lavender) / Condition (amber) / Loop (purple) / End (red)
+  - Drag-to-reposition: document-level mousemove/mouseup, saves position to DB on drop
+  - Toolbar: node palette (add buttons per type), delete selected node, run manual pipelines
+  - Run result bar with ok/error color coding
+  - Empty state when no pipeline selected
+- **`quick_actions.rs`** — pipeline list items use `onclick qaLoadPipeline()` instead of `hx-get` to editor; `use_template_handler` emits `HX-Trigger` header to open canvas for new pipeline
+
+### Design decisions logged
+- **Loop node eliminated** — loops are back-edges (any output → any previous node). Execution engine detects cycles with per-pipeline timeout (default 60s). No dedicated Loop node type.
+- Canvas pan+zoom, node config panel, annotation boxes, undo/redo deferred to H3a–H3d
+
+### Next
+H3a — Canvas pan (drag background) + zoom (scroll wheel) — transform-based canvas replacing scroll approach.
+
+---
+
 ## [2026-03-19] — Phase 4.7 H0: Panel navigation history (back/forward)
 
 ### Completed

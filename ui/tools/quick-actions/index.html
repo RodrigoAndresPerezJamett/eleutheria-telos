@@ -48,40 +48,43 @@
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;">
 
       <!-- Empty state -->
-      <div x-show="!pipelineId"
-           style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;">
+      <div style="flex:1;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;"
+           :style="{ display: !pipelineId ? 'flex' : 'none' }">
         <i data-lucide="workflow" style="width:40px;height:40px;color:var(--text-muted);opacity:0.5;"></i>
         <p style="font-size:13px;color:var(--text-muted);text-align:center;max-width:240px;line-height:1.5;">
           Select a pipeline from the list, or create a new one to open the visual canvas.
         </p>
       </div>
 
-      <!-- Canvas area (pipeline selected) -->
-      <div x-show="pipelineId" style="display:flex;flex-direction:column;height:100%;">
+      <!-- Pipeline active (toolbar + canvas row + config panel) -->
+      <div style="flex-direction:column;flex:1;min-height:0;"
+           :style="{ display: pipelineId ? 'flex' : 'none' }">
 
-        <!-- Toolbar -->
+        <!-- Toolbar (full width) -->
         <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg-elevated);flex-shrink:0;flex-wrap:wrap;">
-          <!-- Pipeline name -->
           <span style="font-size:13px;font-weight:600;color:var(--text-primary);margin-right:4px;" x-text="pipelineName"></span>
           <span style="font-size:11px;color:var(--text-muted);padding:1px 6px;border-radius:var(--radius-pill);border:1px solid var(--border);" x-text="triggerLabel"></span>
-
-          <!-- Divider -->
           <div style="width:1px;height:18px;background:var(--border);margin:0 4px;"></div>
-
-          <!-- Add node palette -->
           <span style="font-size:11px;color:var(--text-muted);">Add:</span>
           <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#22c55e;color:#22c55e;" @click="addNode('trigger')">Trigger</button>
           <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:var(--accent);color:var(--accent);" @click="addNode('action')">Action</button>
           <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#f59e0b;color:#f59e0b;" @click="addNode('condition')">Condition</button>
-          <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#8b5cf6;color:#8b5cf6;" @click="addNode('loop')">Loop</button>
           <button class="btn btn-secondary btn-sm" style="font-size:11px;border-color:#ef4444;color:#ef4444;" @click="addNode('end')">End</button>
-
-          <!-- Right side actions -->
           <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
-            <button x-show="selectedNode" class="btn btn-sm"
+            <button class="btn btn-ghost btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:14px;"
+                    @click="undo()" :disabled="!undoStack.length" title="Undo (Ctrl+Z)">↩</button>
+            <button class="btn btn-ghost btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:14px;"
+                    @click="redo()" :disabled="!redoStack.length" title="Redo (Ctrl+Shift+Z)">↪</button>
+            <div style="width:1px;height:18px;background:var(--border);margin:0 2px;"></div>
+            <button x-show="selectedEdge" class="btn btn-sm"
+                    style="font-size:11px;color:var(--destructive);border-color:var(--destructive);"
+                    @click="deleteSelectedEdge()">
+              <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Delete edge
+            </button>
+            <button x-show="selectedNode && !selectedEdge" class="btn btn-sm"
                     style="font-size:11px;color:var(--destructive);border-color:var(--destructive);"
                     @click="deleteSelectedNode()">
-              <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Delete
+              <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Delete node
             </button>
             <button x-show="isManual" class="btn btn-secondary btn-sm" style="font-size:11px;"
                     @click="runPipeline()" :disabled="running">
@@ -99,42 +102,61 @@
           <button @click="runResult=null" style="border:none;background:transparent;cursor:pointer;color:inherit;font-size:14px;line-height:1;">✕</button>
         </div>
 
-        <!-- Canvas scrollable container -->
-        <div style="flex:1;overflow:auto;cursor:default;" @click="selectedNode=null">
+        <!-- Content row: canvas viewport + config panel -->
+        <div style="flex:1;display:flex;flex-direction:row;min-height:0;">
 
-          <!-- Canvas inner: large fixed area so nodes can be positioned freely -->
+          <!-- Canvas column -->
+          <div style="flex:1;position:relative;overflow:hidden;">
+
+            <!-- Zoom controls -->
+            <div style="position:absolute;bottom:16px;right:16px;z-index:20;flex-direction:column;gap:4px;"
+                 :style="{ display: pipelineId ? 'flex' : 'none' }">
+              <button class="btn btn-secondary btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:16px;line-height:1;" @click="setZoom(zoom + 0.15)" title="Zoom in">+</button>
+              <button class="btn btn-ghost btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:10px;" @click="setZoom(1)" x-text="Math.round(zoom*100)+'%'"></button>
+              <button class="btn btn-secondary btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:16px;line-height:1;" @click="setZoom(zoom - 0.15)" title="Zoom out">−</button>
+              <button class="btn btn-ghost btn-sm" style="width:28px;height:28px;padding:0;justify-content:center;font-size:14px;" @click="fitNodes()" title="Fit all nodes">⌖</button>
+            </div>
+
+            <!-- Canvas viewport -->
+            <div id="qa-viewport"
+                 style="width:100%;height:100%;overflow:hidden;"
+                 :style="{ cursor: panning ? 'grabbing' : 'default' }"
+                 @mousedown="onViewportMousedown($event)"
+                 @mousemove="onViewportMousemove($event)"
+                 @mouseup="onViewportMouseup($event)"
+                 @mouseleave="onViewportMouseup($event)"
+                 @wheel.prevent="onWheel($event)"
+                 @click="selectedNode=null; selectedEdge=null">
+
+          <!-- Canvas inner: transform origin top-left, sized large enough for any layout -->
           <div id="qa-canvas-inner"
-               style="position:relative;width:3000px;height:2000px;background-color:var(--bg-base);background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:28px 28px;">
+               style="position:absolute;top:0;left:0;width:4000px;height:3000px;transform-origin:0 0;background-color:var(--bg-base);background-image:radial-gradient(circle,rgba(128,128,128,0.35) 1.2px,transparent 1.2px);background-size:28px 28px;"
+               :style="{ transform: `translate(${panX}px,${panY}px) scale(${zoom})` }">
 
-            <!-- SVG overlay for edges -->
-            <svg style="position:absolute;top:0;left:0;width:3000px;height:2000px;pointer-events:none;overflow:visible;">
+            <!-- SVG overlay for edges — NO Alpine directives inside SVG (WebKit importNode bug).
+                 Content is managed entirely via _renderEdges() using innerHTML. -->
+            <svg id="qa-edges-svg" style="position:absolute;top:0;left:0;width:4000px;height:3000px;overflow:visible;">
               <defs>
                 <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" style="fill:var(--text-muted);opacity:0.6;" />
+                  <polygon points="0 0, 8 3, 0 6" style="fill:var(--text-muted);opacity:0.7;" />
+                </marker>
+                <marker id="arrowhead-sel" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                  <polygon points="0 0, 8 3, 0 6" style="fill:var(--accent);" />
                 </marker>
               </defs>
-              <template x-for="edge in edges" :key="edge.id">
-                <g>
-                  <path :d="edgePath(edge)"
-                        stroke="var(--text-muted)" stroke-width="1.5" fill="none"
-                        stroke-linecap="round" opacity="0.5"
-                        marker-end="url(#arrowhead)" />
-                  <text x-show="edge.edge_label && edge.edge_label !== 'default'"
-                        :x="edgeMidX(edge)" :y="edgeMidY(edge)"
-                        text-anchor="middle" dominant-baseline="middle"
-                        style="font-size:10px;fill:var(--text-muted);pointer-events:none;"
-                        x-text="edge.edge_label"></text>
-                </g>
-              </template>
+              <!-- Edge paths injected here by _renderEdges() -->
+              <g id="qa-edges-g"></g>
             </svg>
 
             <!-- Nodes -->
             <template x-for="node in nodes" :key="node.id">
               <div :style="nodeStyle(node)"
                    @mousedown.stop="startDrag($event, node)"
-                   @click.stop="selectedNode = node">
+                   @click.stop="openConfig(node); selectedEdge = null">
+
                 <!-- Colored top strip -->
                 <div :style="`height:3px;border-radius:3px 3px 0 0;margin:-10px -12px 8px;background:${nodeColor(node.node_type)};`"></div>
+
                 <!-- Header: icon + type label -->
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
                   <i :data-lucide="nodeIcon(node.node_type)"
@@ -144,16 +166,265 @@
                         :style="`color:${nodeColor(node.node_type)}`"
                         x-text="nodeLabel(node.node_type)"></span>
                 </div>
+
                 <!-- Config summary -->
                 <p style="font-size:12px;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
                    x-text="nodeConfigSummary(node)"></p>
+
+                <!-- Input port (left center) — all except trigger -->
+                <div x-show="node.node_type !== 'trigger'"
+                     style="position:absolute;left:-7px;top:50%;width:12px;height:12px;border-radius:50%;background:var(--bg-base);border:2px solid var(--border);transform:translateY(-50%);z-index:5;pointer-events:none;"></div>
+
+                <!-- Output port: single (all except end and condition) -->
+                <div x-show="node.node_type !== 'end' && node.node_type !== 'condition'"
+                     style="position:absolute;right:-7px;top:50%;width:12px;height:12px;border-radius:50%;background:var(--bg-base);border:2px solid var(--border);transform:translateY(-50%);z-index:5;cursor:crosshair;"
+                     @mousedown.stop="startConnect($event, node, 'default')"
+                     title="Drag to connect"></div>
+
+                <!-- Output port: condition true (upper right) -->
+                <div x-show="node.node_type === 'condition'"
+                     style="position:absolute;right:-7px;top:33%;width:12px;height:12px;border-radius:50%;background:var(--bg-base);border:2px solid #22c55e;transform:translateY(-50%);z-index:5;cursor:crosshair;"
+                     @mousedown.stop="startConnect($event, node, 'true')"
+                     title="true branch — drag to connect"></div>
+
+                <!-- Output port: condition false (lower right) -->
+                <div x-show="node.node_type === 'condition'"
+                     style="position:absolute;right:-7px;top:67%;width:12px;height:12px;border-radius:50%;background:var(--bg-base);border:2px solid #ef4444;transform:translateY(-50%);z-index:5;cursor:crosshair;"
+                     @mousedown.stop="startConnect($event, node, 'false')"
+                     title="false branch — drag to connect"></div>
               </div>
             </template>
 
           </div><!-- /canvas-inner -->
-        </div><!-- /scrollable -->
+            </div><!-- /viewport -->
+          </div><!-- /canvas-column -->
 
-      </div><!-- /canvas area -->
+          <!-- ── Config panel — always display:flex; width+opacity animate for smooth open/close ── -->
+          <div style="display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;background:var(--bg-elevated);transition:width 180ms ease,opacity 180ms ease,border-width 0ms;"
+               :style="{ width: configOpen ? '280px' : '0', opacity: configOpen ? '1' : '0', borderLeft: configOpen ? '1px solid var(--border)' : 'none' }">
+
+            <!-- Header -->
+            <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+              <span style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.07em;"
+                    x-text="configNodeType ? configNodeType.charAt(0).toUpperCase()+configNodeType.slice(1)+' Config' : 'Config'"></span>
+              <button @click="configOpen=false"
+                      style="border:none;background:transparent;cursor:pointer;color:var(--text-muted);font-size:16px;line-height:1;padding:2px 4px;">✕</button>
+            </div>
+
+            <!-- Scrollable form body -->
+            <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;">
+
+              <!-- ── Trigger config ── -->
+              <div x-show="configNodeType === 'trigger'" style="display:flex;flex-direction:column;gap:8px;">
+                <div>
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Trigger event</label>
+                  <select x-model="configDraft.trigger" class="input" style="width:100%;font-size:12px;padding:5px 8px;">
+                    <option value="Manual">Manual (run by hand)</option>
+                    <option value="OcrCompleted">After OCR completes</option>
+                    <option value="TranscriptionCompleted">After Voice transcription</option>
+                    <option value="ClipboardChanged">On clipboard change</option>
+                    <option value="FolderWatch">Watch a folder for new files</option>
+                  </select>
+                </div>
+                <div x-show="configDraft.trigger === 'FolderWatch'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Folder path</label>
+                    <div style="display:flex;gap:4px;">
+                      <input x-model="configDraft.folder_path" type="text" class="input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="/path/to/watch" />
+                      <button class="btn btn-secondary btn-sm" style="font-size:11px;flex-shrink:0;" @click="pickPath('folder_path', true)" title="Browse">…</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">File pattern</label>
+                    <input x-model="configDraft.pattern" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="*.png" />
+                    <p style="font-size:10px;color:var(--text-muted);margin:3px 0 0;">Glob pattern — *.png, *.pdf, * for all</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── Action config ── -->
+              <div x-show="configNodeType === 'action'" style="display:flex;flex-direction:column;gap:10px;">
+                <div>
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Tool</label>
+                  <select x-model="configDraft.tool" class="input" style="width:100%;font-size:12px;padding:5px 8px;">
+                    <optgroup label="Text">
+                      <option value="translate">Translate text</option>
+                      <option value="copy_clipboard">Copy to Clipboard</option>
+                      <option value="save_note">Save as Note</option>
+                    </optgroup>
+                    <optgroup label="Files">
+                      <option value="read_file">Read File → text</option>
+                      <option value="write_file">Write text → File</option>
+                      <option value="append_file">Append text → File</option>
+                      <option value="for_each_file">For each file in Folder</option>
+                    </optgroup>
+                    <optgroup label="Media">
+                      <option value="ocr_file">OCR an image file</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <!-- Translate -->
+                <div x-show="configDraft.tool === 'translate'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">From</label>
+                    <select x-model="configDraft.from_lang" class="input" style="width:100%;font-size:12px;padding:5px 8px;">
+                      <option value="auto">Auto-detect</option>
+                      <option value="en">English</option><option value="es">Spanish</option>
+                      <option value="fr">French</option><option value="de">German</option>
+                      <option value="it">Italian</option><option value="pt">Portuguese</option>
+                      <option value="zh">Chinese</option><option value="ja">Japanese</option>
+                      <option value="ko">Korean</option><option value="ar">Arabic</option>
+                      <option value="ru">Russian</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">To</label>
+                    <select x-model="configDraft.to_lang" class="input" style="width:100%;font-size:12px;padding:5px 8px;">
+                      <option value="en">English</option><option value="es">Spanish</option>
+                      <option value="fr">French</option><option value="de">German</option>
+                      <option value="it">Italian</option><option value="pt">Portuguese</option>
+                      <option value="zh">Chinese</option><option value="ja">Japanese</option>
+                      <option value="ko">Korean</option><option value="ar">Arabic</option>
+                      <option value="ru">Russian</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Save Note -->
+                <div x-show="configDraft.tool === 'save_note'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Title prefix</label>
+                    <input x-model="configDraft.title_prefix" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="Auto note" />
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Tags (comma-separated)</label>
+                    <input x-model="configDraft.tags" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="pipeline, auto" />
+                  </div>
+                </div>
+
+                <!-- Read File -->
+                <div x-show="configDraft.tool === 'read_file'" style="display:flex;flex-direction:column;gap:8px;">
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">File path</label>
+                  <div style="display:flex;gap:4px;">
+                    <input x-model="configDraft.file_path" type="text" class="input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="/path/to/file.txt" />
+                    <button class="btn btn-secondary btn-sm" style="font-size:11px;" @click="pickPath('file_path', false)">…</button>
+                  </div>
+                  <p style="font-size:10px;color:var(--text-muted);margin:0;">Reads entire file contents as text; passes it downstream.</p>
+                </div>
+
+                <!-- Write File -->
+                <div x-show="configDraft.tool === 'write_file'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Output file path</label>
+                    <div style="display:flex;gap:4px;">
+                      <input x-model="configDraft.file_path" type="text" class="input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="/path/to/output.txt" />
+                      <button class="btn btn-secondary btn-sm" style="font-size:11px;" @click="pickPath('file_path', false)">…</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">If file exists</label>
+                    <select x-model="configDraft.if_exists" class="input" style="width:100%;font-size:12px;padding:5px 8px;">
+                      <option value="overwrite">Overwrite</option>
+                      <option value="append">Append</option>
+                      <option value="skip">Skip (keep existing)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Append File -->
+                <div x-show="configDraft.tool === 'append_file'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">File path</label>
+                    <div style="display:flex;gap:4px;">
+                      <input x-model="configDraft.file_path" type="text" class="input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="/path/to/log.txt" />
+                      <button class="btn btn-secondary btn-sm" style="font-size:11px;" @click="pickPath('file_path', false)">…</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Line separator</label>
+                    <input x-model="configDraft.separator" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="\n" />
+                  </div>
+                </div>
+
+                <!-- OCR File -->
+                <div x-show="configDraft.tool === 'ocr_file'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Image file path</label>
+                    <div style="display:flex;gap:4px;">
+                      <input x-model="configDraft.file_path" type="text" class="input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="/path/to/image.png" />
+                      <button class="btn btn-secondary btn-sm" style="font-size:11px;" @click="pickPath('file_path', false)">…</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Language</label>
+                    <input x-model="configDraft.lang" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="eng" />
+                    <p style="font-size:10px;color:var(--text-muted);margin:3px 0 0;">Tesseract code: eng, spa, fra, deu, chi_sim…</p>
+                  </div>
+                </div>
+
+                <!-- For each file in Folder -->
+                <div x-show="configDraft.tool === 'for_each_file'" style="display:flex;flex-direction:column;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Folder</label>
+                    <div style="display:flex;gap:4px;">
+                      <input x-model="configDraft.folder_path" type="text" class="input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="/path/to/folder" />
+                      <button class="btn btn-secondary btn-sm" style="font-size:11px;" @click="pickPath('folder_path', true)">…</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">File pattern</label>
+                    <input x-model="configDraft.pattern" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="*.png" />
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:2px 0;">
+                    <input x-model="configDraft.recursive" type="checkbox" id="cfg-recursive" style="width:14px;height:14px;cursor:pointer;" />
+                    <label for="cfg-recursive" style="font-size:12px;color:var(--text-primary);cursor:pointer;">Include subfolders</label>
+                  </div>
+                  <p style="font-size:10px;color:var(--text-muted);margin:0;">Runs the downstream nodes once per matching file. The file path is passed as input text.</p>
+                </div>
+
+                <!-- Copy to Clipboard: no params -->
+                <div x-show="configDraft.tool === 'copy_clipboard'">
+                  <p style="font-size:12px;color:var(--text-muted);line-height:1.5;">Copies the current pipeline value to the system clipboard. No additional parameters needed.</p>
+                </div>
+              </div>
+
+              <!-- ── Condition config ── -->
+              <div x-show="configNodeType === 'condition'" style="display:flex;flex-direction:column;gap:8px;">
+                <div>
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Condition</label>
+                  <select x-model="configDraft.condition" class="input" style="width:100%;font-size:12px;padding:5px 8px;">
+                    <option value="always_true">Always true (pass-through)</option>
+                    <option value="not_empty">Text is not empty</option>
+                    <option value="contains">Text contains…</option>
+                    <option value="length_gt">Length greater than…</option>
+                    <option value="matches_regex">Matches regex…</option>
+                  </select>
+                </div>
+                <div x-show="configDraft.condition === 'contains' || configDraft.condition === 'length_gt' || configDraft.condition === 'matches_regex'">
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;"
+                         x-text="configDraft.condition === 'length_gt' ? 'Minimum length (chars)' : configDraft.condition === 'matches_regex' ? 'Regex pattern' : 'Text to look for'"></label>
+                  <input x-model="configDraft.value" type="text" class="input" style="width:100%;font-size:12px;padding:5px 8px;" placeholder="…" />
+                </div>
+              </div>
+
+              <!-- ── End config ── -->
+              <div x-show="configNodeType === 'end'">
+                <p style="font-size:12px;color:var(--text-muted);line-height:1.5;">Marks the end of a pipeline branch. No configuration needed.</p>
+              </div>
+
+            </div><!-- /form body -->
+
+            <!-- Footer -->
+            <div style="padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:6px;">
+              <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center;" @click="saveConfig()">Save</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;" @click="configOpen=false">Cancel</button>
+            </div>
+
+          </div><!-- /config-panel -->
+
+        </div><!-- /content-row -->
+      </div><!-- /pipeline-active -->
     </div><!-- /right -->
   </div><!-- /body -->
 
@@ -167,27 +438,35 @@
     trigger:   '#22c55e',
     action:    '#8b74d4',
     condition: '#f59e0b',
-    loop:      '#8b5cf6',
+    comment:   '#6b7280',
     end:       '#ef4444'
   };
   const NODE_ICONS = {
-    trigger: 'zap', action: 'settings-2', condition: 'git-branch', loop: 'repeat-2', end: 'square'
+    trigger: 'zap', action: 'settings-2', condition: 'git-branch', comment: 'message-square', end: 'square'
   };
   const NODE_LABELS = {
-    trigger: 'Trigger', action: 'Action', condition: 'Condition', loop: 'Loop', end: 'End'
+    trigger: 'Trigger', action: 'Action', condition: 'Condition', comment: 'Note', end: 'End'
   };
   const TRIGGER_LABELS = {
     Manual: 'Manual', OcrCompleted: 'After OCR',
-    TranscriptionCompleted: 'After Voice', ClipboardChanged: 'On Copy'
+    TranscriptionCompleted: 'After Voice', ClipboardChanged: 'On Copy',
+    FolderWatch: 'Folder Watch'
   };
   const TOOL_LABELS = {
-    translate: 'Translate', copy_clipboard: 'Copy to Clipboard', save_note: 'Save as Note'
+    translate:      'Translate',
+    copy_clipboard: 'Copy to Clipboard',
+    save_note:      'Save as Note',
+    read_file:      'Read File',
+    write_file:     'Write to File',
+    append_file:    'Append to File',
+    ocr_file:       'OCR File',
+    for_each_file:  'For each file in Folder',
   };
   const DEFAULT_CONFIGS = {
     trigger:   JSON.stringify({ trigger: 'Manual' }),
     action:    JSON.stringify({ tool: 'translate', params: { from_lang: 'auto', to_lang: 'en' } }),
     condition: JSON.stringify({ condition: 'always_true' }),
-    loop:      JSON.stringify({ timeout_secs: 60 }),
+    comment:   JSON.stringify({ color: '#6b7280', title: 'Note', text: '' }),
     end:       '{}'
   };
 
@@ -199,10 +478,31 @@
       nodes:         [],
       edges:         [],
       selectedNode:  null,
+      selectedEdge:  null,
       dragging:      null,
+      draftEdge:     null,   // { sourceNodeId, sourceLabel, x1, y1, x2, y2 }
       running:       false,
       runResult:     null,
       runOk:         true,
+
+      // Pan + zoom state
+      panX:    0,
+      panY:    0,
+      zoom:    1.0,
+      panning: false,
+      panStart: null,
+      _rafPending: false,
+
+      // Undo / redo stacks — each entry is an op descriptor (type + data to replay/invert)
+      undoStack:    [],
+      redoStack:    [],
+      _inUndoRedo:  false,  // guard: prevents undo/redo actions from pushing new undo entries
+
+      // Node config panel state
+      configOpen:     false,
+      configNodeId:   null,
+      configNodeType: null,
+      configDraft:    {},    // flat param map: { tool, from_lang, to_lang, file_path, ... }
 
       get isManual() {
         return this.triggerLabel === 'Manual';
@@ -212,6 +512,31 @@
         document.addEventListener('qa:load-pipeline', (e) => {
           this.loadGraph(e.detail.id, e.detail.name || '', e.detail.triggerLabel || '');
         });
+        document.addEventListener('keydown', (e) => {
+          const tag = document.activeElement?.tagName;
+          const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+          // Undo: Ctrl+Z
+          if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && !inInput) {
+            e.preventDefault(); this.undo(); return;
+          }
+          // Redo: Ctrl+Shift+Z or Ctrl+Y
+          if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y') && !inInput) {
+            e.preventDefault(); this.redo(); return;
+          }
+          if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+          if (inInput) return;
+          if (this.selectedEdge) { this.deleteSelectedEdge(); e.preventDefault(); }
+          else if (this.selectedNode) { this.deleteSelectedNode(); e.preventDefault(); }
+        });
+
+        // Re-render SVG edges whenever edges, selection, or draft changes.
+        // x-for inside SVG crashes WebKit (importNode bug), so we manage SVG manually.
+        const re = () => this.$nextTick(() => this._renderEdges());
+        this.$watch('edges',       re);
+        this.$watch('selectedEdge', re);
+        this.$watch('draftEdge',   re);
+
+        // Edge click listeners are attached directly in _renderEdges() after each innerHTML update.
       },
 
       async loadGraph(id, name, trigLabel) {
@@ -219,7 +544,12 @@
         this.pipelineName = name;
         this.triggerLabel = trigLabel;
         this.selectedNode = null;
+        this.selectedEdge = null;
+        this.configOpen   = false;
         this.runResult    = null;
+        this.undoStack    = [];
+        this.redoStack    = [];
+        this.zoom = 1; this.panX = 0; this.panY = 0; // will be overridden in $nextTick
         const token = window.__SESSION_TOKEN__;
         const port  = window.__API_PORT__;
         try {
@@ -230,6 +560,9 @@
           this.edges = data.edges || [];
           this.$nextTick(() => {
             if (window.lucide) lucide.createIcons({ node: document.getElementById('qa-canvas-inner') });
+            if (this.nodes.length) this.fitNodes();
+            else this._centerCanvas(); // empty pipeline: start at canvas centre, not top-left corner
+            this._renderEdges();
           });
         } catch(e) { console.error('loadGraph failed:', e); }
       },
@@ -242,14 +575,27 @@
       nodeConfigSummary(node) {
         try {
           const c = JSON.parse(node.config || '{}');
-          if (node.node_type === 'trigger')
-            return TRIGGER_LABELS[c.trigger] || c.trigger || 'Manual';
-          if (node.node_type === 'action')
+          if (node.node_type === 'trigger') {
+            const t = c.trigger || 'Manual';
+            if (t === 'FolderWatch' && c.folder_path)
+              return 'Watch: …/' + c.folder_path.split('/').filter(Boolean).pop();
+            return TRIGGER_LABELS[t] || t;
+          }
+          if (node.node_type === 'action') {
+            const p = c.params || {};
+            if (c.tool === 'translate')     return 'Translate → ' + (p.to_lang || 'en');
+            if (c.tool === 'save_note')     return 'Save note' + (p.tags ? ' #' + p.tags.split(',')[0].trim() : '');
+            if (c.tool === 'for_each_file') return 'Each file: ' + (p.pattern || '*') + ' in ' + (p.folder_path ? '…/' + p.folder_path.split('/').filter(Boolean).pop() : 'folder');
+            if (c.tool === 'read_file')     return 'Read: ' + (p.file_path ? '…/' + p.file_path.split('/').filter(Boolean).pop() : 'file');
+            if (c.tool === 'write_file')    return 'Write → ' + (p.file_path ? '…/' + p.file_path.split('/').filter(Boolean).pop() : 'file');
+            if (c.tool === 'append_file')   return 'Append → ' + (p.file_path ? '…/' + p.file_path.split('/').filter(Boolean).pop() : 'file');
+            if (c.tool === 'ocr_file')      return 'OCR: ' + (p.file_path ? '…/' + p.file_path.split('/').filter(Boolean).pop() : 'file');
             return TOOL_LABELS[c.tool] || c.tool || '';
+          }
           if (node.node_type === 'condition')
             return c.condition || 'always true';
-          if (node.node_type === 'loop')
-            return 'Timeout: ' + (c.timeout_secs || 60) + 's';
+          if (node.node_type === 'comment')
+            return c.title || 'Note';
         } catch(e) {}
         return '';
       },
@@ -269,6 +615,7 @@
           'padding:10px 12px',
           'cursor:grab',
           'user-select:none',
+          'overflow:visible',
           'box-shadow:' + (selected ? '0 0 0 3px ' + color + '40,var(--shadow-md)' : 'var(--shadow-sm)'),
           'transition:box-shadow 120ms',
           'z-index:' + (selected ? 10 : 1)
@@ -279,12 +626,7 @@
       _sourcePort(edge) {
         const src = this.nodes.find(n => n.id === edge.source_id);
         if (!src) return { x: 0, y: 0 };
-        const multi = src.node_type === 'condition' || src.node_type === 'loop';
-        const isTop = edge.edge_label === 'true' || edge.edge_label === 'body';
-        const y = multi
-          ? (isTop ? src.pos_y + NODE_H * 0.33 : src.pos_y + NODE_H * 0.67)
-          : src.pos_y + NODE_H / 2;
-        return { x: src.pos_x + NODE_W, y };
+        return this._portPos(src, edge.edge_label);
       },
 
       edgePath(edge) {
@@ -303,27 +645,263 @@
         const src = this._sourcePort(edge);
         const tgt = this.nodes.find(n => n.id === edge.target_id);
         if (!tgt) return 0;
-        return (src.x + tgt.pos_x) / 2 + NODE_W / 2;
+        // Midpoint of cubic bezier at t=0.5 = (P0 + P3) / 2 (control points cancel)
+        return (src.x + tgt.pos_x) / 2;
       },
       edgeMidY(edge) {
         const src = this._sourcePort(edge);
         const tgt = this.nodes.find(n => n.id === edge.target_id);
         if (!tgt) return 0;
-        return (src.y + tgt.pos_y + NODE_H / 2) / 2 - 8;
+        return (src.y + (tgt.pos_y + NODE_H / 2)) / 2 - 10;
+      },
+
+      // ── Pan + zoom ──────────────────────────────────────────────────────
+      setZoom(z) {
+        this.zoom = Math.min(3, Math.max(0.15, z));
+      },
+
+      // Centre the viewport so all nodes are visible. Falls back to (0,0) if no nodes.
+      fitNodes() {
+        const vp = document.getElementById('qa-viewport');
+        if (!vp) return;
+        const rect = vp.getBoundingClientRect();
+        if (!this.nodes.length) {
+          this.zoom = 1; this.panX = 0; this.panY = 0;
+          return;
+        }
+        const minX = Math.min(...this.nodes.map(n => n.pos_x));
+        const minY = Math.min(...this.nodes.map(n => n.pos_y));
+        const maxX = Math.max(...this.nodes.map(n => n.pos_x + 180));
+        const maxY = Math.max(...this.nodes.map(n => n.pos_y + 68));
+        const contentW = maxX - minX, contentH = maxY - minY;
+        const pad = 60;
+        const z = Math.min(3, Math.max(0.15,
+          Math.min((rect.width - pad*2) / contentW, (rect.height - pad*2) / contentH)
+        ));
+        this.zoom = z;
+        this.panX = (rect.width  - contentW * z) / 2 - minX * z;
+        this.panY = (rect.height - contentH * z) / 2 - minY * z;
+      },
+
+      // For new empty pipelines: centre the viewport on the middle of the 4000×3000 canvas
+      // so the user has equal room to pan in any direction.
+      _centerCanvas() {
+        const vp = document.getElementById('qa-viewport');
+        if (!vp) return;
+        const rect = vp.getBoundingClientRect();
+        // Place canvas centre (2000, 1500) at 40% from left / 50% from top of viewport
+        this.panX = rect.width  * 0.4 - 2000 * this.zoom;
+        this.panY = rect.height * 0.5 - 1500 * this.zoom;
+      },
+
+      // Centre the viewport on a single canvas-coordinate point
+      _panToNode(node) {
+        const vp = document.getElementById('qa-viewport');
+        if (!vp) return;
+        const rect = vp.getBoundingClientRect();
+        this.panX = rect.width  / 2 - (node.pos_x + 90)  * this.zoom;
+        this.panY = rect.height / 2 - (node.pos_y + 34) * this.zoom;
+      },
+
+      onViewportMousedown(evt) {
+        // Only start panning if clicking on the viewport background or canvas inner (not a node or port)
+        const t = evt.target;
+        if (t.id === 'qa-viewport' || t.id === 'qa-canvas-inner' || t.tagName === 'svg') {
+          this.panning = true;
+          this.panStart = { x: evt.clientX - this.panX, y: evt.clientY - this.panY };
+        }
+      },
+
+      onViewportMousemove(evt) {
+        if (!this.panning || !this.panStart) return;
+        this.panX = evt.clientX - this.panStart.x;
+        this.panY = evt.clientY - this.panStart.y;
+      },
+
+      onViewportMouseup() {
+        this.panning = false;
+        this.panStart = null;
+      },
+
+      onWheel(evt) {
+        const factor = evt.deltaY < 0 ? 1.1 : 0.9;
+        const newZoom = Math.min(3, Math.max(0.15, this.zoom * factor));
+        const vp = document.getElementById('qa-viewport');
+        const rect = vp ? vp.getBoundingClientRect() : { left: 0, top: 0 };
+        const mx = evt.clientX - rect.left;
+        const my = evt.clientY - rect.top;
+        // Zoom toward cursor: adjust pan so point under cursor stays fixed
+        this.panX = mx - (mx - this.panX) * (newZoom / this.zoom);
+        this.panY = my - (my - this.panY) * (newZoom / this.zoom);
+        this.zoom = newZoom;
+      },
+
+      // ── SVG edge renderer (no Alpine inside SVG — WebKit importNode bug) ──
+      _renderEdges() {
+        const g = document.getElementById('qa-edges-g');
+        if (!g) return;
+        let html = '';
+        for (const edge of this.edges) {
+          const d = this.edgePath(edge);
+          if (!d) continue;
+          const sel = this.selectedEdge && this.selectedEdge.id === edge.id;
+          const stroke = sel ? 'var(--accent)' : 'var(--text-muted)';
+          const sw     = sel ? 2 : 1.5;
+          const op     = sel ? 1 : 0.55;
+          const marker = sel ? 'url(#arrowhead-sel)' : 'url(#arrowhead)';
+          // Visible path
+          html += `<path d="${d}" fill="none" stroke-linecap="round"
+                        style="stroke:${stroke};stroke-width:${sw};opacity:${op};"
+                        marker-end="${marker}"/>`;
+          // Wide hit area — pointer-events:all makes it clickable regardless of fill/stroke visibility
+          html += `<path d="${d}" fill="none"
+                        style="stroke:rgba(0,0,0,0.01);stroke-width:14;cursor:pointer;pointer-events:all;"
+                        data-edge-id="${edge.id}"/>`;
+          // Label for condition branches
+          if (edge.edge_label && edge.edge_label !== 'default') {
+            const mx = this.edgeMidX(edge), my = this.edgeMidY(edge);
+            const lc = edge.edge_label === 'true' ? '#22c55e' : '#ef4444';
+            html += `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle"
+                           style="font-size:10px;font-weight:600;fill:${lc};pointer-events:none;"
+                           >${edge.edge_label}</text>`;
+          }
+        }
+        // Draft edge while connecting
+        if (this.draftEdge) {
+          const d = this.draftEdgePath();
+          if (d) html += `<path d="${d}" fill="none"
+                               style="stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 4;opacity:0.8;pointer-events:none;"/>`;
+        }
+        g.innerHTML = html;
+
+        // Attach click listeners directly — getAttribute is safer than dataset for WebKitGTK SVG elements
+        const self = this;
+        g.querySelectorAll('[data-edge-id]').forEach(el => {
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const eid = el.getAttribute('data-edge-id');
+            const edge = self.edges.find(ed => ed.id === eid);
+            self.selectedEdge = (self.selectedEdge && self.selectedEdge.id === eid) ? null : (edge || null);
+            self.selectedNode = null;
+          });
+        });
+      },
+
+      // ── Connect nodes ────────────────────────────────────────────────────
+      _portPos(node, label) {
+        // Returns canvas-coordinate {x,y} for an output port
+        if (label === 'true')  return { x: node.pos_x + NODE_W, y: node.pos_y + NODE_H * 0.33 };
+        if (label === 'false') return { x: node.pos_x + NODE_W, y: node.pos_y + NODE_H * 0.67 };
+        return { x: node.pos_x + NODE_W, y: node.pos_y + NODE_H / 2 };
+      },
+
+      _inputPortPos(node) {
+        return { x: node.pos_x, y: node.pos_y + NODE_H / 2 };
+      },
+
+      startConnect(evt, node, label) {
+        evt.stopPropagation();
+        evt.preventDefault();
+        const p = this._portPos(node, label);
+        // Use a plain JS object as source of truth during the drag.
+        // We spread-assign to this.draftEdge on each move so Alpine detects the change.
+        const draft = { sourceNodeId: node.id, sourceLabel: label, x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+        this.draftEdge = { ...draft };
+
+        const self = this;
+        const vp = document.getElementById('qa-viewport');
+        const vpRect = vp.getBoundingClientRect();
+
+        const toCanvas = (ex, ey) => ({
+          x: (ex - vpRect.left - self.panX) / self.zoom,
+          y: (ey - vpRect.top  - self.panY) / self.zoom,
+        });
+
+        const onMove = (e) => {
+          const c = toCanvas(e.clientX, e.clientY);
+          draft.x2 = c.x; draft.y2 = c.y;
+          self.draftEdge = { ...draft }; // spread triggers Alpine reactivity
+        };
+
+        const onUp = (e) => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup',   onUp);
+          // Hit detection in screen space — avoids transform math errors.
+          // Input port screen position = vpRect.left + (node.pos_x * zoom + panX)
+          const z = self.zoom, px = self.panX, py = self.panY;
+          let target = null;
+          for (const n of self.nodes) {
+            if (n.id === draft.sourceNodeId) continue;
+            if (n.node_type === 'trigger') continue;
+            const sx = vpRect.left + (n.pos_x * z + px);
+            const sy = vpRect.top  + ((n.pos_y + NODE_H / 2) * z + py);
+            if (Math.hypot(e.clientX - sx, e.clientY - sy) < 30) { target = n; break; }
+          }
+          if (target) self.createEdge(draft.sourceNodeId, target.id, draft.sourceLabel);
+          self.draftEdge = null;
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup',   onUp);
+      },
+
+      draftEdgePath() {
+        if (!this.draftEdge) return '';
+        const { x1, y1, x2, y2 } = this.draftEdge;
+        const dx = Math.max(Math.abs(x2 - x1) * 0.5, 60);
+        return `M ${x1} ${y1} C ${x1+dx} ${y1} ${x2-dx} ${y2} ${x2} ${y2}`;
+      },
+
+      async createEdge(sourceId, targetId, label) {
+        if (!this.pipelineId) return;
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          const res = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/edges', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ source_id: sourceId, target_id: targetId, edge_label: label })
+          });
+          const data = await res.json();
+          const newEdge = { id: data.id, pipeline_id: this.pipelineId, source_id: sourceId, target_id: targetId, edge_label: label };
+          this.edges.push(newEdge);
+          if (!this._inUndoRedo) this._push({ type: 'add_edge', edge: { ...newEdge } });
+        } catch(e) { console.error('createEdge failed:', e); }
+      },
+
+      async deleteSelectedEdge() {
+        if (!this.selectedEdge) return;
+        const edgeSnapshot = { ...this.selectedEdge };
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/edges/' + edgeSnapshot.id, {
+            method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (!this._inUndoRedo) this._push({ type: 'delete_edge', edge: edgeSnapshot });
+          this.edges = this.edges.filter(e => e.id !== edgeSnapshot.id);
+          this.selectedEdge = null;
+        } catch(e) { console.error('deleteEdge failed:', e); }
       },
 
       // ── Drag ────────────────────────────────────────────────────────────
       startDrag(evt, node) {
         evt.preventDefault();
         this.selectedNode = node;
-        const start = { node, mx: evt.clientX, my: evt.clientY, nx: node.pos_x, ny: node.pos_y };
+        // Capture zoom at drag start so movement scales correctly
+        const z = this.zoom;
+        const start = { node, mx: evt.clientX, my: evt.clientY, nx: node.pos_x, ny: node.pos_y, z };
         this.dragging = start;
 
         const self = this;
         const onMove = (e) => {
           if (!self.dragging) return;
-          self.dragging.node.pos_x = Math.max(0, self.dragging.nx + e.clientX - self.dragging.mx);
-          self.dragging.node.pos_y = Math.max(0, self.dragging.ny + e.clientY - self.dragging.my);
+          const z = self.dragging.z;
+          self.dragging.node.pos_x = Math.max(0, self.dragging.nx + (e.clientX - self.dragging.mx) / z);
+          self.dragging.node.pos_y = Math.max(0, self.dragging.ny + (e.clientY - self.dragging.my) / z);
+          // Redraw edges at most once per animation frame
+          if (!self._rafPending) {
+            self._rafPending = true;
+            requestAnimationFrame(() => { self._renderEdges(); self._rafPending = false; });
+          }
         };
         const onUp = async () => {
           document.removeEventListener('mousemove', onMove);
@@ -331,15 +909,16 @@
           document.body.style.userSelect = '';
           if (!self.dragging) return;
           const n = self.dragging.node;
+          const oldX = self.dragging.nx, oldY = self.dragging.ny;
           self.dragging = null;
-          await self.saveNodePosition(n);
+          await self.saveNodePosition(n, oldX, oldY);
         };
         document.body.style.userSelect = 'none';
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup',  onUp);
       },
 
-      async saveNodePosition(node) {
+      async saveNodePosition(node, oldX, oldY) {
         const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
         try {
           await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + node.id, {
@@ -347,17 +926,44 @@
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
             body: JSON.stringify({ pos_x: node.pos_x, pos_y: node.pos_y })
           });
+          // Push undo op only on real user drags (not when called from undo/redo engine)
+          if (!this._inUndoRedo && oldX !== undefined &&
+              (Math.abs(node.pos_x - oldX) > 2 || Math.abs(node.pos_y - oldY) > 2)) {
+            this._push({ type: 'move_node', nodeId: node.id, oldX, oldY, newX: node.pos_x, newY: node.pos_y });
+          }
         } catch(e) { console.error('saveNodePosition failed:', e); }
+        this._renderEdges();
       },
 
       // ── Add / delete node ───────────────────────────────────────────────
       async addNode(type) {
         if (!this.pipelineId) return;
         const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
-        const maxX  = this.nodes.length
-          ? Math.max(...this.nodes.map(n => n.pos_x)) + NODE_W + 40
-          : 60;
-        const pos_x = maxX, pos_y = 200;
+        // Spawn position logic:
+        //   Empty canvas      → centre of visible viewport
+        //   Trigger exists    → to the right of rightmost trigger, cascade for each extra node
+        //   No trigger, nodes → to the right of rightmost node, cascade
+        const vp = document.getElementById('qa-viewport');
+        const rect = vp ? vp.getBoundingClientRect() : { width: 800, height: 600 };
+        let pos_x, pos_y;
+        const triggers = this.nodes.filter(n => n.node_type === 'trigger');
+        const anchor   = triggers.length
+          ? triggers.reduce((a, b) => a.pos_x > b.pos_x ? a : b)
+          : (this.nodes.length ? this.nodes.reduce((a, b) => a.pos_x > b.pos_x ? a : b) : null);
+        if (!anchor) {
+          pos_x = Math.max(20, (rect.width  / 2 - this.panX) / this.zoom - NODE_W / 2);
+          pos_y = Math.max(20, (rect.height / 2 - this.panY) / this.zoom - NODE_H / 2);
+        } else {
+          const MAX_COLS = 3;
+          const siblings = this.nodes.filter(n => n.node_type !== 'trigger' && n.node_type !== 'end');
+          const col = siblings.length % MAX_COLS, row = Math.floor(siblings.length / MAX_COLS);
+          // Clamp the base x so that even the rightmost column (col = MAX_COLS-1) stays inside the canvas.
+          // Canvas width is 4000px; leave NODE_W + 40px margin on the right.
+          const maxBase = 4000 - (MAX_COLS * (NODE_W + 20)) - 40;
+          const baseX   = Math.min(anchor.pos_x + NODE_W + 60, maxBase);
+          pos_x = Math.max(20, baseX + col * (NODE_W + 20));
+          pos_y = Math.max(20, anchor.pos_y + row * (NODE_H + 16));
+        }
         const config = DEFAULT_CONFIGS[type] || '{}';
         try {
           const res  = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes', {
@@ -366,9 +972,13 @@
             body: JSON.stringify({ node_type: type, config, pos_x, pos_y })
           });
           const data = await res.json();
-          this.nodes.push({ id: data.id, pipeline_id: this.pipelineId, node_type: type, config, pos_x, pos_y });
+          const newNode = { id: data.id, pipeline_id: this.pipelineId, node_type: type, config, pos_x, pos_y };
+          this.nodes.push(newNode);
+          if (!this._inUndoRedo) this._push({ type: 'add_node', node: { ...newNode } });
           this.$nextTick(() => {
             if (window.lucide) lucide.createIcons({ node: document.getElementById('qa-canvas-inner') });
+            // Pan canvas so the new node is centred in view
+            this._panToNode(newNode);
           });
         } catch(e) { console.error('addNode failed:', e); }
       },
@@ -376,16 +986,193 @@
       async deleteSelectedNode() {
         const node = this.selectedNode;
         if (!node) return;
+        // Capture connected edges before deletion (needed to restore them on undo)
+        const connectedEdges = this.edges.filter(e => e.source_id === node.id || e.target_id === node.id);
         const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
         try {
           await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + node.id, {
             method: 'DELETE',
             headers: { 'Authorization': 'Bearer ' + token }
           });
+          if (!this._inUndoRedo) this._push({ type: 'delete_node', node: { ...node }, edges: connectedEdges.map(e => ({ ...e })) });
           this.nodes = this.nodes.filter(n => n.id !== node.id);
           this.edges = this.edges.filter(e => e.source_id !== node.id && e.target_id !== node.id);
           this.selectedNode = null;
+          if (this.configNodeId === node.id) { this.configOpen = false; this.configNodeId = null; }
         } catch(e) { console.error('deleteNode failed:', e); }
+      },
+
+      // ── Undo / redo ──────────────────────────────────────────────────────
+      _push(op) {
+        this.undoStack.push(op);
+        if (this.undoStack.length > 50) this.undoStack.shift();
+        this.redoStack = []; // new action invalidates redo history
+      },
+
+      async undo() {
+        const op = this.undoStack.pop();
+        if (!op) return;
+        this._inUndoRedo = true;
+        try   { await this._applyInverse(op); }
+        finally { this._inUndoRedo = false; }
+        this.redoStack.push(op);
+      },
+
+      async redo() {
+        const op = this.redoStack.pop();
+        if (!op) return;
+        this._inUndoRedo = true;
+        try   { await this._applyForward(op); }
+        finally { this._inUndoRedo = false; }
+        this.undoStack.push(op);
+      },
+
+      // Primitives: raw API + state mutations, no undo bookkeeping
+      async _apiAddNode(node) {
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        const res = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ id: node.id, node_type: node.node_type, config: node.config, pos_x: node.pos_x, pos_y: node.pos_y })
+        });
+        const data = await res.json();
+        const restored = { ...node, id: data.id }; // server echoes the id (may equal node.id if accepted)
+        this.nodes.push(restored);
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons({ node: document.getElementById('qa-canvas-inner') }); });
+        return restored;
+      },
+
+      async _apiDeleteNode(nodeId) {
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + nodeId, {
+          method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token }
+        });
+        this.nodes = this.nodes.filter(n => n.id !== nodeId);
+        this.edges = this.edges.filter(e => e.source_id !== nodeId && e.target_id !== nodeId);
+        if (this.selectedNode?.id === nodeId) this.selectedNode = null;
+        if (this.configNodeId === nodeId) { this.configOpen = false; this.configNodeId = null; }
+      },
+
+      async _apiAddEdge(edge) {
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        const res = await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/edges', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ id: edge.id, source_id: edge.source_id, target_id: edge.target_id, edge_label: edge.edge_label })
+        });
+        const data = await res.json();
+        this.edges.push({ ...edge, id: data.id });
+      },
+
+      async _apiDeleteEdge(edgeId) {
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/edges/' + edgeId, {
+          method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token }
+        });
+        this.edges = this.edges.filter(e => e.id !== edgeId);
+        if (this.selectedEdge?.id === edgeId) this.selectedEdge = null;
+      },
+
+      async _apiMoveNode(nodeId, x, y) {
+        const node = this.nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        node.pos_x = x; node.pos_y = y;
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + nodeId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ pos_x: x, pos_y: y })
+        });
+        this._renderEdges();
+      },
+
+      async _applyInverse(op) {
+        if (op.type === 'add_node')    { await this._apiDeleteNode(op.node.id); }
+        if (op.type === 'delete_node') {
+          await this._apiAddNode(op.node);
+          for (const e of op.edges) await this._apiAddEdge(e);
+        }
+        if (op.type === 'move_node')   { await this._apiMoveNode(op.nodeId, op.oldX, op.oldY); }
+        if (op.type === 'add_edge')    { await this._apiDeleteEdge(op.edge.id); }
+        if (op.type === 'delete_edge') { await this._apiAddEdge(op.edge); }
+      },
+
+      async _applyForward(op) {
+        if (op.type === 'add_node')    { await this._apiAddNode(op.node); }
+        if (op.type === 'delete_node') {
+          for (const e of op.edges) await this._apiDeleteEdge(e.id);
+          await this._apiDeleteNode(op.node.id);
+        }
+        if (op.type === 'move_node')   { await this._apiMoveNode(op.nodeId, op.newX, op.newY); }
+        if (op.type === 'add_edge')    { await this._apiAddEdge(op.edge); }
+        if (op.type === 'delete_edge') { await this._apiDeleteEdge(op.edge.id); }
+      },
+
+      // ── Config panel ─────────────────────────────────────────────────────
+      openConfig(node) {
+        this.selectedNode  = node;
+        this.configNodeId   = node.id;
+        this.configNodeType = node.node_type;
+        this.configOpen     = true;
+        try {
+          const c = JSON.parse(node.config || '{}');
+          if (node.node_type === 'action') {
+            // Flatten: { tool, ...params } so x-model binds directly
+            this.configDraft = { tool: c.tool || 'translate', ...(c.params || {}) };
+          } else {
+            this.configDraft = { ...c };
+          }
+        } catch(e) {
+          this.configDraft = {};
+        }
+      },
+
+      async saveConfig() {
+        const node = this.nodes.find(n => n.id === this.configNodeId);
+        if (!node || !this.pipelineId) return;
+
+        let config;
+        if (this.configNodeType === 'action') {
+          // Re-nest: { tool, params: { everything else } }
+          const { tool, ...params } = this.configDraft;
+          // Remove undefined / empty values to keep config clean
+          const cleanParams = Object.fromEntries(
+            Object.entries(params).filter(([, v]) => v !== '' && v !== undefined && v !== null)
+          );
+          config = JSON.stringify({ tool: tool || 'translate', params: cleanParams });
+        } else {
+          // trigger / condition / end — store flat
+          const clean = Object.fromEntries(
+            Object.entries(this.configDraft).filter(([, v]) => v !== '' && v !== undefined && v !== null)
+          );
+          config = JSON.stringify(clean);
+        }
+
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        try {
+          await fetch('http://127.0.0.1:' + port + '/api/pipelines/' + this.pipelineId + '/nodes/' + this.configNodeId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ config })
+          });
+          node.config = config;
+          this.configOpen = false;
+        } catch(e) { console.error('saveConfig failed:', e); }
+      },
+
+      // Opens a native file/folder picker if tauri-plugin-dialog is available.
+      // Falls back silently so users can still type paths manually.
+      async pickPath(key, isFolder) {
+        const d = window.__TAURI__?.dialog;
+        if (!d) return;
+        try {
+          const result = await d.open({ multiple: false, directory: isFolder });
+          if (typeof result === 'string' && result) {
+            this.configDraft = { ...this.configDraft, [key]: result };
+          } else if (Array.isArray(result) && result[0]) {
+            this.configDraft = { ...this.configDraft, [key]: result[0] };
+          }
+        } catch(e) { console.warn('pickPath cancelled or failed:', e); }
       },
 
       // ── Run ─────────────────────────────────────────────────────────────

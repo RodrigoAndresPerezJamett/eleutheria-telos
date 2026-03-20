@@ -592,8 +592,8 @@ async fn use_template_handler(
             .unwrap_or_default();
     let list_html = render_pipeline_list(&pipelines);
 
-    // Editor for new pipeline (OOB swap into #qa-editor)
-    let steps: Vec<StepRow> = sqlx::query_as(
+    // Kept for legacy compatibility; graph-based pipelines no longer use steps
+    let _steps: Vec<StepRow> = sqlx::query_as(
         "SELECT id, pipeline_id, step_order, tool, config FROM pipeline_steps WHERE pipeline_id = ? ORDER BY step_order ASC",
     )
     .bind(&pipeline_id)
@@ -1135,6 +1135,7 @@ struct EdgeRow {
 
 #[derive(serde::Deserialize)]
 struct AddNodeParams {
+    id: Option<String>, // caller may supply original ID (used by undo to restore deleted node)
     node_type: String,
     config: Option<String>,
     pos_x: Option<f64>,
@@ -1150,6 +1151,7 @@ struct UpdateNodeParams {
 
 #[derive(serde::Deserialize)]
 struct AddEdgeParams {
+    id: Option<String>, // caller may supply original ID (used by undo to restore deleted edge)
     source_id: String,
     target_id: String,
     edge_label: Option<String>,
@@ -1187,7 +1189,7 @@ async fn add_node_handler(
     Path(pipeline_id): Path<String>,
     axum::Json(params): axum::Json<AddNodeParams>,
 ) -> impl IntoResponse {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = params.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let config = params.config.unwrap_or_else(|| "{}".to_string());
     let pos_x = params.pos_x.unwrap_or(100.0);
     let pos_y = params.pos_y.unwrap_or(200.0);
@@ -1256,7 +1258,7 @@ async fn add_edge_handler(
     Path(pipeline_id): Path<String>,
     axum::Json(params): axum::Json<AddEdgeParams>,
 ) -> impl IntoResponse {
-    let id = uuid::Uuid::new_v4().to_string();
+    let id = params.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let label = params.edge_label.unwrap_or_else(|| "default".to_string());
     let _ = sqlx::query(
         "INSERT INTO pipeline_edges (id, pipeline_id, source_id, target_id, edge_label) \

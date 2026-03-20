@@ -134,12 +134,25 @@
 **Order: highest cross-cutting impact first.**
 
 ### Quick Actions — Canvas visual (replacing list editor)
-- [ ] **H0 — Panel navigation history (back/forward)** — shell-level feature; back/forward chevrons in header; in-memory nav stack updated on every `htmx:afterSwap` of `#tool-panel`. Applies to all tools, not just Quick Actions.
-- [ ] **H1 — DB migration: graph schema** — new `pipeline_nodes` + `pipeline_edges` tables; auto-migrate existing `pipeline_steps` to linear node chains; new API routes `/graph`, `/nodes`, `/edges`.
-- [ ] **H2 — Canvas render + persistence** — nodes as draggable HTML divs, SVG connections overlay, node positions auto-saved to DB on every move (no "unsaved work" — canvas state is always persisted).
-- [ ] **H3 — Node palette + connect/disconnect + undo/redo** — toolbar with node types (Trigger, Action, Condition, Loop, End); click output port → drag → click input port to connect; Ctrl+Z / Ctrl+Shift+Z for canvas operations.
-- [ ] **H4 — Graph-aware execution engine** — replaces linear step runner; graph traversal; condition node evaluation; backward-compatible with migrated pipelines.
-- [ ] **H5 — Loop node with timeout** — loop node with configurable `max_iterations` and `timeout_secs` (default 60); cycle detection via loop node counter.
+- [x] **H0 — Panel navigation history (back/forward)** — shell-level back/forward chevrons + mouse side buttons + Alt+←/→. ✓
+- [x] **H1 — DB migration: graph schema** — `pipeline_nodes` + `pipeline_edges` tables, auto-migration of existing steps, API routes. ✓
+- [x] **H2 — Canvas render + persistence** — nodes as draggable divs on dot-grid canvas, SVG bezier edges, drag-to-reposition persisted to DB, node palette toolbar, run result bar. ✓
+- [x] **H3a — Canvas pan + zoom** — transform-based canvas; drag background to pan; scroll wheel to zoom toward cursor; zoom buttons ±; fit-all button ⌖. ✓
+- [x] **H3b — Connect nodes** — output/input ports on each node (trigger: out only; end: in only; condition: 2 outs true/false; others: 1 in + 1 out); drag from output port → input port to create edge; back-edges allowed (cycles = loops); click edge + Delete to remove. ✓
+- [x] **H3c — Node config panel** — clicking a node opens a 280px right-side panel; trigger type selector (+ FolderWatch params); action tool select with full param forms (translate, copy_clipboard, save_note, read_file, write_file, append_file, ocr_file, for_each_file); condition type + value; Save PUTs to DB; node card summary updates. Annotation boxes deferred. ✓
+- [x] **Canvas QoL** — node spawn at canvas centre (empty) or near trigger/rightmost node (cascade clamped to canvas bounds); config panel closes without saving on node delete; smooth open/close animation; camera centred on canvas midpoint on pipeline open; pipeline switch resets undo/edge/config state. ✓
+- [x] **H3d — Undo/redo** — 50-op stack; Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y; covers add/delete node (restores edges), move node, add/delete edge; toolbar ↩↪ buttons with disabled state; Rust API accepts optional `id` on node/edge creation so delete-undo restores original IDs. ✓
+- [ ] **H4 — Graph-aware execution engine** — graph traversal replaces linear step runner; condition node evaluation; cycle detection with configurable timeout; backward-compatible with migrated pipelines.
+  - **Loop quality checks (user requirement 2026-03-20):** At 60s elapsed, surface a non-blocking toast warning ("Pipeline X has been running for 60s — still in a loop?"). At a second configurable threshold (default 120s), auto-terminate the cycle and show an error result. Both thresholds configurable per-pipeline in node config (timeout_warn_secs / timeout_kill_secs, overridable globally in Settings). Pipeline result bar must show "✗ Loop timed out after Ns."
+
+> **Loop design decision (2026-03-19):** No dedicated Loop node. Loops are back-edges — any output port can connect to any previous node, creating a cycle. The execution engine detects cycles and enforces a per-pipeline timeout (default 60s warn / 120s kill). This matches the user's mental model and simplifies the node type system.
+
+### Pipeline organisation and portability
+- [ ] **P1 — Pipeline folders** — group pipelines in the left sidebar list; `pipeline_folders` table + `folder_id` FK on `pipelines`; collapse/expand folders; move pipeline into folder via UI.
+- [ ] **P2 — Export pipeline as YAML** — serialize nodes + edges to human-readable YAML; "Export" button in canvas toolbar; downloads `.yaml` file. YAML chosen over JSON (more readable) and BPMN (too complex).
+- [ ] **P3 — Import pipeline from YAML** — upload `.yaml`, parse, validate node types and tool names against available tools, insert into DB as new pipeline.
+
+> **Pipeline YAML format (2026-03-20):** Fields: `name`, `trigger` (string), `nodes` list (id slug, type, config object, pos_x, pos_y), `edges` list (source slug, target slug, label). Human-readable slugs in YAML; real UUIDs generated on import.
 
 ### Remaining backlog items (ordered by impact)
 - [ ] **Notes: inline #tag extraction** — `#tag` tokens parsed at save time → `tags` table → clickable chips in notes list → filter by tag. Touches: `notes.rs`, SQLite migration, notes list UI, search.
@@ -149,7 +162,7 @@
 - [ ] **Clipboard: pin entries + content-type icons** — `is_pinned` column, pinned items float to top; content-type badge (URL, image, code) per item.
 - [ ] **Video: multi-track NLE** — audio + video tracks, trim handles, concatenate clips. Major feature; deferred to end of sprint.
 
-**Phase 4.7 is complete when** all items above are checked, tested, and committed.
+**Phase 4.7 is complete when** all canvas hitos (H3b–H4) are done, pipeline folders + YAML export/import work, and all remaining backlog items above are checked, tested, and committed.
 
 ---
 
