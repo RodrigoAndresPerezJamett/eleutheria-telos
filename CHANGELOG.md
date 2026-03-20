@@ -7,6 +7,26 @@ Format per entry:
 
 ---
 
+## [2026-03-19] — Phase 4.7 H0: Panel navigation history (back/forward)
+
+### Completed
+
+- **`ui/index.html`** — added browser-style back/forward navigation:
+  - `window.__navHistory` module: stack + cursor, `push()`, `back()`, `forward()`
+  - `htmx:afterSwap` on `#tool-panel` pushes URL to history stack; `__navSkipNext` flag suppresses push during back/forward traversal
+  - Back/forward use `fetch()` directly → `innerHTML` → `htmx.process()` (bypasses HTMX cross-origin concerns)
+  - `_navUpdateUI()` updates button `disabled`, `opacity`, `cursor` after every state change
+  - `et:nav-tool` custom event dispatched on back/forward → `shellState.init()` listens and syncs `activeTool` (sidebar highlight)
+  - Keyboard: `Alt+←` / `Alt+→`
+  - Mouse side buttons: `button === 3` (back), `button === 4` (forward) via `mousedown` + `mouseup` listeners
+  - Nav bar added inside `<main id="main">` above `#tool-panel`: two 24×24 chevron buttons (Lucide icons) + label span using CSS vars from design system
+- **Root cause of previous failure:** changes were made to `ui/shell.html` instead of `ui/index.html` — Tauri serves `ui/index.html` as the main window (`frontendDist: "../ui"`)
+
+### Next
+Phase 4.7 H1 — Quick Actions DB migration: `pipeline_nodes` + `pipeline_edges` tables, migrate existing `pipeline_steps` to linear node chains, new API routes.
+
+---
+
 ## [2026-03-19] — UI Design System Overhaul (DESIGN.md / Ethereal Command Center)
 
 ### Completed

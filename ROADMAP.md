@@ -127,6 +127,32 @@
 
 ---
 
+## Phase 4.7 — Backlog Sprint (current)
+
+**Goal:** Implement high-impact features from IDEAS.md that were deferred from previous phases. No monetization, no distribution. Pure product value. Each hito is tested by the user before merging and updating CHANGELOG.md.
+
+**Order: highest cross-cutting impact first.**
+
+### Quick Actions — Canvas visual (replacing list editor)
+- [ ] **H0 — Panel navigation history (back/forward)** — shell-level feature; back/forward chevrons in header; in-memory nav stack updated on every `htmx:afterSwap` of `#tool-panel`. Applies to all tools, not just Quick Actions.
+- [ ] **H1 — DB migration: graph schema** — new `pipeline_nodes` + `pipeline_edges` tables; auto-migrate existing `pipeline_steps` to linear node chains; new API routes `/graph`, `/nodes`, `/edges`.
+- [ ] **H2 — Canvas render + persistence** — nodes as draggable HTML divs, SVG connections overlay, node positions auto-saved to DB on every move (no "unsaved work" — canvas state is always persisted).
+- [ ] **H3 — Node palette + connect/disconnect + undo/redo** — toolbar with node types (Trigger, Action, Condition, Loop, End); click output port → drag → click input port to connect; Ctrl+Z / Ctrl+Shift+Z for canvas operations.
+- [ ] **H4 — Graph-aware execution engine** — replaces linear step runner; graph traversal; condition node evaluation; backward-compatible with migrated pipelines.
+- [ ] **H5 — Loop node with timeout** — loop node with configurable `max_iterations` and `timeout_secs` (default 60); cycle detection via loop node counter.
+
+### Remaining backlog items (ordered by impact)
+- [ ] **Notes: inline #tag extraction** — `#tag` tokens parsed at save time → `tags` table → clickable chips in notes list → filter by tag. Touches: `notes.rs`, SQLite migration, notes list UI, search.
+- [ ] **Quick Actions: opt-in/opt-out for auto-triggered pipelines** — small non-blocking toast bottom-right when a pipeline trigger fires; Accept / Dismiss; auto-dismissed after 8s; "Don't ask again for this pipeline" checkbox. Touches: `event_bus.rs`, `quick_actions.rs`, result cards (OCR/Voice).
+- [ ] **Command palette learns** — `command_history` table with access counts and last-used timestamps; Ctrl+K surfaces most-used items first.
+- [ ] **Voice: live recording waveform** — Web Audio API `AnalyserNode` + canvas waveform while mic is active. Frontend only.
+- [ ] **Clipboard: pin entries + content-type icons** — `is_pinned` column, pinned items float to top; content-type badge (URL, image, code) per item.
+- [ ] **Video: multi-track NLE** — audio + video tracks, trim handles, concatenate clips. Major feature; deferred to end of sprint.
+
+**Phase 4.7 is complete when** all items above are checked, tested, and committed.
+
+---
+
 ## Phase 5 — Monetization + Distribution
 
 **Goal:** Make the app distributable to non-technical users and close the most impactful product gaps identified in the Phase 4.6 introspection.

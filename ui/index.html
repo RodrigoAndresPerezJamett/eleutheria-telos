@@ -107,6 +107,12 @@
           void first.offsetWidth; // force reflow
           first.classList.add('panel-animate');
         }
+        // Nav history: track this swap unless it was triggered by back/forward
+        if (!window.__navSkipNext) {
+          var url = evt.detail.xhr && evt.detail.xhr.responseURL;
+          if (url) window.__navHistory.push(url);
+        }
+        window.__navSkipNext = false;
       }
     });
 
@@ -141,7 +147,7 @@
         }
       } catch (_) {}
 
-      // Init Lucide in shell
+      // Init Lucide in shell (includes nav-back / nav-forward chevrons)
       if (window.lucide) lucide.createIcons();
 
       // Plugin sidebar entries
@@ -180,6 +186,95 @@
     }
 
     document.addEventListener('DOMContentLoaded', initApp);
+
+    // ── Panel navigation history (browser-style back/forward) ──────────────
+    window.__navSkipNext = false;
+
+    function _navLabelFromUrl(url) {
+      var m = url.match(/\/tools\/([^/?#]+)/);
+      if (!m) return '';
+      var id = m[1];
+      return (window.ET_TOOLS && window.ET_TOOLS[id] && window.ET_TOOLS[id].label) ||
+             (id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '));
+    }
+
+    function _navUpdateUI() {
+      var nh   = window.__navHistory;
+      var back = document.getElementById('nav-back');
+      var fwd  = document.getElementById('nav-forward');
+      var lbl  = document.getElementById('nav-label');
+      if (back) {
+        var canBack = nh.cursor > 0;
+        back.disabled    = !canBack;
+        back.style.opacity = canBack ? '1' : '0.35';
+        back.style.cursor  = canBack ? 'pointer' : 'not-allowed';
+      }
+      if (fwd) {
+        var canFwd = nh.cursor < nh.stack.length - 1;
+        fwd.disabled    = !canFwd;
+        fwd.style.opacity = canFwd ? '1' : '0.35';
+        fwd.style.cursor  = canFwd ? 'pointer' : 'not-allowed';
+      }
+      if (lbl) lbl.textContent = nh.stack[nh.cursor] ? _navLabelFromUrl(nh.stack[nh.cursor]) : '';
+    }
+
+    function _navGo(url) {
+      window.__navSkipNext = true;
+      var token = window.__SESSION_TOKEN__;
+      fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+          var panel = document.getElementById('tool-panel');
+          if (!panel) return;
+          panel.innerHTML = html;
+          htmx.process(panel);
+          if (window.lucide) lucide.createIcons({ node: panel });
+          window.__navSkipNext = false;
+          _navUpdateUI();
+          // Sync Alpine activeTool
+          var m = url.match(/\/tools\/([^/?#]+)/);
+          if (m) window.dispatchEvent(new CustomEvent('et:nav-tool', { detail: { tool: m[1] } }));
+        })
+        .catch(function() { window.__navSkipNext = false; });
+    }
+
+    window.__navHistory = {
+      stack:  [],
+      cursor: -1,
+      push: function(url) {
+        this.stack = this.stack.slice(0, this.cursor + 1);
+        this.stack.push(url);
+        this.cursor = this.stack.length - 1;
+        _navUpdateUI();
+      },
+      back: function() {
+        if (this.cursor <= 0) return;
+        this.cursor--;
+        _navGo(this.stack[this.cursor]);
+        _navUpdateUI();
+      },
+      forward: function() {
+        if (this.cursor >= this.stack.length - 1) return;
+        this.cursor++;
+        _navGo(this.stack[this.cursor]);
+        _navUpdateUI();
+      }
+    };
+
+    // Alt+← / Alt+→
+    document.addEventListener('keydown', function(evt) {
+      if (evt.altKey && evt.key === 'ArrowLeft')  { evt.preventDefault(); window.__navHistory.back(); }
+      if (evt.altKey && evt.key === 'ArrowRight') { evt.preventDefault(); window.__navHistory.forward(); }
+    });
+
+    // Mouse side buttons: 3 = back, 4 = forward
+    document.addEventListener('mousedown', function(evt) {
+      if (evt.button === 3 || evt.button === 4) evt.preventDefault();
+    });
+    document.addEventListener('mouseup', function(evt) {
+      if (evt.button === 3) { evt.preventDefault(); window.__navHistory.back(); }
+      if (evt.button === 4) { evt.preventDefault(); window.__navHistory.forward(); }
+    });
   </script>
 </head>
 
@@ -451,6 +546,26 @@
 
   <!-- ── Main content ────────────────────────────────────────────────────────── -->
   <main id="main">
+
+    <!-- Back / forward navigation bar -->
+    <div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-bottom:1px solid var(--border);background:var(--bg-base);flex-shrink:0;">
+      <button id="nav-back"
+              onclick="window.__navHistory.back()"
+              disabled
+              title="Back (Alt+←)"
+              style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-muted);cursor:not-allowed;transition:all 120ms;flex-shrink:0;opacity:0.35;">
+        <i data-lucide="chevron-left" style="width:13px;height:13px;pointer-events:none;"></i>
+      </button>
+      <button id="nav-forward"
+              onclick="window.__navHistory.forward()"
+              disabled
+              title="Forward (Alt+→)"
+              style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-muted);cursor:not-allowed;transition:all 120ms;flex-shrink:0;opacity:0.35;">
+        <i data-lucide="chevron-right" style="width:13px;height:13px;pointer-events:none;"></i>
+      </button>
+      <span id="nav-label" style="margin-left:6px;font-size:11px;color:var(--text-muted);user-select:none;"></span>
+    </div>
+
     <div id="tool-panel">
       <div class="empty-state" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;">
         <i data-lucide="loader-2" class="spin" style="width:28px;height:28px;color:var(--text-muted)"></i>
@@ -530,6 +645,10 @@
             if (typeof s.sidebar_collapsed === 'boolean') {
               this.sidebarCollapsed = s.sidebar_collapsed;
             }
+          });
+          // Sync sidebar active highlight when back/forward navigates
+          window.addEventListener('et:nav-tool', (evt) => {
+            this.activeTool = evt.detail.tool;
           });
         },
 
