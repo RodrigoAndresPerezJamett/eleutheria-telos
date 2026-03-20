@@ -157,15 +157,22 @@
 
       async createNote() {
         const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
-        const res = await fetch('http://127.0.0.1:' + port + '/api/notes', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Bearer ' + token },
-          body:    'title=&content=',
-        });
-        const id = res.headers.get('X-Note-Id');
-        if (id) {
-          htmx.trigger(document.body, 'noteUpdated'); // refresh grid in background
+        try {
+          const res = await fetch('http://127.0.0.1:' + port + '/api/notes', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Bearer ' + token },
+            body:    'title=&content=',
+          });
+          if (!res.ok) { console.error('Notes: create failed', res.status); return; }
+          const html = await res.text();
+          // Extract ID from returned card HTML — avoids CORS header exposure issue with X-Note-Id
+          const match = html.match(/data-note-id="([^"]+)"/);
+          const id = match ? match[1] : null;
+          if (!id) { console.error('Notes: could not parse note ID from response'); return; }
+          htmx.trigger(document.body, 'noteUpdated');
           await this.openEditor(id);
+        } catch (e) {
+          console.error('Notes: createNote error', e);
         }
       },
 
@@ -173,21 +180,27 @@
         this.preview = null;
         this.mode    = 'editor';
         const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
-        const res  = await fetch('http://127.0.0.1:' + port + '/api/notes/' + id, {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const html   = await res.text();
-        const target = document.getElementById('note-editor-inner');
-        target.innerHTML = html;
-        // Execute scripts injected with editor HTML (defines notesEditor component)
-        target.querySelectorAll('script').forEach(old => {
-          const s = document.createElement('script');
-          s.textContent = old.textContent;
-          document.head.appendChild(s);
-          document.head.removeChild(s);
-        });
-        if (window.Alpine) Alpine.initTree(target);
-        if (window.lucide)  lucide.createIcons({ node: target });
+        try {
+          const res = await fetch('http://127.0.0.1:' + port + '/api/notes/' + id, {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (!res.ok) { console.error('Notes: editor load failed', res.status); this.mode = 'grid'; return; }
+          const html   = await res.text();
+          const target = document.getElementById('note-editor-inner');
+          target.innerHTML = html;
+          // Execute scripts injected with editor HTML (defines notesEditor component)
+          target.querySelectorAll('script').forEach(old => {
+            const s = document.createElement('script');
+            s.textContent = old.textContent;
+            document.head.appendChild(s);
+            document.head.removeChild(s);
+          });
+          if (window.Alpine) Alpine.initTree(target);
+          if (window.lucide)  lucide.createIcons({ node: target });
+        } catch (e) {
+          console.error('Notes: openEditor error', e);
+          this.mode = 'grid';
+        }
       },
     };
   };
