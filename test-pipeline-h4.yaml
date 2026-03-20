@@ -43,7 +43,7 @@ nodes:
 
   - id: "action-read"
     type: "action"
-    config: {"tool": "read_file", "params": {"path": "/tmp/test-input.txt"}}
+    config: {"tool": "read_file", "params": {"file_path": "/tmp/test-input.txt"}}
     pos_x: 300
     pos_y: 300
 
