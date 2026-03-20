@@ -13,49 +13,184 @@
   .prose hr { border-color: var(--border); margin: 1em 0; }
 </style>
 
-<div style="display:flex;height:100%;gap:0;">
+<div class="panel" style="display:flex;flex-direction:column;height:100%;padding:0;"
+     x-data="notesApp()" x-init="init()">
 
-  <!-- Left: note list -->
-  <div style="width:220px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);padding:20px 12px 20px 0;">
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0;">
+  <!-- Header -->
+  <div class="panel-header" style="padding:16px 24px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+    <div>
       <h1 class="panel-title" style="margin:0;">Notes</h1>
-      <button class="btn btn-primary btn-sm"
-              hx-post="/api/notes"
-              hx-target="#notes-list"
-              hx-swap="afterbegin"
-              hx-vals='{"title":"","content":""}'>
-        + New
-      </button>
+      <p class="panel-subtitle" style="margin:2px 0 0;">Your ideas, local and searchable.</p>
     </div>
+    <button class="btn btn-primary btn-sm" @click="createNote()">+ New</button>
+  </div>
 
-    <!-- Search notes -->
-    <input type="text"
-           name="q"
-           placeholder="Search notes…"
-           class="input"
-           style="font-size:12px;padding:5px 8px;margin-bottom:10px;flex-shrink:0;"
+  <!-- Content area (grid or editor) -->
+  <div style="flex:1;min-height:0;position:relative;display:flex;flex-direction:column;">
+
+    <!-- ── Grid mode ──────────────────────────────────────────────────────── -->
+    <div :style="{ display: mode === 'grid' ? 'flex' : 'none' }"
+         style="flex-direction:column;flex:1;min-height:0;">
+
+      <!-- Scrollable card grid -->
+      <div id="notes-grid"
+           style="flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;align-content:start;"
            hx-get="/api/notes"
-           hx-trigger="input changed delay:300ms"
-           hx-target="#notes-list"
-           hx-swap="innerHTML" />
+           hx-trigger="load, noteUpdated from:body"
+           hx-swap="innerHTML">
+        <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
+      </div>
 
-    <!-- Note list -->
-    <div id="notes-list"
-         style="flex:1;overflow-y:auto;"
-         hx-get="/api/notes"
-         hx-trigger="load, noteUpdated from:body"
-         hx-swap="innerHTML">
-      <p style="font-size:13px;color:var(--text-muted);">Loading…</p>
+      <!-- Search bar pinned to bottom -->
+      <div style="flex-shrink:0;padding:10px 16px;border-top:1px solid var(--border);background:var(--bg-base);">
+        <input type="text"
+               name="q"
+               placeholder="Search notes…"
+               class="input"
+               style="width:100%;font-size:13px;"
+               hx-get="/api/notes"
+               hx-trigger="input changed delay:300ms"
+               hx-target="#notes-grid"
+               hx-swap="innerHTML" />
+      </div>
     </div>
-  </div>
 
-  <!-- Right: editor area -->
-  <div id="note-editor" style="flex:1;overflow-y:auto;padding:20px 0 20px 24px;">
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;text-align:center;padding:24px;">
-      <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0;">Nothing selected</p>
-      <p style="font-size:13px;color:var(--text-muted);margin:0;">Pick a note from the list, or hit + to write a new one.</p>
+    <!-- ── Editor mode ────────────────────────────────────────────────────── -->
+    <div :style="{ display: mode === 'editor' ? 'flex' : 'none' }"
+         style="flex-direction:column;flex:1;min-height:0;">
+
+      <!-- Editor top bar -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-elevated);">
+        <button class="btn btn-ghost btn-sm" @click="mode = 'grid'">
+          <i data-lucide="arrow-left" style="width:13px;height:13px;margin-right:4px;"></i>Notes
+        </button>
+      </div>
+
+      <!-- Editor content injected here -->
+      <div id="note-editor-inner" style="flex:1;overflow-y:auto;padding:20px 24px;"></div>
     </div>
-  </div>
 
+    <!-- ── Preview modal (overlay) ────────────────────────────────────────── -->
+    <div x-show="preview"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         style="position:absolute;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;"
+         @click.self="preview = null"
+         @keydown.escape.window="preview = null">
+
+      <div style="background:var(--bg-elevated);border-radius:var(--radius-lg);max-width:640px;width:100%;max-height:85%;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+
+        <!-- Modal header -->
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <h2 x-text="preview?.title || 'Untitled'"
+              style="flex:1;font-size:16px;font-weight:600;color:var(--text-primary);margin:0;"></h2>
+          <button class="btn btn-ghost btn-sm" @click="preview = null" style="padding:4px 7px;">✕</button>
+        </div>
+
+        <!-- Scrollable content — click anywhere to copy -->
+        <div style="flex:1;overflow-y:auto;padding:16px 20px;cursor:copy;"
+             @click="copyContent()"
+             title="Click anywhere to copy full text">
+          <pre x-text="preview?.content"
+               style="white-space:pre-wrap;font-size:13px;color:var(--text-primary);margin:0;font-family:inherit;line-height:1.65;"></pre>
+        </div>
+
+        <!-- Modal footer -->
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;">
+          <button class="btn btn-secondary btn-sm" @click="copyContent()">
+            <i data-lucide="clipboard" style="width:12px;height:12px;margin-right:4px;"></i>
+            <span x-text="copyFeedback ? 'Copied!' : 'Copy'"></span>
+          </button>
+          <button class="btn btn-primary btn-sm" @click="openEditor(preview.id)">
+            <i data-lucide="pencil" style="width:12px;height:12px;margin-right:4px;"></i>Edit
+          </button>
+          <span x-show="copyFeedback"
+                x-transition
+                style="font-size:12px;color:var(--success);margin-left:4px;">✓ Copied to clipboard</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content area -->
 </div>
+
+<script>
+(function () {
+
+  // Global hook called by server-rendered note cards (data attributes → preview modal)
+  window.notesOpenPreview = function (el) {
+    document.dispatchEvent(new CustomEvent('notes:preview', {
+      detail: {
+        id:      el.dataset.noteId,
+        title:   el.dataset.noteTitle,
+        content: el.dataset.noteContent,
+      }
+    }));
+  };
+
+  window.notesApp = function () {
+    return {
+      mode:         'grid',   // 'grid' | 'editor'
+      preview:      null,     // { id, title, content } | null
+      copyFeedback: false,
+
+      init() {
+        document.addEventListener('notes:preview', e => {
+          this.preview = e.detail;
+        });
+      },
+
+      async copyContent() {
+        if (!this.preview?.content) return;
+        try {
+          await navigator.clipboard.writeText(this.preview.content);
+          this.copyFeedback = true;
+          setTimeout(() => { this.copyFeedback = false; }, 1800);
+        } catch (e) {
+          console.warn('Clipboard write failed:', e);
+        }
+      },
+
+      async createNote() {
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        const res = await fetch('http://127.0.0.1:' + port + '/api/notes', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Bearer ' + token },
+          body:    'title=&content=',
+        });
+        const id = res.headers.get('X-Note-Id');
+        if (id) {
+          htmx.trigger(document.body, 'noteUpdated'); // refresh grid in background
+          await this.openEditor(id);
+        }
+      },
+
+      async openEditor(id) {
+        this.preview = null;
+        this.mode    = 'editor';
+        const token = window.__SESSION_TOKEN__, port = window.__API_PORT__;
+        const res  = await fetch('http://127.0.0.1:' + port + '/api/notes/' + id, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const html   = await res.text();
+        const target = document.getElementById('note-editor-inner');
+        target.innerHTML = html;
+        // Execute scripts injected with editor HTML (defines notesEditor component)
+        target.querySelectorAll('script').forEach(old => {
+          const s = document.createElement('script');
+          s.textContent = old.textContent;
+          document.head.appendChild(s);
+          document.head.removeChild(s);
+        });
+        if (window.Alpine) Alpine.initTree(target);
+        if (window.lucide)  lucide.createIcons({ node: target });
+      },
+    };
+  };
+
+})();
+</script>

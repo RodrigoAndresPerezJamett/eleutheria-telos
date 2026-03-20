@@ -23,56 +23,56 @@ fn html_escape(s: &str) -> String {
 
 fn render_note_card(id: &str, title: &str, content: &str, pinned: i64, updated_at: i64) -> String {
     let display_title = if title.is_empty() { "Untitled" } else { title };
-    let preview = if content.len() > 120 {
-        format!("{}…", &content[..120])
-    } else {
-        content.to_string()
-    };
-    let pin_icon = if pinned == 1 { "📌" } else { "" };
+    let pin_icon = if pinned == 1 { "📌 " } else { "" };
+    let pin_btn_label = if pinned == 1 { "Unpin" } else { "Pin" };
     let ts = format_timestamp(updated_at);
-    // r##"..."## used because the HTML contains "# sequences (HTMX targets like "#note-id")
+    // data-note-content embeds full content; browser HTML-decodes it when JS reads dataset
     format!(
-        r##"<div id="note-{id}" style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:6px;cursor:pointer;"
-             onmouseenter="this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=1)"
-             onmouseleave="this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=0)"
-             hx-get="/api/notes/{id}"
-             hx-target="#note-editor"
-             hx-swap="innerHTML">
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
-    <h3 style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0;">{pin_icon}{escaped_title}</h3>
-    <button class="btn btn-ghost btn-sm note-action"
-            style="flex-shrink:0;opacity:0;transition:opacity 150ms;"
+        r##"<div id="note-{id}"
+     data-note-id="{id}"
+     data-note-title="{escaped_title}"
+     data-note-content="{escaped_content}"
+     style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 14px 12px;cursor:pointer;display:flex;flex-direction:column;min-height:120px;transition:box-shadow 150ms;"
+     onmouseenter="this.style.boxShadow='0 0 0 1px var(--accent)';this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=1)"
+     onmouseleave="this.style.boxShadow='';this.querySelectorAll('.note-action').forEach(e=>e.style.opacity=0)"
+     onclick="notesOpenPreview(this)">
+  <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:6px;">
+    <h3 style="flex:1;font-size:13px;font-weight:600;color:var(--text-primary);margin:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{pin_icon}{escaped_title}</h3>
+    <button class="note-action btn btn-ghost btn-sm"
+            style="flex-shrink:0;opacity:0;transition:opacity 150ms;padding:2px 5px;font-size:11px;"
             hx-post="/api/notes/{id}/pin"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
-            title="Toggle pin"
-            @click.stop="">Pin</button>
+            onclick="event.stopPropagation()"
+            title="{pin_btn_label}">{pin_btn_label}</button>
   </div>
-  <p style="font-size:11px;color:var(--text-muted);margin:4px 0 6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{escaped_preview}</p>
+  <p style="font-size:12px;color:var(--text-muted);flex:1;margin:0 0 10px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;line-height:1.5;">{escaped_preview}</p>
   <div style="display:flex;align-items:center;justify-content:space-between;">
     <span style="font-size:11px;color:var(--text-muted);">{ts}</span>
-    <button class="btn btn-danger btn-sm note-action"
-            style="opacity:0;transition:opacity 150ms;"
+    <button class="note-action btn btn-ghost btn-sm"
+            style="opacity:0;transition:opacity 150ms;padding:2px 5px;font-size:11px;color:var(--destructive);"
             hx-delete="/api/notes/{id}"
             hx-target="#note-{id}"
             hx-swap="outerHTML"
             hx-confirm="Delete this note?"
-            @click.stop="">Delete</button>
+            onclick="event.stopPropagation()">✕</button>
   </div>
 </div>"##,
         id = id,
         pin_icon = pin_icon,
+        pin_btn_label = pin_btn_label,
         escaped_title = html_escape(display_title),
-        escaped_preview = html_escape(&preview),
+        escaped_content = html_escape(content),
+        escaped_preview = html_escape(content), // CSS -webkit-line-clamp:3 handles visual truncation
         ts = ts,
     )
 }
 
 fn render_note_list(entries: &[(String, String, String, i64, i64)]) -> String {
     if entries.is_empty() {
-        return r#"<div style="padding:24px 8px;text-align:center;">
-  <p style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 6px;">Got something worth keeping?</p>
-  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.5;">Write your first note — it stays local, searchable, and yours.</p>
+        return r#"<div style="grid-column:1/-1;padding:48px 16px;text-align:center;">
+  <p style="font-size:15px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">Got something worth keeping?</p>
+  <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.6;">Write your first note — it stays local, searchable, and yours forever.</p>
 </div>"#.to_string();
     }
     entries
