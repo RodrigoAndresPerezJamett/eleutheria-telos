@@ -581,3 +581,98 @@ Scripts rewritten:
 Axum routes and UI unchanged — same CLI interface.
 
 **Revisit if:** ctranslate2 drops Python 3.14 support or a better offline translation library emerges with a lighter footprint.
+
+---
+
+### D-038 — CSS theming: separate file per theme, swapped via `<link>` href
+
+**Decision:** Each theme is a standalone CSS file in `ui/assets/themes/`. The active theme is applied by swapping the `href` of a `<link id="theme-link">` element in `shell.html`. The active theme name is persisted to SQLite via `POST /api/settings` (key: `active_theme`). On app load, an inline `<script>` in `<head>` reads the current theme from a `window.__ACTIVE_THEME__` constant injected by Axum (same mechanism as the session token) and sets the `<link>` href before any paint, eliminating flash of unstyled content.
+
+```html
+<!-- In shell.html <head> -->
+<link id="theme-link" rel="stylesheet" href="/assets/themes/dark.css">
+<script>
+  // Runs before paint — no FOUC
+  const t = window.__ACTIVE_THEME__ || 'dark';
+  document.getElementById('theme-link').href = '/assets/themes/' + t + '.css';
+</script>
+```
+
+```javascript
+// Theme change in Settings panel (Alpine)
+async function setTheme(name) {
+  document.getElementById('theme-link').href = `/assets/themes/${name}.css`;
+  await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${window.__SESSION_TOKEN__}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `key=active_theme&value=${name}`
+  });
+}
+```
+
+**Each theme file structure:**
+```css
+/* ui/assets/themes/dark.css */
+:root {
+  --bg-base: #13151a;
+  --bg-surface: #1e2030;
+  --bg-elevated: #24273a;
+  --bg-overlay: rgba(30, 32, 48, 0.6);
+  --text-primary: #cad3f5;
+  --text-secondary: #a5adcb;
+  --text-muted: #6e738d;
+  --accent: #8aadf4;
+  --accent-subtle: rgba(138, 173, 244, 0.15);
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --glass-bg: rgba(30, 32, 48, 0.6);
+  --glass-blur: blur(16px);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+}
+```
+
+**Glass off state:** When user disables glassmorphism in Settings, write `glass_enabled=false` to settings and add `data-glass="off"` to `<html>` via Alpine. In every theme file:
+```css
+[data-glass="off"] {
+  --bg-overlay: var(--bg-elevated);
+  --glass-bg: var(--bg-elevated);
+  --glass-blur: none;
+  --glass-border: 1px solid var(--border);
+}
+```
+
+**Rejected alternatives:**
+- `data-theme` attribute on `<html>` (all themes in one file) — scales poorly for community contributions: every contributor edits the same file, merge conflicts multiply, a community member cannot submit a new theme without understanding the whole file structure.
+- CSS class on `<html>` — functionally equivalent to `data-theme` but less semantic; same community-scaling problem.
+
+**Reason:** Community scalability is the primary driver. A contributor adds a theme by: (1) copying any existing theme file, (2) renaming it, (3) changing the color values. They need zero knowledge of the rest of the codebase. Theme templates from the internet (VS Code, Neovim, terminal themes that publish their palettes as CSS variables) map directly to this structure — copy the color values, fill in the variable names. The FOUC risk is eliminated by the inline script that runs before first paint.
+
+**Date:** 2026-03-20
+
+**Revisit if:** Tauri adds a native CSS variable injection API that makes runtime theming simpler without FOUC risk.
+
+---
+
+### D-039 — Quick Actions canvas node visual style
+
+**Decision:** Nodes use a **flowchart-classic** visual language:
+- **Action nodes:** pill shape (fully rounded ends, `border-radius: 999px`), filled with `--accent-subtle`, `--accent` border
+- **Condition nodes:** diamond shape (rotated square via CSS `transform: rotate(45deg)` on the container, counter-rotated label inside), `--glass-bg` fill, amber `--border` variant to signal branching
+- **Trigger nodes:** rounded rectangle with a left-side accent bar in `--accent` (visually distinct as the entry point)
+- **End nodes:** small filled circle in `--text-muted`
+- **Edges:** smooth bezier curves, `--border` stroke, `--accent` on hover; condition edges labelled "true" / "false" in `text-xs --text-muted`
+
+All node shapes use `--glass-bg` + `--glass-border` as the base surface, consistent with the rest of the UI. Node labels use `font-medium text-sm --text-primary`. Selected node: `--accent` border at 2px, subtle `box-shadow: 0 0 0 3px var(--accent-subtle)`.
+
+**Rejected alternatives:**
+- Rounded cards for all nodes (Notion/Linear style) — doesn't visually communicate node type at a glance; users have to read the label to know if a node is an action vs a condition
+- All rounded rectangles (n8n style) — same problem; color alone carries too much cognitive load
+
+**Reason:** The pill/diamond distinction is universally understood (flowchart notation that any user has encountered). Conditions need to visually "pop" as decision points — the diamond shape achieves this without requiring color alone to carry the meaning. Consistent with the glassmorphism aesthetic because the shapes use the same surface variables.
+
+**Date:** 2026-03-20
+
+**Revisit if:** User testing shows the diamond shape is confusing or hard to interact with on small canvas scales.

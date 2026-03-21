@@ -58,10 +58,11 @@ This project has zero dependency conflicts. Keep it that way.
 ## Session Workflow
 
 ### Starting a session
-1. Read CHANGELOG.md — know what was done last and what comes next
-2. Read DECISIONS.md — know the constraints that are already locked in
-3. Confirm current phase from ROADMAP.md
-4. Say: "Ready. Phase X. Last session: [Y]. Today: [Z]."
+1. Read `STATUS.md` — know what Cursor has done and what is blocked
+2. Read `CHANGELOG.md` — know what was completed last session
+3. Read `DECISIONS.md` — know the locked constraints
+4. Confirm current phase from `ROADMAP.md`
+5. Say: "Ready. Phase X. Last session: [Y]. Cursor status: [Z]. Today: [W]."
 
 ### Before writing any code
 1. List every file that will be created or modified, and why
@@ -76,11 +77,33 @@ This project has zero dependency conflicts. Keep it that way.
 - Never implement Phase N+1 features while working on Phase N
 
 ### Ending a session
-1. Update CHANGELOG.md — specific: which files changed, what was added/removed/fixed
-2. Add new architectural decisions to DECISIONS.md
-3. Move any ideas that surfaced to IDEAS.md
-4. Create GitHub issues for anything identified but not completed
-5. State the recommended next step for the following session
+1. Update `CHANGELOG.md` — specific: files changed, what was added/removed/fixed
+2. Update `STATUS.md` — mark your tasks done, unblock any Cursor tasks you resolved, add new discoveries
+3. Add new architectural decisions to `DECISIONS.md`
+4. Move any ideas that surfaced to `IDEAS.md`
+5. Create GitHub issues for anything identified but not completed
+6. State the recommended next step for the following session
+
+---
+
+## Worktree Awareness (new section — add after Session Workflow)
+
+This project uses git worktrees to run Cursor in parallel. Full protocol: **WORKTREE.md**.
+
+**Claude Code's worktree:** `/home/rodrigopj/Projects/eleutheria-telos/` (the `dev` branch) — unchanged.
+**Cursor's worktree:** `/home/rodrigopj/Projects/eleutheria-telos-cursor/` (the `cursor-sprint` branch).
+
+### What this means for Claude Code
+
+1. **Check STATUS.md before every session.** It shows what Cursor is actively working on. If Cursor has checked out an HTML panel, do not restructure that file this session — note it and pick a different task.
+
+2. **Lane discipline.** Claude Code owns `src-tauri/`, migrations, CI, and documentation. During Phase 4.5, do not redesign HTML panels — that is Cursor's lane. If a Rust handler change requires a structural HTML fragment update (new field in a rendered card), make the minimal structural change only and note it in CHANGELOG.md: "Rust fragment updated — Cursor should apply styling to X."
+
+3. **Unblock Cursor proactively.** If STATUS.md shows a Cursor task blocked on a new route or schema change, implement it as soon as possible and mark it unblocked in STATUS.md before ending the session.
+
+4. **Add new i18n keys yourself.** If any UI task requires a new user-facing string, add the key to `ui/locales/en.json` and note it in CHANGELOG.md so Cursor knows it is available.
+
+5. **Shared files: append, never overwrite.** `STATUS.md`, `CHANGELOG.md`, and `IDEAS.md` are edited by both tools. Always append to the relevant section — never rewrite the whole file.
 
 ---
 
