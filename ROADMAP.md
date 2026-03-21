@@ -154,6 +154,11 @@
 
 > **Pipeline YAML format (2026-03-20):** Fields: `name`, `trigger` (string), `nodes` list (id slug, type, config object, pos_x, pos_y), `edges` list (source slug, target slug, label). Human-readable slugs in YAML; real UUIDs generated on import.
 
+### Audio research (added 2026-03-20 — no code, document outcomes only)
+- [ ] **R1 — CDP investigation** — research CDP licensing (can we redistribute in a commercial app?), platform availability, and whether its DSP capabilities overlap meaningfully with ffmpeg. Write findings to `RESEARCH_CDP.md` + a DECISIONS.md entry. Outcome: go / no-go for using CDP as a backend.
+- [ ] **R2 — Audacity 4 UI study** — catalogue new UX patterns introduced in Audacity 4 (clip gain handles, effect chains, multi-track layout). Identify which patterns transfer to our Audio Editor / Voice tools. Confirm that studying and independently implementing Audacity's ideas does not create GPL exposure (it does not — ideas are not copyrightable). Write findings to `RESEARCH_AUDACITY4.md`.
+- [ ] **R3 — SoundThread feasibility** — determine SoundThread's license and whether it can be embedded in a Tauri WebView offline. If viable, assess the API surface for programmatic control. Compare effort vs. building in-house with Wavesurfer.js + Web Audio API. Write findings to `RESEARCH_SOUNDTHREAD.md` + DECISIONS.md entry.
+
 ### Known bugs (blocking backlog items that depend on translation)
 - [ ] **Translation model index 404** — Models panel returns `HTTP Error 404: Not Found` when fetching the argostranslate model index. Root cause: argostranslate index URL changed or is down; also blocked by Python 3.14 incompatibility (see D-036). Fix: replace argostranslate with ctranslate2 + Opus-MT (Phase 4.6 decision, deferred). Pipeline actions using `translate` will fail until this is resolved.
 
@@ -171,7 +176,9 @@
 - [ ] **Name sanity check (folders + pipelines)** — strip or reject invalid characters (`/`, `\`, `<`, `>`, `"`, null bytes) from pipeline and folder name inputs on both client (input validation) and server (trim + sanitise before INSERT/UPDATE). Currently `/` can be stored, which breaks YAML filenames and future file-backed features.
 - [ ] **Video: multi-track NLE** — audio + video tracks, trim handles, concatenate clips. Major feature; deferred to end of sprint.
 
-**Phase 4.7 is complete when** all canvas hitos (H3b–H4) are done, pipeline folders + YAML export/import work, and all remaining backlog items above are checked, tested, and committed.
+**Phase 4.7 is complete when** all canvas hitos (H3b–H4) are done, pipeline folders + YAML export/import work, all remaining backlog items above are checked, tested, and committed, and audio research tasks R1–R3 have written outcomes in their respective `RESEARCH_*.md` files.
+
+> **Planned for Phase 5+** (pending audio research): Soundboard, Virtual Microphone / Voice Effects, Audio Editor. See IDEAS.md for full scope and dependencies.
 
 ---
 

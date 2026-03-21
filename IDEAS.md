@@ -130,6 +130,30 @@ Claude Code: do not implement anything from this file unless it has been explici
 
 ---
 
+## Audio Tools — Research & Investigation (Added 2026-03-20)
+
+These items require research and a feasibility decision before any implementation. Do not build until each investigation is complete and the outcome documented in DECISIONS.md.
+
+- **Investigate: CDP (Composers' Desktop Project)** — CDP is a suite of 200+ command-line audio processing programs developed at the Dartington College of Arts and Huddersfield University. Evaluate: (1) Is it still maintained and installable on Linux/Windows/macOS? (2) License — historically distributed as freeware, but investigate exact terms and whether commercial use and redistribution in a paid app is permitted without restriction. (3) API surface — programs are CLI tools (stdin/stdout based); can they be driven by Rust `std::process::Command` the way ffmpeg is? (4) Overlap with ffmpeg — which CDP tools offer capabilities unavailable or impractical in ffmpeg (spectral morphing, granular synthesis, convolution reverb, psola pitch shift without artefacts)? (5) Scope fit — would CDP serve as the audio processing backend for a future Audio Editor or Voice Effects tool? Write findings to `RESEARCH_CDP.md` and a DECISIONS.md entry. Risk: licensing ambiguity; potential installation complexity on non-Linux platforms.
+
+- **Investigate: Audacity 4 — UI concepts and functionality** — Audacity 4 was rewritten with a new UI (Qt6 based). Evaluate: (1) What new UX patterns did Audacity 4 introduce compared to Audacity 3? (2) Are there interaction patterns (waveform editing, multi-track layout, effect chains, clip gain handles) that would transfer well to our Audio Editor or Voice tools? (3) Audacity's licensing: the source is GPL-2.0+ which means we cannot embed or link Audacity code directly in our commercial app. However, we can study its UI and replicate concepts independently (ideas are not copyrightable). Confirm this is safe before referencing Audacity patterns in implementation. (4) Does Audacity 4's architecture give any clues about how to implement a lightweight multi-track editor in a WebView context? Write findings to `RESEARCH_AUDACITY4.md`.
+
+- **Investigate: SoundThread audio editor — embed feasibility + commercial licensing** — SoundThread is a browser-based DAW/audio editor. Evaluate: (1) Is it open source? If so, what license? (2) If MIT/Apache: can it be embedded in a Tauri WebView as a panel directly, or does it require an iframe to a hosted URL? If hosted-URL-only, does that violate offline-first principles? (3) If proprietary: what are the OEM/embedding terms and commercial pricing? (4) If embedding is viable: what is the API surface for programmatic control (load file, export result, trigger actions from Rust)? (5) Alternative: build a minimal audio editor UI in-house using the Web Audio API + Wavesurfer.js (MIT) for waveform rendering, which gives us full control and no licensing risk. Compare effort vs. embedding SoundThread. Write findings to `RESEARCH_SOUNDTHREAD.md` and add a DECISIONS.md entry.
+
+---
+
+## New Audio Tools (Pending Research — Phase 5+)
+
+These tools are conceptually clear but depend on the research investigations above (CDP, SoundThread, Audacity 4) before implementation scope is defined. Do not schedule until research is complete.
+
+- **Soundboard** — a panel where the user configures a grid of sound buttons (upload audio files, assign them to a grid cell, click to play). Key feature: route playback through a virtual microphone so sounds play through the user's mic in Discord, Zoom, games, etc. Implementation path: (1) play sounds via Web Audio API or rodio (Rust); (2) route to virtual mic via PulseAudio/PipeWire loopback sink on Linux, VB-Cable or Virtual Audio Cable on Windows, Soundflower/BlackHole on macOS. Platform-specific routing is the core challenge. Phase 5+.
+
+- **Virtual Microphone / Voice Effects** — a real-time voice processing pipeline that captures mic input, applies effects (pitch shift, reverb, robotic, radio, megaphone, noise gate, compression), and routes the processed audio to a virtual microphone sink that other apps see as a regular mic. Implementation path: (1) capture mic via CPAL (Rust, cross-platform); (2) apply effects in a real-time DSP chain (rubberband for pitch shift, simple convolution for reverb using impulse responses, parametric EQ for tone shaping); (3) output to PipeWire/PulseAudio null sink loopback on Linux, VB-Cable on Windows. CDP may provide some of the DSP blocks if licensing permits. This is a significant native audio engineering effort. Phase 5+.
+
+- **Audio Editor** — trim, fade, normalize, cut/paste, multi-track mixing. Waveform visualisation via Wavesurfer.js (MIT). Backend: ffmpeg for format conversion, decode/encode; optionally CDP for advanced DSP (if licensing cleared). Scope is deliberately smaller than Audacity — cover the 20% of operations that cover 80% of use cases: trim, split, fade, normalize, export. SoundThread embedding is one route; a purpose-built WebView panel backed by Rust DSP is the other. Blocked on SoundThread + CDP research. Phase 5+.
+
+---
+
 ## Voice Tool Enhancements
 
 - **Notes: text highlighting / marker** — select a word or sentence and apply a highlight colour (like a marker pen). Multiple colours available (yellow, green, pink, blue) via a small colour chip toolbar that appears on text selection. Highlights stored as markdown-compatible annotations (`==text==` syntax, rendered via a custom CSS rule as `background: <color>`). Useful for study notes, review workflows, and meeting notes. Phase 5.
