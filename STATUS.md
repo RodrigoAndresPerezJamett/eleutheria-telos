@@ -1,4 +1,4 @@
-#/home/rodrigopj/Downloads/CLAUDE_ADDITIONS.md  Status — Eleutheria Telos
+# Status — Eleutheria Telos
 
 **This file is the single handoff document between Claude Code, Cursor, and Rodrigo.**
 Every session starts by reading this file. Every session ends by updating it.
@@ -9,122 +9,115 @@ Every session starts by reading this file. Every session ends by updating it.
 
 | | |
 |---|---|
-| **Active phases** | 4.5 UI Polish (Cursor lane) + 4.7 Backlog Sprint (Claude Code lane) |
-| **Claude Code limit** | Resets 2026-03-25 ~14:00 Santiago |
+| **Mode** | **Solo (Claude Code limit resets 2026-03-25 ~14:00 Santiago)** |
+| **Active phases** | 4.5 UI Polish + 4.7 Backlog Sprint |
 | **Last Claude Code session** | 2026-03-20 — trash bin, date chunks, note references, drag ghost fix |
 | **Last Cursor session** | None yet — sprint starting |
-| **Last dev→cursor sync** | Not yet — run worktree setup below first |
+| **Last dev→cursor sync** | Run setup commands in WORKTREE.md if not done |
 | **Last cursor→dev merge** | N/A |
 
----
+**Mode explanation for Cursor:**
+- **Solo** = Claude Code limit is active. You handle all tasks regardless of lane. Follow Solo Mode Rules in CURSOR.md.
+- **Parallel** = Both tools active. Strict lane separation applies.
 
-## Worktree Setup (run once if not done)
-
-```bash
-cd /home/rodrigopj/Projects/eleutheria-telos
-git worktree add -b cursor-sprint ../eleutheria-telos-cursor dev
-git worktree list   # verify both appear
-```
+Rodrigo updates this field at the start of each week.
 
 ---
 
 ## Rodrigo's Role — The Three Rituals
 
-You are the conductor. The tools do not coordinate with each other automatically. Your job is three small rituals, each takes under a minute.
-
-### Ritual 1 — Starting a Cursor session
+### Ritual 1 — Starting any session
 ```bash
+# For a Cursor session:
 cd /home/rodrigopj/Projects/eleutheria-telos-cursor
 git fetch origin && git merge origin/dev --no-ff -m "chore: sync cursor-sprint with dev"
-# Open Cursor in that directory
-# First message to Cursor: "Read CURSOR.md and STATUS.md. Tell me your plan."
+# Open Cursor. First message: "Read CURSOR.md and STATUS.md. Mode is [Solo/Parallel]. Tell me your plan."
+
+# For a Claude Code session:
+cd /home/rodrigopj/Projects/eleutheria-telos
+# Open Claude Code. First message: "Read CLAUDE.md and STATUS.md. Tell me what Cursor has done and your plan."
 ```
 
-### Ritual 2 — Starting a Claude Code session
+### Ritual 2 — Merging after a Cursor task is done
 ```bash
 cd /home/rodrigopj/Projects/eleutheria-telos
-# Open Claude Code there (your normal flow)
-# First message: "Read CLAUDE.md and STATUS.md. Tell me what Cursor has done and your plan."
-```
+git merge cursor-sprint --no-ff -m "feat: [describe what was done]"
 
-### Ritual 3 — Merging after a Cursor task is done
-```bash
-# When Cursor marks a task [DONE] and you're happy with the result:
-cd /home/rodrigopj/Projects/eleutheria-telos
-git merge cursor-sprint --no-ff -m "feat(ui): [describe what Cursor did]"
-
-# Then re-sync Cursor's branch so it has the latest Claude Code work too:
+# Re-sync cursor branch:
 cd /home/rodrigopj/Projects/eleutheria-telos-cursor
 git merge origin/dev --no-ff -m "chore: sync after merge"
 ```
 
-**When to merge:** After each self-contained task (e.g. "sidebar redesign done"), not after every commit. Merge when the feature is testable, not merely written.
+**When to merge:** After each self-contained task, not after every commit. Merge when it's testable.
 
-**Conflict resolution:** Conflicts will only happen in `STATUS.md` and `CHANGELOG.md`. For both: keep all content from both sides — there is never a logical conflict, only a git text conflict. Accept both sections in full.
+### Ritual 3 — Triggering the archive
+After a merge, if CHANGELOG.md is getting long, tell the active tool: "The merge is done. Archive entries older than 14 days." The tool moves those entries to `CHANGELOG_ARCHIVE.md` and commits.
+
+**Conflict resolution:** Conflicts will only happen in `STATUS.md` and `CHANGELOG.md`. Always keep content from both sides — accept both sections in full.
 
 ---
 
-## How the Tools Update This File
+## ⚠️ Important: What Phase 4.5 Already Has
 
-**Both tools update STATUS.md at the end of every session.**
-They only update the relevant rows — they do not rewrite the whole file.
-They must append a "Last updated" timestamp at the top when they do.
+Phase 4.5 Step 1 was **completed on 2026-03-19**. The following already exists — do not recreate:
+
+- `ui/assets/themes/dark.css`, `light.css`, `catppuccin-mocha.css`, `catppuccin-latte.css`, `tokyo-night.css` ✓
+- `ui/assets/fonts/inter-variable.woff2` + italic ✓
+- `ui/assets/lucide.min.js` (v0.577.0) ✓
+- `ui/assets/base.css` — full component system (btn, card, card-glass, input, badge, empty-state, etc.) ✓
+- `applyTheme()` and `applyGlass()` global functions in shell ✓
+- Sidebar groups (Tools / Media / Plugins), pill active state ✓
+- `GET /api/settings/ui` and `POST /api/settings/ui` routes ✓
+
+**What is still needed** is applying the design system to individual panels that still use old Tailwind color classes or don't match the UI_BRIEF spec. See tasks below.
 
 ---
 
 ## Active Tasks
 
-### 🟡 Cursor Queue — Phase 4.5 UI Polish
+### Cursor Queue — Phase 4.5 Panel Polish
 
-Work in this exact order. Mark `[DONE YYYY-MM-DD]` when complete and committed.
+Work in priority order. Mark `[DONE YYYY-MM-DD]` when complete and committed.
 
-**Foundation — do these first, everything depends on them**
-- [ ] `[CURSOR]` Create `ui/assets/themes/dark.css` — all CSS vars from UI_BRIEF.md §4 + D-038
-- [ ] `[CURSOR]` Create `ui/assets/themes/light.css`
-- [ ] `[CURSOR]` Create `ui/assets/themes/catppuccin-mocha.css`
-- [ ] `[CURSOR]` Create `ui/assets/themes/catppuccin-latte.css`
-- [ ] `[CURSOR]` Create `ui/assets/themes/tokyo-night.css`
-- [ ] `[CURSOR]` Bundle Inter font under `ui/assets/fonts/inter/` (self-host, no CDN)
-- [ ] `[CURSOR]` Confirm `ui/assets/lucide.min.js` present; if not, download and bundle locally
-- [ ] `[CURSOR]` Update `ui/shell.html` — sidebar groups (TOOLS/MEDIA/PLUGINS separators), pill active state, glassmorphism, Lucide icons replacing all emojis, `lucide.createIcons()` on DOMContentLoaded + every HTMX swap
+**Audit first (do this before any panel work)**
+- [ ] `[CURSOR]` Open `cargo tauri dev`, review each panel visually. For each panel: does it use `btn btn-primary/secondary/ghost/danger` consistently? Does it use `.card`/`.card-glass`? Does it use `.empty-state` for empty states? Note any that still have raw Tailwind color classes (`bg-blue-700`, `bg-gray-800`, etc.) and fix them in priority order below.
 
-**Panels (in order)**
-- [ ] `[CURSOR]` Clipboard History — card depth + hover lift, `btn-*` variants on all actions, date bucket separator styling
-- [ ] `[CURSOR]` OCR — rich empty state (large Lucide icon + prominent CTA), result card with `btn-*` actions
-- [ ] `[CURSOR]` Screen Recorder — pulsing red dot while recording, clear status in header
-- [ ] `[CURSOR]` Audio Recorder — same pattern as Screen Recorder
-- [ ] `[CURSOR]` Notes — tag pill chips at card bottom, editor chrome consistency
-- [ ] `[CURSOR]` Models — CSS progress bar inside model card, installed vs available card distinction
-- [ ] `[CURSOR]` Quick Actions — step card richer appearance (left-border accent, node type label), pipeline list polish
-- [ ] `[CURSOR]` Video Processor — operation tab layout polish
-- [ ] `[CURSOR]` Photo Editor — toolbar polish
-- [ ] `[CURSOR]` Translate / Voice — empty state redesign
-- [ ] `[EITHER]` Settings — theme selector (swaps `<link>` href per D-038), glass toggle, font selector
-- [ ] `[CURSOR]` Plugin panels — consistent chrome (header, empty state, `btn-*` actions)
+**Panels still needing polish (based on last Playwright review)**
+- [ ] `[CURSOR]` **Clipboard History** — apply `.card-glass` to items, `btn-ghost` on Copy/Delete/Pin actions, date bucket separator styling (`.text-xs .text-muted uppercase tracking-wider`), hover lift
+- [ ] `[CURSOR]` **OCR** — verify empty state uses `.empty-state` class + Lucide icon; result card uses `.card`; action buttons use `btn` variants
+- [ ] `[CURSOR]` **Notes** — tag pill chips at card bottom (tags JSON is already in DOM); editor chrome consistency; backlinks panel styling
+- [ ] `[CURSOR]` **Models** — progress bar inside card (CSS width from inline style); installed vs available visual distinction
+- [ ] `[CURSOR]` **Quick Actions** — apply D-039 node shapes (pill/diamond); step card left-border accent; pipeline list card polish
+- [ ] `[CURSOR]` **Video Processor** — operation tab active state using `btn-primary/secondary` toggle
+- [ ] `[CURSOR]` **Photo Editor** — toolbar uses `btn` variants consistently; layer strip polish
+- [ ] `[CURSOR]` **Translate / Voice** — empty state uses `.empty-state`; result cards use `.card`
+- [ ] `[EITHER]` **Settings** — verify theme selector, glass toggle, font selector all work end-to-end; add any missing UI polish
+- [ ] `[CURSOR]` **Plugin panels** — consistent chrome (header with `.panel-title`, `.empty-state` for empty, `btn` variants on actions)
 
 ---
 
-### 🔵 Claude Code Queue — Phase 4.7 Backlog
+### Claude Code Queue — Phase 4.7 Backlog
 
-Pick from here when the limit resets (2026-03-25). Ordered by impact.
+Pick from here when limit resets (2026-03-25). Ordered by impact.
 
-**Safety / correctness**
-- [ ] `[CLAUDE]` **Loop quality checks** — 60s toast warn + 120s auto-kill in Quick Actions. Spec in ROADMAP.md Phase 4.7. Files: `quick_actions.rs`, `event_bus.rs`, `server.rs` (settings), Quick Actions panel HTML.
+**Safety / correctness — start here**
+- [ ] `[CLAUDE]` **Loop quality checks** — 60s toast warn + 120s auto-kill in Quick Actions engine. Both thresholds configurable per-pipeline (`timeout_warn_secs`/`timeout_kill_secs`) and globally in Settings. Files: `quick_actions.rs`, `event_bus.rs`, `server.rs`, Quick Actions panel HTML.
 - [ ] `[CLAUDE]` Fix `tools::translate::tests::test_langs_no_models` — pre-existing HTML mismatch
 - [ ] `[CLAUDE]` Fix `clippy::unnecessary_closure` in `quick_actions.rs`
 
 **Usability**
-- [ ] `[CLAUDE]` Quick Actions: opt-in/opt-out toast for auto-triggered pipelines. Full spec in ROADMAP.md Phase 4.7.
-- [ ] `[CLAUDE]` Clipboard: copy button shows `{okay:true}` — fix to return HTML fragment or `hx-swap="none"`. See IDEAS.md Bugs.
-- [ ] `[CLAUDE]` Clipboard + Notes: full-content DOM bloat fix — truncate server-side, add `GET /api/clipboard/:id` + `GET /api/notes/:id/content`. Spec in ROADMAP.md.
+- [ ] `[CLAUDE]` **Quick Actions: opt-in/opt-out toast** — non-blocking toast bottom-right when pipeline auto-fires: name + Accept / Dismiss / "Don't ask again" checkbox; auto-dismissed 8s; per-pipeline "Always run" vs "Ask me first" setting. Files: `event_bus.rs`, `quick_actions.rs`, OCR/Voice result card HTML.
+- [ ] `[CLAUDE]` **Clipboard: copy button shows `{okay:true}`** — endpoint must return HTML fragment (button in "copied" state) or `hx-swap="none"` + `htmx:afterRequest` listener. See IDEAS.md Bugs.
+- [ ] `[CLAUDE]` **Clipboard + Notes: full-content DOM bloat** — truncate to 2KB attr / 300 char preview server-side; add `GET /api/clipboard/:id` and `GET /api/notes/:id/content`; modal fetches on demand. Files: `clipboard.rs`, `notes.rs`, both index.html modal handlers.
+- [ ] `[CLAUDE]` **Name sanity check** — strip/reject invalid chars (`/`, `\`, `<`, `>`, `"`, null bytes) from pipeline and folder names, client + server.
 
 **Features**
-- [ ] `[CLAUDE]` Voice: live recording waveform — Web Audio API `AnalyserNode` + canvas. Frontend only, no Rust changes needed.
-- [ ] `[CLAUDE]` Clipboard: pin entries + `is_pinned` column migration, content-type badge.
-- [ ] `[CLAUDE]` Quick Actions: pipeline tree visualizer — read-only collapsible tree, toggle button in canvas toolbar.
-- [ ] `[CLAUDE]` Command palette learns — `command_history` table, Ctrl+K surfaces most-used first.
+- [ ] `[CLAUDE]` **Voice: live recording waveform** — Web Audio API `AnalyserNode` + canvas. Frontend only, no Rust changes.
+- [ ] `[CLAUDE]` **Clipboard: pin entries** — `is_pinned` column migration, pinned float to top, content-type badge (URL globe, image chip, code `{}` icon).
+- [ ] `[CLAUDE]` **Quick Actions: pipeline tree visualizer** — read-only collapsible tree as alternative to canvas; toggle in toolbar.
+- [ ] `[CLAUDE]` **Command palette learns** — `command_history` table; Ctrl+K surfaces most-used first.
 
-**Research (no code — written outcomes only)**
+**Research (no code — documented outcomes only)**
 - [ ] `[CLAUDE]` R1 — CDP licensing → `RESEARCH_CDP.md` + DECISIONS.md entry
 - [ ] `[CLAUDE]` R2 — Audacity 4 UI study → `RESEARCH_AUDACITY4.md`
 - [ ] `[CLAUDE]` R3 — SoundThread feasibility → `RESEARCH_SOUNDTHREAD.md` + DECISIONS.md entry
@@ -135,30 +128,35 @@ Pick from here when the limit resets (2026-03-25). Ordered by impact.
 
 | Task | Blocked by | Who unblocks |
 |------|-----------|--------------|
-| Glass sidebar visual test | `transparent: true` needed in `tauri.conf.json` | Claude Code sets it; Cursor then tests |
-| Notes: `#tag` vs `##heading` conflict fix | Design decision needed first (see IDEAS.md Open Design Questions) | Rodrigo decides; both tools may be affected |
-| Audio tools (Soundboard, Virtual Mic, Audio Editor) | R1–R3 research must complete first | Claude Code does research |
-| Translation (end-to-end) | Phase 4.6 ctranslate2 fix not yet deployed | Claude Code (Phase 4.6) |
+| Glass sidebar visual test | Needs `transparent: true` in `tauri.conf.json` | Claude Code sets it; Cursor tests |
+| Notes: `#tag` vs `##heading` parsing conflict | Design decision needed (see IDEAS.md Open Design Questions) | Rodrigo decides |
+| Audio tools (Soundboard, Virtual Mic, Audio Editor) | R1–R3 research first | Claude Code |
+| Translation end-to-end test | ctranslate2 model download needs verification | Claude Code (Phase 4.6 follow-up) |
 
 ---
 
 ## Completed
 
-### 2026-03-20 (latest)
-- [x] Notes + Clipboard: trash bin with 30-day retention (soft delete, restore, Purge Forever)
+### 2026-03-20
+- [x] Notes + Clipboard: trash bin, 30-day retention, restore, Purge Forever
 - [x] Notes + Clipboard: date-chunked grid (Today / Yesterday / This Week / This Month / Older)
-- [x] Notes: `[[Note Title]]` backlinks — join table, backlink panel, clickable in preview
+- [x] Notes: `[[Note Title]]` backlinks, join table, backlink panel, clickable in preview
 - [x] Notes: tag drag ghost fix, `user-select:none`
-
-### 2026-03-20 (earlier)
-- [x] Notes: Bear-style `#tag` inline extraction, collapsible tag sidebar, right-click delete
+- [x] Notes: Bear-style `#tag` extraction, collapsible tag sidebar, right-click delete
 - [x] Quick Actions: pipeline folders (P1), YAML export (P2), YAML import (P3)
+- [x] Workflow files added: CURSOR.md, WORKTREE.md, STATUS.md, CHANGELOG_ARCHIVE.md
+- [x] .gitignore: `__pycache__/`, `*.pyc` added; pycache removed from tracking
+- [x] test-pipeline-h4.yaml moved to `tests/fixtures/`
 
 ### 2026-03-19
-- [x] UI_BRIEF.md approved (full design spec, all panels, component patterns)
-- [x] Quick Actions canvas H0–H4 (pan/zoom, node connect, config panel, undo/redo, graph execution engine with cycle detection)
+- [x] **Phase 4.5 Step 1 (App Shell + Design System)** — Inter font, Lucide, 5 themes, base.css, sidebar groups, pill nav, glassmorphism, Settings panel, `applyTheme()`/`applyGlass()`
+- [x] Phase 4.5 Step 2 — emoji removal from all panels, btn/input/card design system applied to Quick Actions, Screen Rec, Audio Rec, Video Processor, Photo Editor
+- [x] Phase 4.5 complete — Playwright review, all 13 panels signed off
+- [x] Phase 4.6 complete — translation backend (ctranslate2), contextual pipeline CTA, pipeline templates, problem-first empty states
+- [x] Phase 4.7 H0–H4 — panel nav history, canvas render, pan/zoom, node connect, config panel, undo/redo, graph execution engine
 - [x] Notes: grid card UI, lazy-load pagination
 - [x] Clipboard: lazy-load pagination
+- [x] UI_BRIEF.md approved
 
-### Foundation (earlier phases — full detail in CHANGELOG.md)
+### Earlier phases (full detail in CHANGELOG_ARCHIVE.md)
 - [x] Phase 0–4: Foundation, Core Tools, AI Tools, Media Tools, MCP + Plugins

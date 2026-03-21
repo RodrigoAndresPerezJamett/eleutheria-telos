@@ -20,22 +20,48 @@ Rust:          1.92.0 (edition 2021)
 Node.js:       22.20.0
 Tauri CLI:     2.10.1
 Tauri:         2.x — do NOT suggest upgrades
-ffmpeg:        7.1.2 (ffmpeg-free, LGPL codecs only)
-Python:        3.14.2 — verify package compatibility before any suggestion
+ffmpeg:        7.1.2 (ffmpeg-free, LGPL codecs only — no H.264 decode)
+Tesseract:     5.5.2
+Python:        3.14.2 — always verify package compatibility before suggesting pip install
 ```
 
 ---
 
-## Worktree — Read This First
+## Two Modes — Read STATUS.md to Know Which Applies
 
-You work exclusively in:
-```
-/home/rodrigopj/Projects/eleutheria-telos-cursor/   ← cursor-sprint branch
-```
+### Mode A: Parallel (Claude Code is also active this week)
+Lane separation is strict. You own UI/HTML/CSS. Claude Code owns Rust/migrations/CI.
+Full rules in the "Lane Ownership" section below.
+STATUS.md will say: **"Mode: Parallel"**
 
-Never touch `/home/rodrigopj/Projects/eleutheria-telos/` — that is Claude Code's worktree on `dev`.
+### Mode B: Solo (Claude Code limit is active — you are the only tool)
+Lane separation is suspended. You can work on any task in STATUS.md, including backend Rust work.
+Extra caution rules apply — see "Solo Mode Rules" below.
+STATUS.md will say: **"Mode: Solo (Claude Code limit resets [date])"**
 
-Full protocol: **WORKTREE.md**.
+Rodrigo tells you which mode at the start of every session. If STATUS.md doesn't say, ask before touching any Rust files.
+
+---
+
+## Solo Mode Rules (Mode B only)
+
+When Claude Code is unavailable, you handle everything. These rules keep you safe in unfamiliar territory:
+
+1. **Read DECISIONS.md in full before any Rust work.** The hard-won lessons are there. Skipping this is how bugs get introduced.
+2. **Dependency protocol before any Cargo.toml change:**
+   - State the crate name, version, and why it's needed
+   - Verify it compiles with Rust 1.92.0 / edition 2021
+   - Verify it is compatible with Tauri 2.x
+   - Confirm license: MIT, Apache 2.0, or BSD only — no GPL
+   - Check crates.io: last updated within 12 months?
+   - Add with comment: `# Used for: {reason} | pinned: {date}`
+3. **Never rewrite working Rust code to "improve" it.** Fix the specific issue. Leave everything else alone.
+4. **Use `tokio::spawn` for any blocking operation** (Whisper, Tesseract, ffmpeg, Python subprocess). Never block an Axum handler thread.
+5. **Route params are `:param` not `{param}`** — `{param}` compiles but returns 404 at runtime. This is D-020 and has burned us before.
+6. **HTMX handlers use `Form<T>` not `Json<T>`** — HTMX POSTs are form-encoded. `Json<T>` returns 415 silently. D-021.
+7. **Run `cargo clippy -- -D warnings` and `cargo test` before committing any Rust change.** If tests fail, fix them before ending the session.
+8. **Document every non-obvious decision in DECISIONS.md** before ending the session. Future Claude Code needs to understand what you did.
+9. Pick tasks from STATUS.md in order. Don't skip to Phase N+1 tasks while Phase N tasks are unfinished.
 
 ---
 
@@ -43,177 +69,148 @@ Full protocol: **WORKTREE.md**.
 
 ### Starting a session
 1. Run `git fetch origin && git merge origin/dev --no-ff -m "chore: sync"` — always sync first
-2. Read `STATUS.md` — find the next unchecked `[CURSOR]` task in priority order
-3. Confirm the task is in your lane (UI/HTML/CSS — see lane ownership below)
-4. Say: "Synced from dev [hash]. Task: [X]. Files I will touch: [Y]."
+2. Read `STATUS.md` — confirm the mode (Parallel or Solo) and find the next unchecked task
+3. If Parallel: confirm the task is in your lane
+4. If Solo: pick the highest-priority task regardless of lane
+5. Say: "Mode: [A/B]. Synced from dev [hash]. Task: [X]. Files I will touch: [Y]."
 
 ### Before writing any code
 1. List every file you will create or modify
-2. Confirm none are in Claude Code's lane (`src-tauri/`, migrations, CI, docs)
-3. If a task requires a new Axum route or schema change: add it to STATUS.md Blocked section and pick a different task
+2. If touching Rust: run the dependency protocol and state your plan before writing
+3. If a task needs clarification: ask Rodrigo before starting
 
 ### During implementation
-- One panel or component at a time — commit after each completes
-- Never touch `src-tauri/` for any reason
-- If you find a bug in HTML rendered by Rust (wrong structure, missing field): document it in STATUS.md and CHANGELOG.md — do not patch the Rust yourself
+- One task at a time — commit after each completes
+- Small verifiable steps — one thing, confirm it works, then the next
+- If something fails: report the exact error and proposed fix before trying anything
 
 ### Ending a session
-1. Mark tasks done in `STATUS.md` with `[DONE YYYY-MM-DD]`
-2. Append to `CHANGELOG.md` — files changed, what was added/removed/fixed
+1. Mark tasks `[DONE YYYY-MM-DD]` in STATUS.md
+2. Append to CHANGELOG.md — files changed, what was added/removed/fixed
 3. Commit with a conventional commit message
 4. State what is recommended next
 
 ---
 
-## Your Lane
+## Lane Ownership (Mode A — Parallel only)
 
-**You own:**
-- `ui/assets/themes/` — all theme CSS files
+### You own (Cursor)
+- `ui/assets/themes/` — CSS theme files
 - `ui/assets/fonts/` — font files
 - `ui/tools/*/index.html` — panel HTML
 - `ui/tools/*/partials/` — HTMX fragments
-- `ui/shell.html` — app shell
+- `ui/shell.html` — app shell layout (note: may be `ui/index.html` — check ARCHITECTURE.md)
 
-**Do not touch without explicit instruction:**
-- `src-tauri/` — anything in here
-- `ui/locales/` — add new key needs via STATUS.md for Claude Code
+### Claude Code owns
+- `src-tauri/src/` — all Rust source
+- `src-tauri/migrations/` — SQLite migrations
+- `src-tauri/Cargo.toml`
+- `src-tauri/tauri.conf.json`
 - `.github/workflows/`
+- `plugins/`
+- `ui/locales/` — i18n (Claude Code adds keys; you only use existing ones)
 - `ARCHITECTURE.md`, `DECISIONS.md`, `PRINCIPLES.md`, `ROADMAP.md`
+
+### Both tools update (append only, never overwrite)
+- `STATUS.md`, `CHANGELOG.md`, `IDEAS.md`
+
+### In Parallel mode: if a UI task requires a new Axum route or schema change
+1. Do NOT implement it yourself
+2. Add it to STATUS.md Blocked section: "Task X needs route Y — Claude Code implements"
+3. Move on to the next task
 
 ---
 
 ## CSS Theming Architecture (D-038)
 
-Each theme is a **separate CSS file** in `ui/assets/themes/`. The active theme is applied by swapping the `href` of `<link id="theme-link">` in `shell.html`. This is the community-scalable approach: a contributor adds a theme by copying one file, renaming it, and changing the color values — no other files touched.
+Each theme is a **separate CSS file** in `ui/assets/themes/`. The active theme is applied by swapping the `href` of `<link id="theme-link">` in the shell HTML. Community contributors add a theme by copying one file, renaming it, and changing color values — no other files touched.
 
-**File naming:** `dark.css`, `light.css`, `catppuccin-mocha.css`, `catppuccin-latte.css`, `tokyo-night.css`
+**Already implemented (Phase 4.5 Step 1, 2026-03-19):** `dark.css`, `light.css`, `catppuccin-mocha.css`, `catppuccin-latte.css`, `tokyo-night.css` exist. `base.css` owns all component styles. `applyTheme()` and `applyGlass()` are global window functions.
 
 **Each theme file defines only `:root` custom properties:**
 ```css
-/* ui/assets/themes/dark.css */
 :root {
-  --bg-base: #13151a;        /* deepest layer — window background */
-  --bg-surface: #1e2030;     /* panel content area */
-  --bg-elevated: #24273a;    /* cards, inputs */
-  --bg-overlay: rgba(30, 32, 48, 0.6);
-  --text-primary: #cad3f5;
-  --text-secondary: #a5adcb;
-  --text-muted: #6e738d;
-  --accent: #8aadf4;
-  --accent-subtle: rgba(138, 173, 244, 0.15);
-  --border: rgba(255, 255, 255, 0.08);
-  --shadow: rgba(0, 0, 0, 0.4);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --glass-bg: rgba(30, 32, 48, 0.6);
-  --glass-blur: blur(16px);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --bg-base, --bg-surface, --bg-elevated, --bg-overlay
+  --text-primary, --text-secondary, --text-muted
+  --accent, --accent-subtle, --accent-hover
+  --border, --border-focus, --shadow, --shadow-lg
+  --glass-bg, --glass-blur, --glass-border
+  --destructive, --success, --warning (+ -subtle variants)
+  --radius-sm: 8px, --radius-md: 12px, --radius-lg: 16px, --radius-xl
 }
 
-/* Glass off — add this block to every theme file */
-[data-glass="off"] {
-  --bg-overlay: var(--bg-elevated);
+/* Glass off — in every theme file */
+html.no-glass {
   --glass-bg: var(--bg-elevated);
   --glass-blur: none;
   --glass-border: 1px solid var(--border);
 }
 ```
 
-**Theme switching in the Settings panel (Alpine):**
-```javascript
-async function setTheme(name) {
-  document.getElementById('theme-link').href = `/assets/themes/${name}.css`;
-  await fetch('/api/settings', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${window.__SESSION_TOKEN__}`,
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: `key=active_theme&value=${name}`
-  });
-}
-```
-
-**Glass toggle:**
-```javascript
-function setGlass(enabled) {
-  document.documentElement.dataset.glass = enabled ? 'on' : 'off';
-  // also POST to /api/settings key=glass_enabled value=true/false
-}
-```
-
-**FOUC prevention** — already handled by Claude Code in `shell.html` via an inline script that sets the theme before first paint (reads `window.__ACTIVE_THEME__` injected by Axum). You do not need to implement this — just ensure your theme files are in the correct location.
+**Switching theme:** `applyTheme(name)` swaps the `<link id="theme-link">` href and POSTs to `/api/settings/ui`.
 
 ---
 
 ## Quick Actions Canvas — Node Visual Style (D-039)
 
-Nodes use flowchart-classic shapes. All nodes use `--glass-bg` + `--glass-border` as their base surface.
+Nodes use flowchart-classic shapes. All use `--glass-bg` + `--glass-border` as base surface.
 
 | Node type | Shape | Key style |
 |-----------|-------|-----------|
-| **Trigger** | Rounded rectangle + left accent bar | `--accent` left border (4px), `--glass-bg` fill |
-| **Action** | Pill (fully rounded) | `border-radius: 999px`, `--accent-subtle` fill, `--accent` border |
-| **Condition** | Diamond | Container `transform: rotate(45deg)`, label counter-rotated inside |
-| **End** | Small filled circle | `--text-muted` fill, no border |
+| **Trigger** | Rounded rect + left accent bar | 4px `--accent` left border |
+| **Action** | Pill (`border-radius: 999px`) | `--accent-subtle` fill, `--accent` border |
+| **Condition** | Diamond (`transform: rotate(45deg)`) | Counter-rotated label inside |
+| **End** | Small filled circle | `--text-muted` fill |
 
-**Edges:** smooth bezier, `--border` stroke, `--accent` on hover. Condition edges labelled "true" / "false" in `text-xs --text-muted`. Selected node: `--accent` border 2px + `box-shadow: 0 0 0 3px var(--accent-subtle)`.
-
-You will apply this styling when working on the Quick Actions panel task. Do not deviate from these shapes without a DECISIONS.md update.
+Edges: smooth bezier, `--border` stroke, `--accent` on hover. Condition edges: "true"/"false" labels in `text-xs --text-muted`. Selected: `--accent` 2px border + `box-shadow: 0 0 0 3px var(--accent-subtle)`.
 
 ---
 
-## Component Patterns — Use These, Invent Nothing New
+## Component Patterns
 
-**Buttons (3 variants only):**
-- `btn-primary` — `--accent` fill, white text, `--radius-md`
-- `btn-secondary` — `--bg-elevated` fill, `--text-primary`, 1px `--border`
-- `btn-ghost` — transparent, `--text-secondary`, `--accent-subtle` bg on hover
-- Destructive: `btn-ghost` with `color: var(--color-danger)`, confirmation state on click
+**3 button variants only — standardize everywhere:**
+- `btn btn-primary` — `--accent` fill, white text, `--radius-md`
+- `btn btn-secondary` — `--bg-elevated` fill, `--text-primary`, 1px `--border`
+- `btn btn-ghost` — transparent, `--text-secondary`, `--accent-subtle` bg on hover
+- Destructive: `btn btn-danger` or `btn-ghost` with `--destructive` color, confirmation state on click
 
-**Cards:**
-- `--glass-bg` fill, `--glass-border`, `--radius-md`, `box-shadow: 0 1px 3px var(--shadow)`
-- Hover: `translateY(-1px)`, slightly brighter border
+**Cards:** `card` or `card-glass` class from `base.css`. `--glass-bg` fill, `--glass-border`, `--radius-md`, subtle shadow. Hover: `translateY(-1px)`, brighter border.
 
-**Sidebar active item:** pill highlight — `--accent-subtle` bg, `--accent` left micro-border. No rectangular highlight.
+**Sidebar active item:** pill highlight — `--accent-subtle` bg, `--accent` text. No rectangular highlight.
 
-**Section separators in sidebar:** thin `1px --border` line + `text-xs --text-muted uppercase tracking-wider` label. No `<hr>`.
+**Inputs:** `.input` class. `--bg-elevated` fill, `1px --border`, `--radius-sm`. Focus: `2px --border-focus` outline.
 
-**Inputs:** `--bg-elevated` fill, `1px --border`, `--radius-sm`. Focus: `2px --accent` outline.
+**Empty states:** `.empty-state` class. Lucide icon (48px `--text-muted`), title (`text-base font-medium`), subtitle (`text-sm --text-muted`), optional CTA button.
 
-**Status badges:**
-- Recording: pulsing red dot (`@keyframes pulse`, CSS only)
-- Downloaded: green subtle chip
-- Downloading: CSS progress bar inside card (no separate indicator)
-- Error: red inline text, no toast
+**Status badges:** `.badge` class. Recording: pulsing red dot (`@keyframes pulse`). Downloaded: green chip. Error: red inline text, no toast.
 
 ---
 
-## HTMX Rules (Hard-Won From Phase 0)
+## HTMX Rules (Critical — Silent Failures Without These)
 
 - **Always explicit:** `hx-target`, `hx-swap`, `hx-trigger` — never rely on defaults
-- **`selfRequestsOnly = false` is already set** in shell — do not change it
+- **`selfRequestsOnly = false` is already set** in shell — do not change or duplicate it
 - **After any `htmx.ajax()` swap:** call `htmx.process(target)` to re-process child `hx-*` attributes
-- **HTMX POSTs are form-encoded** — Rust handlers use `Form<T>`, not `Json<T>`. If a button does nothing after clicking, this is the first thing to check.
-- **Call `lucide.createIcons()`** after every HTMX swap that loads HTML containing Lucide data attributes
-- **No CDN assets** — HTMX, Alpine, Lucide are all in `ui/assets/`, bundled locally
+- **HTMX POSTs are form-encoded** — Rust handlers must use `Form<T>`, not `Json<T>`. Button does nothing after click? This is why. (D-021)
+- **After any HTMX swap loading Lucide icons:** call `lucide.createIcons()` on the swapped target
+- **No CDN assets** — HTMX, Alpine, Lucide are all in `ui/assets/`, bundled locally (D-018)
 
 ---
 
 ## Typography
 
-**Font:** Inter, bundled locally under `ui/assets/fonts/inter/`. Never load from Google Fonts or any CDN.
+**Font:** Inter variable, bundled locally as `ui/assets/fonts/inter-variable.woff2`. Never CDN.
+
+Panel titles: `.panel-title` class (Space Grotesk, `letter-spacing: -0.02em`).
+Body/UI: Inter via `base.css`.
 
 | Class | Size | Use |
 |-------|------|-----|
-| `text-xs` | 11px | Timestamps, metadata labels |
+| `text-xs` | 11px | Timestamps, labels |
 | `text-sm` | 13px | Secondary content, sidebar labels |
 | `text-base` | 15px | Body, card content |
-| `text-lg` | 17px | Panel subheadings |
+| `text-lg` | 17px | Subheadings |
 | `text-xl` | 20px | Panel titles |
-
-Weights: `font-normal` body · `font-medium` labels/buttons · `font-semibold` panel titles/section headers · `font-bold` accent numbers only.
 
 ---
 
@@ -222,27 +219,55 @@ Weights: `font-normal` body · `font-medium` labels/buttons · `font-semibold` p
 - No hardcoded colors — always CSS variables
 - No pure black `#000000` — use `--text-primary`
 - No square corners — minimum `--radius-sm` everywhere, including tooltips
-- No `<hr>` dividers — use spacing + surface shifts (DESIGN.md "no-line rule")
-- No inline `style=""` — Tailwind classes only, except where a CSS variable needs to be set dynamically (e.g. progress bar width)
+- No `<hr>` dividers — use spacing + surface shifts
+- No inline `style=""` except where a CSS variable must be set dynamically (e.g. progress bar width)
 - No `hx-boost` — breaks tool isolation
-- No Alpine `$store` for app state — SQLite only (via existing HTMX routes)
+- No Alpine `$store` for app state — SQLite only
 - No CDN assets — everything must work offline
+
+---
+
+## Rust / Backend Quick Reference (Solo Mode)
+
+Only read this section when in Solo Mode. When in Parallel Mode, these are Claude Code's concern.
+
+**AppError:** All Axum handlers return `Result<impl IntoResponse, AppError>`. Use `?` for propagation.
+
+**Route registration:** Add to the router in `server.rs` via `merge(tool::router())`. Routes use `:param` syntax (not `{param}` — D-020).
+
+**Database:** `sqlx::query!` macros for compile-time checking. Never raw string queries. Migrations in `src-tauri/migrations/` as numbered SQL files.
+
+**Blocking work:** `tokio::spawn` for anything that blocks (ffmpeg, Tesseract, Python subprocess, Whisper). Never block the Axum handler thread directly.
+
+**Python subprocess pattern:**
+```rust
+tokio::spawn(async move {
+    let output = tokio::process::Command::new("python3")
+        .arg(script_path)
+        .args(&[...])
+        .output()
+        .await?;
+});
+```
+
+**HTMX fragment response:** Return `Html<String>` from handlers that HTMX will swap into the DOM.
 
 ---
 
 ## Git
 
 ```
-cursor-sprint  ← your branch
-dev            ← Claude Code's branch (read-only for you)
+cursor-sprint  ← your branch (commits go here)
+dev            ← Claude Code's branch (read-only in Parallel mode; reference in Solo mode)
 ```
 
 Commit format (Conventional Commits):
 ```
 feat(ui): redesign sidebar with pill active state and section groups
-fix(ui): correct glass-blur fallback when glass setting is disabled
-chore(ui): bundle Inter font files under ui/assets/fonts/inter/
-style(ui): apply btn-primary variant consistently across all panels
+fix(ui): correct glass-blur fallback when glass is disabled
+feat(backend): add loop timeout quality checks to quick actions engine
+fix(backend): clipboard copy button returns HTML fragment instead of JSON
+chore: sync cursor-sprint with dev
 ```
 
 ---
@@ -251,4 +276,18 @@ style(ui): apply btn-primary variant consistently across all panels
 
 `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set in hyprland.conf. If the WebView goes blank, that's the fix.
 
-`backdrop-filter: blur()` works in WebKitGTK on Wayland only when the Tauri window has `transparent: true` in `tauri.conf.json`. Claude Code sets this (D-038). If glass backgrounds are not rendering visually, check STATUS.md Blocked section before debugging CSS.
+`backdrop-filter: blur()` requires `transparent: true` in `tauri.conf.json` (D-038). If glass isn't rendering visually, check STATUS.md Blocked section.
+
+---
+
+## Running the App
+
+The app runs with `cargo tauri dev` from the Claude Code worktree:
+```bash
+cd /home/rodrigopj/Projects/eleutheria-telos
+cargo tauri dev
+```
+
+In Solo Mode, you can run this from your own worktree too — `src-tauri/` is present in `cursor-sprint` as it's branched from `dev`.
+
+In Parallel Mode, ask Rodrigo to run it and reload the relevant panel to verify CSS/HTML changes.

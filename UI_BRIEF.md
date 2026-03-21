@@ -1,305 +1,239 @@
 # Eleutheria Telos — UI Brief
 
-This file is the contract for all UI work in Phase 4.5. Filled via Q&A session on 2026-03-19.
-
-Claude Code: do not begin UI implementation until this file is marked **BRIEF STATUS: APPROVED**.
-
----
+This file is the contract for all UI work in Phase 4.5. Approved 2026-03-19.
 
 **BRIEF STATUS: APPROVED — 2026-03-19**
 
+> **Note on DESIGN.md:** `DESIGN.md` (the "Ethereal Command Center" doc) has been absorbed into this file. The unique content (Creative North Star, Space Grotesk for panel titles, Telos Glow interaction) is in §1 and §7 below. `DESIGN.md` can be deleted — it is superseded by this file.
+
 ---
 
-## 1. Aesthetic Direction
+## 1. Creative North Star: "The Ethereal Command Center"
 
-**Confirmed direction:** Soft glassmorphism, Arc × Caelestia Shell aesthetic.
+This app moves beyond rigid, utilitarian software to create a digital environment that feels breathable, intelligent, and editorial. Inspired by Arc Browser's translucency and Caelestia Shell's geometric precision.
 
-Specific principles:
+The goal: replace "software widgets" with "composed modules." Achieve premium feel via **Tonal Layering** and **Atmospheric Depth** — reject hard borders in favor of surface shifts and negative space.
+
+**Specific principles:**
 - **Glassmorphism as default:** sidebar, cards, and floating panels use frosted-glass backgrounds (`backdrop-filter: blur + semi-transparent fill`). Toggleable off in Settings.
 - **Rounded corners everywhere:** generous radius on cards (12–16px), smaller on inputs/buttons (8px). No sharp rectangles.
-- **Depth through layers:** content cards sit above a panel surface, which sits above the sidebar, which sits above the background. Each layer is a slightly lighter shade + subtle shadow.
-- **Minimal chrome:** no heavy borders, no loud outlines. Separation is achieved via opacity and blur, not hard lines.
-- **Transitions:** smooth panel-to-panel transitions (150ms ease-out). No jarring flashes.
+- **Depth through layers:** content cards sit above panel surface, which sits above sidebar, which sits above background. Each layer: slightly lighter shade + subtle shadow.
+- **Minimal chrome:** no heavy borders, no loud outlines. Separation via opacity and blur, not hard lines.
+- **Transitions:** smooth panel-to-panel (150ms ease-out). No jarring flashes.
 
-**References apply to:** how panels/elements are disposed, how they layer over content, how sidebars collapse/group — not specifically to color palette.
-
-**Out of scope for 4.5 (future phases):**
-- Dynamic color adaptation from wallpaper/open apps (Caelestia feature → Phase 6)
-- Panels sliding in from screen edges overlapping other apps (requires Tauri transparent overlay window → Phase 5)
-- Floating radial mode / fan menu (Phase 5)
-
----
-
-## 2. Visual References
+**Visual references:**
 
 | Reference | What to take from it |
 |-----------|---------------------|
-| **Arc Browser** | Sidebar grouping, collapsible sections, stacked entries, smooth active states, pill-shaped highlights |
+| **Arc Browser** | Sidebar grouping, collapsible sections, smooth active states, pill-shaped highlights |
 | **Caelestia Shell + Hyprland** | Glassmorphism layering, frosted panels, soft blur, how elements coexist without competing |
 
 ---
 
-## 3. Current Pain Points (from screenshots)
+## 2. Color Palette & Theme System
 
-| Pain point | Location |
-|-----------|----------|
-| Cards blend into background — no depth, no separation | Clipboard, Models, Quick Actions |
-| Buttons are inconsistent — some filled blue, some dark outlined, some text-only | Everywhere |
-| Sidebar has no grouping between Core Tools / Media / Plugins | Sidebar |
-| Emoji system icons are inconsistent and not visually uniform | Sidebar, panel headers |
-| Panels are bare and feel abandoned on empty state | OCR, Translate, Voice, Screen Rec |
-| Typography is completely flat — no visual hierarchy beyond size | All panels |
-| "ELEUTHERIA" sidebar label is small and characterless | Sidebar header |
-| Active sidebar item highlight looks like a colored rectangle, not a pill | Sidebar |
-| Photo Editor / Quick Actions / Video controls feel arcaic and cramped | Those panels |
-| Native title bar has no personality | App shell |
+**5 built-in themes** stored in `ui/assets/themes/` (already implemented). Active theme persisted to SQLite. See D-038 for architecture.
 
----
-
-## 4. Color Palette
-
-**Theme system (multiple themes, not just dark):**
-
-The app ships with built-in themes, stored in `ui/assets/themes/`. Theme is selected in Settings and saved to SQLite. The active theme CSS file is swapped at runtime.
-
-**Built-in themes to ship in Phase 4.5:**
-
-| Theme name | Base | Notes |
-|-----------|------|-------|
-| `dark` (default) | `#13151a` base, `#1e2030` surface, `#24273a` elevated | Soft dark, not pure black |
-| `light` | `#eff1f5` base, `#ffffff` surface, `#f2f4f8` elevated | Clean light |
-| `catppuccin-mocha` | Catppuccin Mocha palette | Popular in Hyprland/Linux community |
+| Theme | Base | Notes |
+|-------|------|-------|
+| `dark` (default) | `#0f1117` base, indigo-periwinkle accent `#6d83f2` | Soft dark, not pure black |
+| `light` | `#eff1f5` base | Clean light |
+| `catppuccin-mocha` | Catppuccin Mocha palette | Mauve accent `#cba6f7` |
 | `catppuccin-latte` | Catppuccin Latte palette | Light variant |
-| `tokyo-night` | Tokyo Night palette | Common VS Code / Hyprland theme |
+| `tokyo-night` | Tokyo Night palette | Blue accent `#7aa2f7` |
 
-**CSS custom properties (defined per-theme):**
+**CSS custom properties (defined per-theme in every theme file):**
 ```css
---bg-base       /* deepest layer — window background */
---bg-surface    /* panel content area */
---bg-elevated   /* cards, inputs */
---bg-overlay    /* glassmorphism fill: semi-transparent */
---text-primary
---text-secondary
---text-muted
---accent         /* primary action color — per-theme */
---accent-subtle  /* accent at low opacity — hover states, badges */
---border         /* subtle divider color */
---shadow         /* box-shadow color */
---radius-sm: 8px
---radius-md: 12px
---radius-lg: 16px
+--bg-base, --bg-surface, --bg-elevated, --bg-overlay
+--text-primary, --text-secondary, --text-muted
+--accent, --accent-subtle, --accent-hover
+--border, --border-focus
+--shadow, --shadow-lg
+--glass-bg, --glass-blur, --glass-border
+--destructive, --success, --warning (+ -subtle variants)
+--radius-sm: 8px, --radius-md: 12px, --radius-lg: 16px, --radius-xl
 ```
 
-**Glassmorphism variables:**
-```css
---glass-bg       /* rgba version of --bg-surface at ~60% opacity */
---glass-blur: blur(16px)
---glass-border   /* 1px solid rgba(white, 0.08) */
-```
+**The "No-Line" rule:** Standard 1px borders are prohibited for structural sectioning. Use surface shifts and negative space instead.
 
-Glassmorphism toggle in Settings saves `glass: true/false` to SQLite. When off, `--glass-bg` falls back to `--bg-surface` (opaque) and `--glass-blur` to `none`.
+**Glassmorphism toggle:** `html.no-glass` class → opaque fills, no blur.
 
 ---
 
-## 5. Typography
+## 3. Typography
 
-**Default font:** Inter (bundled locally under `ui/assets/fonts/inter/`)
+**Display & headlines: Space Grotesk** — used for `.panel-title` class only. Tight letter-spacing (`-0.02em`) creates editorial authority and the "Caelestia Shell" futuristic personality. Already bundled.
+
+**UI & body: Inter variable** — high legibility, all other text. Already bundled as `ui/assets/fonts/inter-variable.woff2`.
 
 **Size scale (Tailwind overrides):**
-- `text-xs`: 11px — timestamps, labels
-- `text-sm`: 13px — secondary content, sidebar labels
-- `text-base`: 15px — body, card content
-- `text-lg`: 17px — panel subheadings
-- `text-xl`: 20px — panel titles
-- `text-2xl`: 24px — (rarely used)
+- `text-xs` (11px) — timestamps, labels
+- `text-sm` (13px) — secondary content, sidebar labels
+- `text-base` (15px) — body, card content
+- `text-lg` (17px) — panel subheadings
+- `text-xl` (20px) — panel titles (pair with `.panel-title` for Space Grotesk)
 
-**Weight usage:**
-- `font-normal (400)`: body text, descriptions
-- `font-medium (500)`: labels, button text, sidebar items
-- `font-semibold (600)`: panel titles, section headers
-- `font-bold (700)`: accent numbers, status indicators
-
-**Font change in Settings (Phase 4.5):**
-- Dropdown to select system font vs Inter
-- "Download font" feature → **Phase 5** (requires font management system)
+**Weight usage:** `font-normal (400)` body · `font-medium (500)` labels/buttons · `font-semibold (600)` panel titles/headers · `font-bold (700)` accent numbers only. Never bold body text when medium + darker color achieves the same hierarchy.
 
 ---
 
-## 6. Density & Spacing
+## 4. Elevation & Depth
 
-**Core principle:** Compact and information-dense for simple panels (Clipboard, Notes list, Models). Visually richer and more spaced for complex workflow panels (Quick Actions, Photo Editor, Video Processor).
+Elevation is a property of **light and opacity**, not shadow-casting.
 
-**Simple panel density:**
+- **Layering principle:** `card-glass` on `--bg-surface` creates natural soft lift. Stack layers: base → surface → elevated → overlay.
+- **Ambient shadows:** floating elements (popovers, tooltips) use tinted ambient shadow: `Y: 20px, Blur: 40px, Color: rgba(var(--accent-raw), 0.06)`.
+- **Ghost border:** for accessibility on near-white elements, use `--border` at 10% opacity — felt, not seen.
+- **Glassmorphism:** nav rail and sidebar use `--glass-bg` (60–70% opacity fill) + `--glass-blur` (blur 16–20px). Wallpaper ghosts through, mimicking Arc Browser.
+
+---
+
+## 5. Density & Spacing
+
+**Simple panels** (Clipboard, Notes list, Models) — compact and information-dense:
 - Card padding: `px-4 py-3`
 - Gap between cards: `gap-2`
 - Section headers: `py-2 px-4`
 
-**Complex panel density:**
-- More whitespace between logical groups
-- Larger step cards, clearer visual flow
-- Action buttons more prominent (not just text links)
+**Complex panels** (Quick Actions, Photo Editor, Video Processor) — more whitespace, larger step cards, clearer visual flow, more prominent action buttons.
 
 ---
 
-## 7. Component Patterns
+## 6. Component Patterns
 
-**Buttons (3 variants only — standardize across all panels):**
-- `btn-primary`: filled with `--accent`, white text, `radius-md`
-- `btn-secondary`: `--bg-elevated` fill, `--text-primary`, subtle border
-- `btn-ghost`: transparent, `--text-secondary`, `--accent-subtle` on hover
-- **No more raw text links as action buttons** (Copy, Delete, Download must use btn variants)
-- Destructive actions (Delete, Clear all): `btn-ghost` with red text, confirmation state on click
+All implemented in `ui/assets/base.css`.
 
-**Inputs:**
-- `--bg-elevated` fill, `--border` outline at 1px, `radius-sm`
-- Focus ring: `--accent` at 2px, no default browser outline
-- Placeholder: `--text-muted`
+**Buttons (3 variants — standardize everywhere):**
+- `btn btn-primary` — `--accent` fill, white text, `--radius-md`. For primary actions.
+- `btn btn-secondary` — `--bg-elevated` fill, `--text-primary`, subtle border. For secondary actions.
+- `btn btn-ghost` — transparent, `--text-secondary`, `--accent-subtle` on hover. For tertiary/text-link actions.
+- `btn btn-danger` — destructive. `btn-ghost` treatment with `--destructive` color + confirmation state on click.
+- All buttons: `--radius-pill` (9999px) shape — the "Pill Aesthetic."
 
 **Cards:**
-- `--glass-bg` fill (or `--bg-elevated` when glass off), `--glass-border`, `radius-md`
-- Subtle `box-shadow: 0 1px 3px var(--shadow)`
-- Hover: lift effect (`translateY(-1px)`, slightly brighter border)
+- `.card` — opaque, `--bg-elevated` fill
+- `.card-glass` — `--glass-bg` fill, `--glass-border`, `--radius-md`, `box-shadow: 0 1px 3px var(--shadow)`
+- Hover: `translateY(-1px)`, slightly brighter border, subtle `--shadow-accent` tinted glow
+- `.card-interactive:active` — inset accent glow (the **Telos Glow** — simulates the shell being energized by user presence)
 
-**Sidebar item (active state):**
-- Pill highlight: `--accent-subtle` background, `--accent` left border or pill shape
-- Arc-style: the active item is a pill that fills the sidebar width with rounded ends
+**Inputs:** `.input` class. `--bg-elevated` fill, `1px --border`, `--radius-sm`. Focus: `2px --border-focus` outline. Placeholder: `--text-muted`.
 
-**Badges / Status indicators:**
-- Recording: pulsing red dot
+**Sidebar active item:** `.nav-item.active` pill style — `--accent-subtle` background, `--accent` text. Arc-style pill fills sidebar width with rounded ends.
+
+**Section separators in sidebar:** thin `1px --border` line + `text-xs --text-muted uppercase tracking-wider` label. No `<hr>`.
+
+**Badges / Status:**
+- Recording: pulsing red dot (`@keyframes pulse`, CSS only via `.badge-recording`)
 - Downloaded: green subtle chip
-- Downloading: progress bar inside card (not a separate indicator)
-- Error: red text, no toast (inline)
+- Downloading: CSS progress bar inside card (no separate indicator)
+- Error: `--destructive` inline text, no toast
 
-**Section separators in sidebar:**
-- Thin `1px --border` line + small label (`text-xs --text-muted uppercase tracking-wider`)
+**Empty states:** `.empty-state` class. Lucide icon (48px, `--text-muted`), title (`text-base font-medium`), subtitle (`text-sm --text-muted`), optional `btn btn-primary` CTA.
+
+**Loading states:**
+- Skeleton shimmer: CSS animation via `.skeleton` class
+- HTMX indicator: Lucide `loader-2` rotating via `.htmx-indicator`
+
+---
+
+## 7. The "Telos Glow" — Signature Interaction
+
+When a user interacts with an interactive card or tile, apply a subtle inset glow using `--accent-subtle`:
+
+```css
+.card-interactive:active {
+  box-shadow: inset 0 0 0 2px var(--accent-subtle), 0 1px 3px var(--shadow);
+}
+```
+
+This simulates the shell being "energized" by the user's presence. It reinforces the high-performance personality of Eleutheria Telos. Applied via `.card-interactive` class in `base.css`.
 
 ---
 
 ## 8. Sidebar
 
-**Structure (3 static groups for Phase 4.5):**
+**Structure (3 static groups, Phase 4.5):**
 ```
 TOOLS
-  Clipboard
-  Notes
-  Voice
-  OCR
-  Translate
-  Search
-─────────────
+  Clipboard · Notes · Voice · OCR · Translate · Search
+──────────────────────────────
 MEDIA
-  Screen Rec
-  Audio Rec
-  Photo Edit
-  Video
-  Quick Actions
-─────────────
+  Screen Rec · Audio Rec · Photo Edit · Video · Quick Actions
+──────────────────────────────
 PLUGINS
   [plugin entries]
-  Models
-  Settings
+  Models · Settings
 ```
 
-**Icons:** Lucide icons, replacing all emojis. Bundled locally as `ui/assets/lucide.min.js`. Called via `lucide.createIcons()` on DOMContentLoaded and after each HTMX swap.
+**Icons:** Lucide icons via `ui/assets/lucide.min.js`. `lucide.createIcons()` on DOMContentLoaded + every HTMX swap. All emojis replaced.
 
-**Sidebar width:** 200px desktop (unchanged). Active item: pill style.
+**Sidebar width:** 200px desktop (icons + labels). Icon-only collapsed at tablet. Bottom nav on mobile.
 
-**User-creatable groups + Arc-style stacking → Phase 5** (requires backend data model for group persistence).
-
-**Glassmorphism on sidebar:** yes, sidebar uses `--glass-bg` + `--glass-blur` by default.
+**User-creatable groups + Arc-style stacking → Phase 5.**
 
 ---
 
 ## 9. Panel Layout
 
-**Header per panel:**
-- Each panel has a consistent header zone: `<h1>` title (text-xl, font-semibold) + optional subtitle (text-sm, text-muted)
-- Actions (e.g., "Clear all", "+ New") live in the header row, right-aligned, using btn variants
+**Header per panel:** `<h1>` with `.panel-title` class (Space Grotesk) + optional subtitle (`.text-sm .text-muted`). Actions right-aligned in header row using `btn` variants.
 
-**Content area:**
-- `px-6 py-5` padding (slightly more breathing room than current)
-- Max content width: none (full width) for list panels; `max-w-2xl` for form-heavy panels (OCR, Voice, Translate)
+**Content area:** `px-6 py-5` padding. Max width: none for list panels; `max-w-2xl` for form-heavy panels (OCR, Voice, Translate).
 
-**Split panels (Notes, Quick Actions):**
-- Left panel: fixed width, scrollable list
-- Right panel: fills remaining space, content area
-
-**No breadcrumbs** — single-level navigation via sidebar is sufficient.
+**Split panels** (Notes, Quick Actions): left panel fixed width + scrollable; right panel fills remaining space.
 
 ---
 
-## 10. Empty States & Feedback
+## 10. Per-Panel Empty States
 
-**Empty state anatomy:**
-- Lucide icon: `text-muted`, large (48px)
-- Title: `text-base font-medium`
-- Subtitle: `text-sm text-muted`
-- Optional CTA button
-
-**Per-panel empty states:**
-- Clipboard: "Nothing copied yet. Start copying text to see your history here."
-- Notes: "No notes yet. Press + New to create your first note."
-- OCR: visual prompt — drag zone + "Capture screen area" big action button
-- Voice: microphone icon, "Press Record to start transcribing"
-- Translate: "No language packs installed." + link to Models (already exists, needs styling)
-- Models: never empty (catalog is always populated)
-- Quick Actions: "No pipelines. Create one to automate your workflow."
-
-**Loading states:**
-- Skeleton shimmer (CSS animation) for lists that are loading
-- `hx-indicator` spinner: replace current CSS spinner with a subtle Lucide `loader-2` rotating icon
-
-**Error states:**
-- Inline below the form/action that failed
-- Red text, `text-sm`, no modal/toast
+| Panel | Copy |
+|-------|------|
+| Clipboard | "Nothing copied yet. Start copying text to see your history here." |
+| Notes | "No notes yet. Press + New to create your first note." |
+| OCR | Drag zone + "Capture screen area" as large `btn-primary` |
+| Voice | Microphone icon + "Press Record to start transcribing" |
+| Translate | "No language packs installed." + link to Models |
+| Quick Actions | "No pipelines. Create one to automate your workflow." |
+| Models | Never empty (catalog always populated) |
 
 ---
 
-## 11. Priority Order
+## 11. Panel Polish Priority Order
 
-Implement in this order (most impactful / most-used first):
-
-1. **App shell** — CSS variables, Inter font, Lucide icons, sidebar redesign (groups, pill active state)
+1. **App shell** ✓ (Phase 4.5 Step 1 — complete)
 2. **Clipboard History** — card depth, hover lift, consistent action buttons
-3. **OCR** — richer empty state, better button layout, result card
-4. **Screen Recorder** — status feedback, recording state clarity
+3. **OCR** — richer empty state, result card
+4. **Screen Recorder** — recording state clarity
 5. **Audio Recorder** — same pattern as Screen Rec
-6. **Notes** — editor chrome, note list card polish
-7. **Models** — download progress bar, installed vs available distinction
-8. **Quick Actions** — step cards richer, pipeline list more visual
-9. **Video Processor** — better operation tab layout
+6. **Notes** — editor chrome, tag pills at card bottom
+7. **Models** — download progress bar, installed vs available
+8. **Quick Actions** — D-039 node shapes, pipeline list polish
+9. **Video Processor** — operation tab layout
 10. **Photo Editor** — toolbar polish
-11. **Translate / Voice** — mostly empty-state work
+11. **Translate / Voice** — empty state work
 12. **Settings** — theme selector, font selector, glass toggle
-13. **Plugin panels** — consistent chrome so they feel native
+13. **Plugin panels** — consistent chrome
 
 ---
 
-## 12. What to Keep
+## 12. What to Keep (Do Not Change)
 
 - Dark theme as default
 - 2-column split layout for Notes and Quick Actions
 - HTMX-driven navigation (no SPA, no full-page reloads)
-- Sidebar structure (desktop: icons + labels; tablet: icons only)
-- The `Ctrl+K` command palette overlay
-- Axum/HTMX/Alpine stack — all visual changes are CSS + HTML only, no architecture changes
+- Sidebar structure (desktop: icons + labels; tablet: icons only; mobile: bottom nav)
+- `Ctrl+K` command palette overlay
+- Axum/HTMX/Alpine/Tailwind stack — visual changes are CSS + HTML only, no architecture changes
 
 ---
 
-## Design Decisions (filled during execution)
+## Design Decisions Log
 
 | Decision | Rationale | Date |
 |----------|-----------|------|
-| Lucide icons bundled locally | Offline-first (D-018 principle); consistent visual language vs mixed emojis | 2026-03-19 |
-| Inter bundled locally | Offline-first; Inter is the most neutral high-quality UI font | 2026-03-19 |
-| CSS custom properties for theming | Clean separation; theme swap = single class change on `<html>` | 2026-03-19 |
-| Static sidebar groups for Phase 4.5 | Dynamic groups require backend data model; styling can be done without that | 2026-03-19 |
-| Glassmorphism default on, toggleable | Matches Caelestia reference; users on lower-end hardware may want to disable | 2026-03-19 |
-
----
-
-## Playwright Review Notes (filled during Playwright step)
-
-| Panel | Issues found | Fixed |
-|-------|-------------|-------|
-| | | |
+| Lucide icons bundled locally | Offline-first (D-018); consistent visual language | 2026-03-19 |
+| Inter bundled locally | Offline-first; best neutral high-quality UI font | 2026-03-19 |
+| Space Grotesk for panel titles | Editorial authority; Caelestia Shell personality | 2026-03-19 |
+| Separate CSS file per theme | Community scalability — copy one file, change values, done (D-038) | 2026-03-20 |
+| Static sidebar groups for Phase 4.5 | Dynamic groups require backend data model; styling done without it | 2026-03-19 |
+| Glassmorphism default on, toggleable | Matches Caelestia reference; users on lower-end hardware may disable | 2026-03-19 |
+| Pill/diamond node shapes for Quick Actions canvas | Flowchart-classic — universally understood without color alone (D-039) | 2026-03-20 |

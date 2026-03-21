@@ -1,9 +1,10 @@
 # Eleutheria Telos — Changelog
 
-This file is the project's memory between sessions. It is updated at the end of every work session by Claude Code. Before starting any session, read the most recent entry.
+Contains the **last ~2 weeks of sessions only**. Everything older lives in `CHANGELOG_ARCHIVE.md`.
 
-Format per entry:
-- **Date** — what was completed, what changed, what was decided, what's next
+**Archive policy:** After any `cursor-sprint → dev` merge, Rodrigo tells the active tool "the merge is done." The tool then moves all entries older than 14 days to `CHANGELOG_ARCHIVE.md` and commits. Neither tool archives without that explicit confirmation.
+
+Read the most recent entry before starting any session.
 
 ---
 
@@ -11,92 +12,48 @@ Format per entry:
 
 ### Completed
 
-**`src-tauri/migrations/010_trash.sql`** (created)
-- `deleted_at INTEGER DEFAULT NULL` on both `notes` and `clipboard`; two new indexes
+**`src-tauri/migrations/010_trash.sql`** — `deleted_at INTEGER DEFAULT NULL` on `notes` and `clipboard`; indexes
 
-**`src-tauri/migrations/011_note_links.sql`** (created)
-- `note_links (from_id, to_id)` join table — `ON DELETE CASCADE`, two indexes
-- Derived read index rebuilt from `[[Note Title]]` tokens on every save
+**`src-tauri/migrations/011_note_links.sql`** — `note_links (from_id, to_id)` join table; `ON DELETE CASCADE`; derived index rebuilt from `[[Note Title]]` tokens on every save
 
 **`src-tauri/src/tools/notes.rs`**
-- `date_bucket()` + `bucket_separator()` — buckets notes by recency (Today / Yesterday / This Week / This Month / Older)
-- `render_note_list` — now takes `show_buckets: bool`; emits `<div grid-column:1/-1>` separators between buckets
-- `render_trash_note_card()` — dimmed card with Restore + Delete Forever buttons; `hx-on::after-request` triggers `noteUpdated` on restore
-- `extract_note_refs()` + `sync_note_links()` — scans `[[...]]` tokens, resolves titles to IDs, rebuilds `note_links`
-- `sync_note_links` called in `create_handler` and `update_handler`
-- All list/tag/filter queries: `AND deleted_at IS NULL` / `AND n.deleted_at IS NULL`
-- `delete_handler` → soft delete (`UPDATE SET deleted_at = ?`); returns empty HTML to remove card from grid
-- `restore_handler: POST /api/notes/:id/restore` — sets `deleted_at = NULL`; returns `HX-Trigger: noteUpdated`
-- `purge_handler: DELETE /api/notes/:id/purge` — hard DELETE, only if `deleted_at IS NOT NULL`
-- `trash_list_handler: GET /api/notes/trash` — auto-purges >30d, renders trash cards
-- `links_handler: GET /api/notes/:id/links` — returns backlinks + outgoing refs HTML (buttons that dispatch `notes:open-editor`)
-- `resolve_by_title_handler: GET /api/notes/resolve?title=` — returns `{ id }` JSON for `[[...]]` link navigation
-- `render_note_card`: added `user-select:none` (fixes drag in tag-filtered views on WebKitGTK)
-- `render_editor`: backlinks panel below editor — `hx-get="/api/notes/{id}/links" hx-trigger="load, noteUpdated from:body"`
-- `renderMarkdown()` in `notesEditor` — `[[...]]` → clickable span dispatching `notes:find-by-title` event
+- `date_bucket()` + `bucket_separator()` — buckets notes by recency
+- `render_note_list` — takes `show_buckets: bool`; emits grid-spanning separators between buckets
+- `render_trash_note_card()` — dimmed card with Restore + Delete Forever buttons
+- `extract_note_refs()` + `sync_note_links()` — scans `[[...]]` tokens, resolves to IDs, rebuilds `note_links`
+- All list/tag/filter queries: `AND deleted_at IS NULL`
+- New handlers: `restore_handler`, `purge_handler`, `trash_list_handler`, `links_handler`, `resolve_by_title_handler`
 - Router: added `/api/notes/trash`, `/api/notes/resolve`, `/api/notes/:id/restore`, `/api/notes/:id/purge`, `/api/notes/:id/links`
-- Tests updated for soft-delete; 28 pass
+- Tests updated; 28 pass
 
-**`src-tauri/src/tools/clipboard.rs`**
-- `clip_date_bucket()` + `clip_bucket_separator()` + `render_trash_clip_card()` — same pattern as notes
-- `render_list` takes `show_buckets: bool`; date separators on first page only
-- List queries: `AND deleted_at IS NULL`
-- `delete_one_handler` → soft delete
-- `restore_clipboard_handler: POST /api/clipboard/:id/restore` — `HX-Trigger: clipboardRefresh`
-- `purge_clipboard_handler: DELETE /api/clipboard/:id/purge` — hard DELETE
-- `trash_clipboard_handler: GET /api/clipboard/trash` — auto-purges >30d, renders trash cards
+**`src-tauri/src/tools/clipboard.rs`** — same trash/date-bucket pattern; `restore_clipboard_handler`, `purge_clipboard_handler`, `trash_clipboard_handler` added
 
-**`ui/tools/notes/index.html`**
-- Sidebar wrapper restructured: `flex-direction:column` with scrollable `#notes-tag-sidebar` + fixed trash button at bottom
-- `notesShowTrash()` — loads `/api/notes/trash`, highlights trash button, resets active tag
-- `notesSetActiveTag()` — now also clears `notesTrashActive`
-- `_applyActiveTag()` — resets trash button color when tag is selected
-- `notesDragStart` — creates semi-transparent ghost clone via `setDragImage` (fixes ghost opacity); fades source element
-- `notesApp.init()` — listens for `notes:find-by-title`; resolves title via `/api/notes/resolve`, opens editor
+**`ui/tools/notes/index.html`** — trash button fixed to sidebar bottom; `notesDragStart` creates semi-transparent ghost; `notesApp.init()` handles `notes:find-by-title`
 
-**`ui/tools/clipboard/index.html`**
-- Header: added Trash button (`hx-get="/api/clipboard/trash"` into `#clipboard-grid`)
+**`ui/tools/clipboard/index.html`** — Trash button added to header
 
-### Known pre-existing failures (not from this session)
-- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
-- `clippy::unnecessary_closure` in `quick_actions.rs` — pre-existing
+### Known pre-existing failures
+- `tools::translate::tests::test_langs_no_models` — HTML mismatch (prior session)
+- `clippy::unnecessary_closure` in `quick_actions.rs`
 
 ### Next session
-- Test all features in the running app
-- Possible follow-up: tag pill badges on note cards, multi-select notes, clipboard trash accessible from notes panel
+Test all features in running app. See STATUS.md for full task queue.
 
 ---
 
-## [2026-03-20] — Phase 4.7: Notes tag UX polish — drag opacity, active highlight, tag deletion
+## [2026-03-20] — Phase 4.7: Notes tag UX polish
 
 ### Completed
 
 **`src-tauri/src/tools/notes.rs`**
-- `render_note_card` — added `ondragend="this.style.opacity='1'"` to card div (pair with JS drag start fade)
-- `render_tag_tree` — has_kids flex row now has `data-tag-card="{root}"` attribute so the active highlight can cover the chevron+label row as a unit
-- `render_tag_tree` — `oncontextmenu="notesTagContextMenu(event, '{tag}')"` added to: has_kids flex row, leaf tag button, and child tag buttons; right-click on any tag node now opens delete menu
-- `DeleteTagQuery` struct + `delete_tag_handler` — `DELETE /api/notes/tags?name={tag}`: finds all notes referencing the tag or any child (`LIKE 'tag/%'`), strips the tag token from title+content via `replace_tag_in_text(text, tag, "")`, saves, calls `sync_note_tags`; returns 204
-- Router: `/api/notes/tags` now registered as `get(tags_handler).delete(delete_tag_handler)`
-- All 15 notes tests pass; no new clippy warnings in notes.rs
+- `render_tag_tree` — `data-tag-card` attribute for active highlight; `oncontextmenu` on all tag nodes
+- `DeleteTagQuery` + `delete_tag_handler` (`DELETE /api/notes/tags?name=`) — strips tag from all affected notes, calls `sync_note_tags`
+- All 15 tests pass
 
 **`ui/tools/notes/index.html`**
-- `notesDragStart` — added `setTimeout(() => { el.style.opacity = '0.35'; }, 0)` to fade card during drag; deferred so the ghost captures at full opacity first
-- `_applyActiveTag` — now resets then applies outline to `[data-tag-card]` container first (covers chevron+label); falls back to standalone `button[data-tag]` for leaf/All Notes buttons
-- `notesTagContextMenu(event, tag)` — creates a floating context menu at cursor; single "Delete #tag" item; auto-dismissed on next click
-- `notesDeleteTag(tag)` — calls `DELETE /api/notes/tags?name=…`; resets active filter to All Notes if the deleted tag was active; triggers `noteUpdated` to refresh sidebar + grid
-
-**`IDEAS.md`**
-- Added 3 new entries: Trash bin with 30-day retention (#5), Date-chunked grid organisation (#6), Obsidian-style `[[Note Title]]` backlinks (#7)
-
-### Known pre-existing failures (not from this session)
-- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
-- `clippy::unnecessary_closure` in `quick_actions.rs` — pre-existing
-
-### Next session
-Phase 4.7 polish or Phase 5. Candidates:
-- Tag badge pills on note cards (render `notes.tags` JSON as small pills at card bottom)
-- Trash bin (Phase 5 item — now fully speced in IDEAS.md)
-- Clipboard search history `[object Object]` bug — GitHub issue #3, needs DevTools
+- `notesDragStart` — deferred fade so ghost captures at full opacity
+- `_applyActiveTag` — applies outline to `[data-tag-card]` container
+- `notesTagContextMenu` + `notesDeleteTag` — floating context menu; "Delete #tag"; auto-dismissed on next click
 
 ---
 
@@ -104,1587 +61,141 @@ Phase 4.7 polish or Phase 5. Candidates:
 
 ### Completed
 
-**`src-tauri/migrations/009_note_tags.sql`** (created)
-- `note_tags (note_id, tag)` join table — `ON DELETE CASCADE`, two indexes
-- Source of truth is `notes.tags` JSON blob; this table is the read index, rebuilt on every save
+**`src-tauri/migrations/009_note_tags.sql`** — `note_tags (note_id, tag)` join table
 
 **`src-tauri/src/tools/notes.rs`**
-- `extract_tags(content)` — byte-scan parser (no regex crate); finds `#tagname` / `#parent/child`; must start with ASCII letter; returns unique lowercase tags
-- `sync_note_tags(db, note_id, content)` — deletes old rows, inserts fresh rows, updates `notes.tags` JSON blob; called after every create and content-touching update
-- `render_tag_tree(rows)` — builds collapsible sidebar HTML from flat `(tag, count)` rows; 2-level hierarchy derived by splitting on `/`; Alpine `x-data="{{ open: true }}"` per root; chevron rotates on collapse; "All Notes" reset button; `hx-get="/api/notes?tag=…"` on each tag button
-- `tags_handler` — `GET /api/notes/tags` → queries `note_tags GROUP BY tag ORDER BY tag` → returns sidebar HTML
-- `list_handler` — added `tag: String` to `ListQuery`; new tag-filter branch joins `note_tags` to filter by tag with pagination
-- `create_handler` — calls `sync_note_tags` after successful insert
-- `update_handler` — saves `content_for_tags` clone before query builder consumes it; calls `sync_note_tags` after successful update when content was provided
-- Router: `/api/notes/tags` declared before `/api/notes/:id` (static wins over param in matchit)
-- 6 new tests: `extract_tags_basic`, `extract_tags_nested`, `extract_tags_dedup`, `extract_tags_must_start_with_letter`, `tag_filter_route`, `tags_handler_returns_tree`
-- All 12 notes tests pass
-
-**`ui/tools/notes/index.html`**
-- Grid mode content area changed from `flex-direction:column` to `flex-direction:row`
-- `#notes-tag-sidebar` added: 168px wide, `border-right`, `hx-get="/api/notes/tags"`, `hx-trigger="load, noteUpdated from:body"` — refreshes on any note save
-- `#notes-grid` `grid-template-columns` changed from `minmax(273px,1fr)` to `minmax(220px,1fr)` to accommodate narrower space
-
-### Known pre-existing failures (not from this session)
-- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
-- `clippy::unnecessary_closure` in `quick_actions.rs` — pre-existing
-
-### Known open bug (GitHub issue #3)
-- Clipboard search history shows `[object Object]` when selecting a past search. Root cause unclear after 4 fix attempts. Needs DevTools inspection.
-
-### Next session
-Phase 4.7 — remaining backlog items or start Phase 5. Consider:
-- Tag badges on note cards (small `#tag` pills at card bottom)
-- Tag sidebar highlight on active filter (visual active state)
-- Clipboard search history bug (#3) — if DevTools data becomes available
+- `extract_tags(content)` — byte-scan parser; `#tagname`/`#parent/child`; unique lowercase
+- `sync_note_tags()` — rebuilds `note_tags` rows + `notes.tags` JSON blob
+- `render_tag_tree()` — collapsible sidebar, 2-level hierarchy, Alpine chevron, `hx-get` per tag
+- `tags_handler`, tag-filter branch in `list_handler`, `sync_note_tags` called after create/update
 
 ---
 
-## [2026-03-20] — Phase 4.7: Clipboard pin entries + content-type icons
+## [2026-03-20] — Phase 4.7 P1–P3: Pipeline folders, YAML export/import
 
 ### Completed
+- `migrations/008_pipeline_folders.sql` — `pipeline_folders` table + `folder_id FK` on `pipelines`
+- `quick_actions.rs` — folder CRUD; pipeline list groups by folder; move-to-folder; `export_pipeline_handler`; `import_pipeline_handler` (parses YAML, generates fresh UUIDs, remaps edges)
+- `serde_yaml = "0.9"` added (MIT, Rust 1.92 compatible)
+- Canvas toolbar: Export + Import buttons; Import uses hidden file input + `hx-encoding="multipart/form-data"`
 
-**`src-tauri/migrations/008_clipboard_pin.sql`**
-- `ALTER TABLE clipboard ADD COLUMN is_pinned BOOLEAN NOT NULL DEFAULT 0`
-
-**`src-tauri/src/tools/clipboard.rs`**
-- `detect_content_kind(content)` helper — returns `"url"` (starts with `http://`/`https://`), `"code"` (multiline with `{` and `}`), or `"text"`
-- `render_entry_card` — new `is_pinned: bool` param; pin button (⭐ star SVG, absolute top-right): filled amber when pinned (always visible), outline muted when unpinned (hover-only via `clip-action`); triggers `clipboardRefresh` on body via `hx-on::after-request` after PUT
-- Content-type badge in card footer: URL entries show globe SVG + "URL" pill; code entries show `{}` monospace pill; plain text and image entries show no badge
-- `render_list` — tuple extended to 6-element `(id, content, ts, image_thumb, content_type, is_pinned)`; `#[allow(clippy::type_complexity)]` added
-- `list_handler` — `SELECT` extended with `is_pinned`; both queries now `ORDER BY is_pinned DESC, created_at DESC`
-- `pin_toggle_handler` — `PUT /api/clipboard/:id/pin` toggles with SQL `CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END`; returns `204 No Content`
-- Route added: `PUT /api/clipboard/:id/pin`
-- 2 new tests: `pin_toggle` (on→off round-trip), `pinned_items_float_to_top` (ORDER BY verified)
-- All 7 clipboard tests pass
-
-### Known pre-existing failures (not from this session)
-- `tools::translate::tests::test_langs_no_models` — HTML mismatch from a prior session
-- `clippy::type_complexity` + `unnecessary_closure` in `quick_actions.rs` — pre-existing
-
-### Known open bug (GitHub issue #3)
-- Clipboard search history shows `[object Object]` when selecting a past search. Root cause unclear after 4 fix attempts. Needs DevTools inspection. Workaround: manually type searches.
-
-### Next session
-Implement **Notes tags** (Phase 4.7 backlog item #5 / next highest-impact):
-- `tags TEXT` column on `notes` table (comma-separated or JSON array)
-- Tag input in create/edit flow
-- Filter chips above notes grid
+> **YAML format:** `name`, `trigger`, `nodes` (id slug, type, config, pos_x, pos_y), `edges` (source slug, target slug, label). Human-readable slugs in YAML; real UUIDs on import.
 
 ---
 
-## [2026-03-20] — Phase 4.7: Clipboard image support + card UI polish
+## [2026-03-20] — Workflow + documentation overhaul
 
 ### Completed
-
-**`src-tauri/src/tools/clipboard.rs`**
-- Added `image` crate (`0.25`, PNG/JPEG/GIF/BMP features) and `png` crate (`0.17`) to `Cargo.toml`
-- `THUMB_W/H` set to 640×360 (16:9, up from 320×240)
-- `make_thumbnail(bytes, src_w, src_h)` — nearest-neighbour downsampler + PNG encoder → base64; takes raw RGBA bytes so both arboard and file-loaded images share the same path
-- `thumb_from_path(text)` — detects image file paths (plain path or `file://` URI with percent-decode); loads via `image::open`; returns `Some(base64_thumb)` or `None`
-- Clipboard monitor: checks `cb.get_image()` first each cycle (arboard); stores image entries as `content_type='image'`, `content='[image]'`, `image_thumb=base64`; text entries that look like image file paths are converted to image entries via `thumb_from_path`
-- `render_entry_card` signature extended: `(id, content, created_at, content_type, image_thumb)`; image cards render `<img src="data:image/png;base64,…">` with `flex:1;object-fit:cover`; text cards use `flex:1;overflow:hidden` (removed `max-height:6.5em` so footer sits at card bottom)
-- DB query updated: `SELECT id, content, created_at, image_thumb, content_type FROM clipboard`
-- Migration `007_clipboard_image.sql`: `ALTER TABLE clipboard ADD COLUMN image_thumb TEXT`
-
-**`ui/tools/clipboard/index.html`**
-- `hx-trigger` on grid: added `every 3s` for live auto-refresh
-- Grid: `grid-auto-rows:225px` (16:9 approximation for ~400px columns), replaces `210px`
-- Card body wrapper: object-form `:style` binding on blur wrapper (fixes Alpine string-form bug that wiped `flex:1;min-height:0` layout when `searchFocused || preview`)
-- `clipboardOpenPreview`: handles `data-clip-kind="image"` — dispatches `clipboard:preview` with `imageSrc` from `<img>` src; no fetch needed
-- Preview modal:
-  - `previewOpen` boolean added — controls `x-show` on outer modal; decoupled from `preview` object
-  - `closePreview()` method: sets `previewOpen = false` immediately (starts fade), then `preview = null` after 160ms (after animation); eliminates ghost-card flash on close
-  - All close triggers (✕, backdrop click, Escape) call `closePreview()` instead of `preview = null`
-  - Image wrapper uses `<template x-if>` instead of `x-show` — prevents Alpine's `el.style.display = ''` from wiping inline `display:flex` on reveal
-  - `:style` on content div changed from string form to object form `{ cursor: … }` — prevents cssText wipe
-  - Modal image: `max-width:100%;height:auto` with scrollable container for tall images
-- Search popup history: `@mousedown.prevent="selectHistory($event.currentTarget.querySelector('span').textContent)"` — prevents Alpine proxy → `[object Object]` bug
-- `applySearch()` uses `htmx.ajax()` directly (bypasses 300ms debounce that gets cancelled when popup closes via `x-show`)
-- `searchHistory` filtered on init: `.filter(s => typeof s === 'string' && s !== '[object Object]')`
-
-**`ui/tools/notes/index.html`**
-- Grid: `grid-auto-rows:225px` — matches clipboard 16:9 card height
-
-### Bugs fixed
-- **Footer in middle of card** — `<pre>` had `max-height:6.5em` preventing `flex:1` from filling space; removed.
-- **Image from file manager shows path instead of image** — `thumb_from_path` detects copied image paths and stores thumbnail.
-- **Image modal: left-corner alignment** — root cause was Alpine `x-show` calling `el.style.display = ''` which cleared inline `display:flex`. Fixed with `<template x-if>`.
-- **Ghost empty popup on modal close** — `preview = null` caused inner `x-show` conditions to flip (undefined !== 'image' = true) showing empty text skeleton during fade. Fixed with `previewOpen` + `closePreview()` delayed clear.
-- **Search bar wiping layout** — Alpine string-form `:style` was calling `el.style.cssText = ''` when expression evaluated to empty string. Fixed to object-form binding.
-- **`[object Object]` in search history** — Alpine x-for proxy returned `[object Object]` via `String(proxy)`. Fixed: read from DOM via `$event.currentTarget.querySelector('span').textContent`.
-- **Enter key not triggering search** — `htmx.trigger` with 300ms debounce was cancelled when `x-show` set display:none on popup close. Fixed: `htmx.ajax()` fires immediately.
-
-### Next session
-Implement **Clipboard: pin entries + content-type icons** (Phase 4.7 backlog item #4):
-- Add `is_pinned BOOLEAN DEFAULT 0` column to `clipboard` table (migration `008_clipboard_pin.sql`)
-- Pin button per card (star icon); `PUT /api/clipboard/:id/pin` toggle route
-- Pinned items float to top in `list_handler` (`ORDER BY is_pinned DESC, created_at DESC`)
-- Content-type badge per card: URL globe icon, image thumbnail chip, code `{}` badge — detected server-side from `content_type` + URL regex
+- `CURSOR.md`, `WORKTREE.md`, `STATUS.md` added — multi-tool parallel/solo workflow
+- `ROADMAP.md` restructured — parallel phase lanes explicit; Phase 4.5 completion criteria defined
+- `DECISIONS.md` — D-038 (CSS theming), D-039 (canvas node style) added; D-027 (superseded Spanish duplicate) removed
+- `CHANGELOG_ARCHIVE.md` created — all sessions before 2026-03-19 moved there
+- `.gitignore` — `__pycache__/`, `*.pyc` added; pycache removed from tracking
+- `tests/fixtures/test-pipeline-h4.yaml` — moved from repo root
 
 ---
 
-## [2026-03-20] — Phase 4.7: DOM content truncation + on-demand fetch (Steps 1 & 2)
+## [2026-03-19] — Phase 4.7: Notes grid card UI + lazy-load pagination
 
 ### Completed
-- **`src-tauri/src/tools/clipboard.rs`** — Step 1: `render_entry_card` now truncates `data-clip-content` to 2 KB and `<pre>` preview to 300 bytes server-side; adds `data-clip-truncated="true"` flag when content exceeds limit. Added `truncate_bytes` helper (O(1), respects UTF-8 boundaries). Step 2: new `get_one_handler` → `GET /api/clipboard/:id` returns `{ "content": "..." }` JSON with full content.
-- **`src-tauri/src/tools/notes.rs`** — Same truncation pattern on `render_note_card` (2 KB attr / 300 bytes preview / `data-note-truncated`). New `get_content_handler` → `GET /api/notes/:id/content` returns `{ "content": "..." }` JSON.
-- **`ui/tools/clipboard/index.html`** — `clipboardOpenPreview` detects `data-clip-truncated`; opens modal immediately with truncated content + `loading: true`, then fetches full content via `GET /api/clipboard/:id` and dispatches `clipboard:content-loaded` to update the modal. Copy button blocked while loading.
-- **`ui/tools/notes/index.html`** — Same pattern: `notesOpenPreview` fetches full content via `GET /api/notes/:id/content` when truncated.
-- Fixed pre-existing test: `list_empty` text mismatch (`"Nothing copied yet."` → `"Lost something you copied?"`).
-
-### Performance impact
-- A 100 KB clipboard entry was ~200 KB in DOM (content duplicated in attribute + `<pre>`). Now: ~2.3 KB in DOM. Full content loads on-demand in ~1 HTMX round-trip only when the modal is opened.
-
-### Known remaining issue
-- `tools::translate::tests::test_langs_no_models` — pre-existing test text mismatch introduced in a prior session (empty state HTML changed but test string not updated). Not related to this session's work.
-
-### Next session (start here)
-If Step 1+2 are sufficient to fix the sluggishness, close the issue. Otherwise implement Step 3: DOM virtualisation (sliding window of ~30 visible cards). Test with 200+ clipboard entries.
+- `notes.rs` — responsive card grid (`auto-fill minmax(210px,1fr)`); modal preview with copy-on-click; paginated list (24/page); `IntersectionObserver` sentinel; search bypasses pagination (200 max)
+- `clipboard.rs` — paginated list (20/page); sentinel div
 
 ---
 
-## [2026-03-20] — Phase 4.7: Notes + Clipboard card UI, lazy load, hover performance
+## [2026-03-19] — Phase 4.7 H4: Graph-aware execution engine
 
 ### Completed
-- **`src-tauri/src/tools/notes.rs`** — full rewrite of card rendering + pagination:
-  - `const PAGE: i64 = 24` — infinite scroll page size
-  - `render_note_card`: `data-note-id`, `data-note-title`, `data-note-content` (HTML-escaped); `onclick="notesOpenPreview(this)"`; hover via `onmouseenter/leave` toggling `outline` + `display:none/inline-flex` on `.note-action` buttons (no CSS transitions); `max-height` replaces `-webkit-line-clamp`
-  - `render_note_list`: appends IntersectionObserver sentinel div when `has_more`; empty state spans full grid width
-  - `list_handler`: fetches `limit+1` rows; search bypasses pagination (200 max); computes `has_more` and `next_offset`
-- **`ui/tools/notes/index.html`** — full rewrite:
-  - Two modes: `'grid'` and `'editor'` (Alpine `mode` state)
-  - Grid: `repeat(auto-fill, minmax(210px, 1fr))`; `hx-trigger="load, noteUpdated from:body"`; search bar pinned to bottom
-  - Editor: `← Notes` back button + `#note-editor-inner`; loaded via fetch + innerHTML + script re-execution + `Alpine.initTree()` + `lucide.createIcons()`
-  - Preview modal: `position:absolute` overlay; `@click.self` / `@keydown.escape.window` close; Copy + Edit buttons
-  - `notesOpenPreview(el)`: dispatches `notes:preview` custom event (decouples server HTML from Alpine scope)
-  - `createNote()`: POST → parse `data-note-id` from response body HTML (not headers — CORS doesn't expose custom headers cross-origin); wrapped in try/catch; `openEditor(id)` called on success
-- **`src-tauri/src/tools/clipboard.rs`** — full rewrite of card rendering + pagination:
-  - `const PAGE: i64 = 20`
-  - `render_entry_card`: same hover pattern as notes (outline + display toggle, no transitions); `max-height:5.5em` replaces `-webkit-line-clamp:4`
-  - `render_list`: sentinel div for infinite scroll; search bypasses pagination
-- **`ui/tools/clipboard/index.html`** — full rewrite:
-  - Removed `hx-trigger="every 3s"` polling — was root cause of scroll momentum interruption in WebKitGTK (full innerHTML swap breaks scroll state)
-  - `hx-trigger="load, clipboardRefresh from:body"` + `visibilitychange` listener fires `clipboardRefresh` when window regains focus
-  - Preview modal: `position:fixed`; `clipboardOpenPreview(el)` dispatches `clipboard:preview` event
-- **`4d4b227`** — hover fix commit: instant `outline` color + `display:none/inline-flex` toggle replaces `box-shadow` + `opacity` CSS transitions
+- `quick_actions.rs` — full graph traversal (BFS); condition node evaluation; cycle detection with configurable per-pipeline timeout (default 60s warn / 120s kill); backward-compatible with migrated pipelines
 
-### Bugs fixed
-- `createNote()` silently did nothing — `res.headers.get('X-Note-Id')` returns `null` because CORS doesn't expose custom headers. Fixed: parse `data-note-id` from response body HTML via regex.
-- Clipboard slow scroll — `every 3s` full innerHTML swap interrupts WebKitGTK scroll momentum. Fixed: removed polling, use `visibilitychange` refresh.
-- Slow hover on cards — `box-shadow` + `transition` + `opacity` on child elements forces WebKitGTK repaint on every hover. Fixed: instant `outline` + `display` toggle.
-
-### Known issue (NOT YET FIXED — next session priority)
-- **Clipboard (and Notes) still feel sluggish** — root cause identified: each card embeds full content **twice** in the DOM: once in `data-clip-content="..."` attribute and once in the `<pre>` body. Large clipboard entries (code, articles) = 100+ KB per card. WebKitGTK parses all of it even when hidden. Fix plan:
-  1. Truncate `data-clip-content` to 2 KB and `<pre>` preview to 300 chars server-side; add `data-clip-truncated` flag
-  2. Add `GET /api/clipboard/:id` route; modal fetches full content on demand when truncated
-  3. DOM virtualization (sliding window) if 1+2 aren't enough
-  - Files: `clipboard.rs` `render_entry_card`, `notes.rs` `render_note_card`, new `get_entry_handler`, `clipboard/index.html` modal, `notes/index.html` modal
-
-### Next session (start here)
-Fix the content-in-DOM-attribute performance issue described above. Start with Step 1 (pure Rust, no API change needed). Test with a large clipboard entry before and after.
+> **Loop design (D-037):** No dedicated Loop node. Loops are back-edges. Engine enforces timeout.
 
 ---
 
-## [2026-03-20] — Phase 4.7 P1/P2/P3: pipeline folders + YAML export/import
+## [2026-03-19] — Phase 4.7 H3a–H3d: Canvas pan/zoom, node connect, config panel, undo/redo
 
 ### Completed
-- **`src-tauri/migrations/006_pipeline_folders.sql`** — `pipeline_folders` table (id, name, sort_order) + `folder_id TEXT` column on `pipelines`
-- **`src-tauri/Cargo.toml`** — added `serde_yaml = "0.9"` (MIT, Rust 1.92 compatible)
-- **`src-tauri/src/tools/quick_actions.rs`** — P1/P2/P3 backend:
-  - `FolderRow`, `PipelineYaml`, `NodeYaml`, `EdgeYaml`, `CreateFolderParams`, `MoveFolderParams`, `ImportParams` structs
-  - `render_pipeline_item()`: single pipeline `<li>` with folder `<select>` (HTMX PUT on change, shows on hover via `.qa-hover` class)
-  - `render_pipeline_list()`: folder-aware; folders rendered as `<details>/<summary>` collapsible sections; uncategorised pipelines at bottom
-  - `load_and_render_list()`: single async helper fetching folders + pipelines; all CRUD handlers use it
-  - `create_folder_handler` / `delete_folder_handler` / `move_to_folder_handler` — full folder CRUD
-  - `export_handler`: serializes pipeline + nodes + edges to serde_yaml YAML; returns with `Content-Disposition: attachment`
-  - `import_handler`: deserializes YAML via serde_yaml; generates fresh UUIDs; remaps edge source/target IDs via HashMap
-  - Router: `/api/pipeline-folders`, `/api/pipelines/import` (before `/:id`), `/api/pipelines/:id/folder`, `/api/pipelines/:id/export`
-  - `PipelineRow` updated with `folder_id: Option<String>`; all SELECT queries updated
-- **`ui/tools/quick-actions/index.html`** — P1/P2/P3 frontend:
-  - Sidebar: "+ Pipeline" + "⊞ Folder" dual-button row; folder creation inline form
-  - Hidden `<input type="file" id="qa-import-input">` inside sidebar header
-  - Canvas toolbar: Export + Import buttons (with download/upload icons)
-  - `exportYaml()`: fetch + blob URL + `<a download>` click
-  - `importYaml(event)`: read file text → POST JSON → refresh list via fetch → auto-open imported pipeline
-- **`test-pipeline-h4.yaml`** — 7-node H4 test pipeline (read_file → not_empty condition → translate or save_note branches → two end nodes); ready to import and run
-
-### Next
-Notes: inline #tag extraction — `#tag` tokens parsed at save time → `tags` table → clickable chips → filter by tag.
+- **H3a** — transform-based canvas; scroll-to-zoom toward cursor; fit-all ⌖; zoom ± buttons
+- **H3b** — output/input ports; drag port-to-port to create edge; back-edges for cycles; click-edge-Delete
+- **H3c** — 280px right config panel; trigger/action/condition forms; Save PUTs to DB; canvas QoL (spawn position, camera reset on pipeline switch)
+- **H3d** — 50-op undo stack; Ctrl+Z/Y/Shift+Z; toolbar ↩↪ with disabled state; covers add/delete node+edges, move node
 
 ---
 
-## [2026-03-20] — Phase 4.7 H4: graph-aware execution engine
+## [2026-03-19] — Phase 4.7 H0–H2: Nav history + Quick Actions canvas foundation
 
 ### Completed
-- **`src-tauri/src/tools/quick_actions.rs`** — H4 graph execution engine:
-  - `GraphCtx` struct: nodes HashMap, adj HashMap (source→edges), `started_at` Instant, `warned` AtomicBool for one-shot 60s warning
-  - `GraphCtx::guard()`: at 60s logs a warning (once, via AtomicBool); at 120s returns `Err("Loop timed out")` to kill the pipeline
-  - `run_pipeline_graph()`: loads `pipeline_nodes` + `pipeline_edges` from DB, finds trigger node, builds `Arc<GraphCtx>`, dispatches `run_graph_from`; falls back to linear `run_pipeline_steps` if no graph nodes (backwards-compatible)
-  - `run_graph_from()`: `Pin<Box<dyn Future>>` boxed async fn for recursive fan-out; iterative traversal via `adj` HashMap; condition nodes branch on "true"/"false" edge labels; `__done__` signal from `for_each_file` short-circuits further traversal
-  - `execute_action()`: dispatches 8 tools — translate, copy_clipboard, save_note, read_file, write_file (overwrite/append/skip modes), append_file (custom separator), ocr_file (tesseract), for_each_file (recursive fan-out returning `__done__`)
-  - `evaluate_condition()`: always_true, not_empty, contains, length_gt, matches_regex (substring fallback if regex parse fails)
-  - `list_files()` / `file_matches_pattern()`: async `tokio::fs::read_dir` with recursive option; supports `*`, `*.ext`, exact name patterns
-  - `NodeRow` derives `Clone` (fixed noop_method_call warning)
-  - Both `run_handler` and `start_pipeline_engine` updated to call `run_pipeline_graph`
-
-### Next
-P1 — Pipeline folders: `pipeline_folders` table + sidebar grouping + collapse/expand + move pipeline into folder.
+- **H0** — back/forward nav (Alt+←/→, mouse side buttons, chevrons in shell header)
+- **H1** — `migrations/006_pipeline_graph.sql`: `pipeline_nodes` + `pipeline_edges`; auto-migration of existing `pipeline_steps` to linear chains; full graph CRUD routes
+- **H2** — `qaApp()` Alpine canvas component: nodes as draggable divs on 3000×2000 dot-grid, SVG bezier edges, 5 node types, drag-to-reposition, toolbar, run result bar, empty state
 
 ---
 
-## [2026-03-20] — Phase 4.7 canvas QoL + H3d + camera fixes
+## [2026-03-19] — Phase 4.5 Complete (Playwright review + OCR fix)
 
 ### Completed
-- **`ui/tools/quick-actions/index.html`** — camera centering + cascade clamp (second pass):
-  - **Camera on pipeline open:** New `_centerCanvas()` method sets `panX = vw×0.4 − 2000`, `panY = vh×0.5 − 1500`, placing the canvas midpoint (2000, 1500) at 40/50% of the viewport. Previously started at (0,0) = top-left corner, leaving no room to pan up/left. Now called on empty pipeline load; existing pipelines with nodes still use `fitNodes()`.
-  - **Cascade overflow fixed:** Base x for new nodes is clamped to `min(anchor.pos_x + NODE_W + 60, 3360)`. With 3 columns of 200px each and 40px margin, the rightmost spawn point is 3760px — always inside the 4000px canvas regardless of where the anchor was dragged.
-  - **Pipeline switch cleanup:** `loadGraph()` now resets `selectedEdge`, `configOpen`, `undoStack`, `redoStack` on every pipeline switch so state never bleeds between pipelines.
+- Playwright review infrastructure (`playwright-review/`) — screenshots all 13 panels
+- All panels signed off ✓
+- OCR panel: controls wrapped in `.card` for consistency
 
-- **`ui/tools/quick-actions/index.html`** — spawn position + H3d undo/redo:
-  - **Spawn position (revised):** Empty canvas → centre of visible viewport. Trigger exists → new nodes spawn to the right of the rightmost trigger, cascading in a 3-col grid (col × (NODE_W+20), row × (NODE_H+16)) per non-trigger/non-end node count. No trigger → rightmost existing node as anchor.
-  - **Config panel smooth close:** Panel animates `width 280px→0 + opacity 1→0` (180ms ease) on close. Closing on delete is instant-state, animation plays automatically via CSS transition.
-  - **H3d — Undo/redo:** 50-op stack. Keyboard: Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo). Toolbar ↩↪ buttons with `:disabled` binding. Covers: `add_node` (undo = delete), `delete_node` (undo = re-create node + all connected edges with original IDs), `move_node` (undo = restore old position), `add_edge` (undo = delete), `delete_edge` (undo = re-create with original ID). Guard flag `_inUndoRedo` prevents undo/redo actions from pushing onto the stack. Redo is cleared on any new user action.
-- **`src-tauri/src/tools/quick_actions.rs`** — `AddNodeParams` and `AddEdgeParams` now accept optional `id` field; if provided, the server uses it verbatim (enables undo to restore deleted items with original DB IDs).
-
-### Next
-H4 — Graph-aware execution engine: graph traversal, condition node evaluation, cycle detection (60s warn / 120s kill).
+**Phase 4.5 COMPLETE.** → Phase 4.6.
 
 ---
 
-## [2026-03-20] — Phase 4.7 H3b + H3c: Connect nodes + Node config panel
+## [2026-03-19] — Phase 4.5 Step 2: Panel polish, emoji removal
 
 ### Completed
-- **`ui/tools/quick-actions/index.html`** — H3b + H3c implemented:
-  - **H3b (Connect nodes):** Input port (left) + output port (right) circles on each node. Condition nodes have two output ports (true = green, false = red). Drag from any output port to any input port to create a bezier edge. Back-edges (loops) allowed. Click edge to select (highlighted in accent colour); Delete/Backspace deletes selected edge. SVG managed via `_renderEdges()` + `g.innerHTML` (Alpine `x-for` inside SVG crashes WebKit — D-024). Edges redrawn on RAF during node drag for 60fps responsiveness. Zoom-aware hit detection in screen space.
-  - **H3c (Node config panel):** Clicking a node opens a 280px right-side panel. Per-node-type forms: trigger type selector (Manual, OcrCompleted, TranscriptionCompleted, ClipboardChanged, FolderWatch with folder_path + pattern); action tool selector with full param forms for 8 tools (translate, copy_clipboard, save_note, read_file, write_file, append_file, ocr_file, for_each_file); condition type + value input. Browse "…" buttons call `window.__TAURI__.dialog.open()` if dialog plugin is available (graceful fallback to text input). Save PUTs to `/api/pipelines/{id}/nodes/{nid}`, updates node card summary in canvas.
-  - Fixed 2 missing closing `</div>` tags left from previous session's partial H3c restructure.
-  - Fixed `x-show` + `display:flex` on config panel using `:style="{ display: configOpen ? 'flex' : 'none' }"`.
-- **`src-tauri/src/tools/quick_actions.rs`** — renamed unused `steps` → `_steps` to silence Rust warning.
-- **`ROADMAP.md`** — marked H3b, H3c complete; added FolderWatch to trigger types.
-
-### Bugs fixed
-- SVG `x-for` WebKit crash (importNode) → D-024: all Alpine removed from SVG, content via `g.innerHTML`
-- Draft edge reactivity: spread-assign `self.draftEdge = { ...draft }` on each mousemove
-- Edge click in WebKit: `pointer-events:all` + `rgba(0,0,0,0.01)` stroke + direct listeners after innerHTML
-- Node drag not zoom-aware: divide delta by captured zoom at drag start
-- Edge labels floating 90px off: removed erroneous `+ NODE_W/2` offset in `edgeMidX`
-
-### Next
-H3d — Undo/redo: operation stack (add node, delete node, move node, add edge, delete edge); Ctrl+Z / Ctrl+Shift+Z.
+- Emoji removal: translate, quick-actions, screen-recorder, audio-recorder, photo-editor, video-processor panels
+- `quick_actions.rs` — all Tailwind color classes replaced with `btn`/`input` design system classes; `trigger_label()`, `tool_icon()` use Lucide HTML strings
+- Screen Rec, Audio Rec, Video Processor, Photo Editor — full design system pass (panel-title, card, btn variants, input class)
+- `base.css` — `.btn-disabled` added
+- Bug fix: `GET /api/settings/ui` SQL fixed to include `pinned` and `sidebar_collapsed` keys (were always returning defaults)
 
 ---
 
-## [2026-03-19] — Phase 4.7 H2: Quick Actions visual canvas
-
-### Completed
-- **`ui/tools/quick-actions/index.html`** — complete rewrite with Alpine `qaApp()` canvas component:
-  - Loads graph from `/api/pipelines/:id/graph` on pipeline selection
-  - Nodes rendered as absolutely positioned divs on 3000×2000 dot-grid canvas
-  - SVG bezier edges with arrowheads and edge labels (true/false, body/done)
-  - 5 node types: Trigger (green) / Action (lavender) / Condition (amber) / Loop (purple) / End (red)
-  - Drag-to-reposition: document-level mousemove/mouseup, saves position to DB on drop
-  - Toolbar: node palette (add buttons per type), delete selected node, run manual pipelines
-  - Run result bar with ok/error color coding
-  - Empty state when no pipeline selected
-- **`quick_actions.rs`** — pipeline list items use `onclick qaLoadPipeline()` instead of `hx-get` to editor; `use_template_handler` emits `HX-Trigger` header to open canvas for new pipeline
-
-### Design decisions logged
-- **Loop node eliminated** — loops are back-edges (any output → any previous node). Execution engine detects cycles with per-pipeline timeout (default 60s). No dedicated Loop node type.
-- Canvas pan+zoom, node config panel, annotation boxes, undo/redo deferred to H3a–H3d
-
-### Next
-H3a — Canvas pan (drag background) + zoom (scroll wheel) — transform-based canvas replacing scroll approach.
-
----
-
-## [2026-03-19] — Phase 4.7 H0: Panel navigation history (back/forward)
+## [2026-03-19] — Phase 4.5 Step 1: App Shell + Design System
 
 ### Completed
 
-- **`ui/index.html`** — added browser-style back/forward navigation:
-  - `window.__navHistory` module: stack + cursor, `push()`, `back()`, `forward()`
-  - `htmx:afterSwap` on `#tool-panel` pushes URL to history stack; `__navSkipNext` flag suppresses push during back/forward traversal
-  - Back/forward use `fetch()` directly → `innerHTML` → `htmx.process()` (bypasses HTMX cross-origin concerns)
-  - `_navUpdateUI()` updates button `disabled`, `opacity`, `cursor` after every state change
-  - `et:nav-tool` custom event dispatched on back/forward → `shellState.init()` listens and syncs `activeTool` (sidebar highlight)
-  - Keyboard: `Alt+←` / `Alt+→`
-  - Mouse side buttons: `button === 3` (back), `button === 4` (forward) via `mousedown` + `mouseup` listeners
-  - Nav bar added inside `<main id="main">` above `#tool-panel`: two 24×24 chevron buttons (Lucide icons) + label span using CSS vars from design system
-- **Root cause of previous failure:** changes were made to `ui/shell.html` instead of `ui/index.html` — Tauri serves `ui/index.html` as the main window (`frontendDist: "../ui"`)
+**Assets (all bundled locally — offline-first)**
+- `ui/assets/fonts/inter-variable.woff2` + italic
+- `ui/assets/lucide.min.js` — Lucide v0.577.0 UMD
+- `ui/assets/themes/dark.css`, `light.css`, `catppuccin-mocha.css`, `catppuccin-latte.css`, `tokyo-night.css`
+- `ui/assets/base.css` — full component design system
 
-### Next
-Phase 4.7 H1 — Quick Actions DB migration: `pipeline_nodes` + `pipeline_edges` tables, migrate existing `pipeline_steps` to linear node chains, new API routes.
+**Theme CSS variables per-theme:** `--bg-base/surface/elevated/overlay`, `--text-primary/secondary/muted`, `--accent/subtle/hover`, `--border/border-focus`, `--shadow/shadow-lg`, `--glass-bg/blur/border`, `--destructive/success/warning` (+subtle), `--radius-sm/md/lg/xl`
 
----
+**App shell (`ui/index.html`) rewritten:**
+- `applyTheme(name)` + `applyGlass(enabled)` global functions
+- `initApp()` fetches `/api/settings/ui` on startup to apply saved theme/glass
+- Lucide `createIcons()` on DOMContentLoaded + every `htmx:afterSwap`
+- Three sidebar groups: Tools / Media / Plugins; pill active nav item; "Eleutheria" logo-dot
+- Command palette: glassmorphism box, Lucide search icon
 
-## [2026-03-19] — UI Design System Overhaul (DESIGN.md / Ethereal Command Center)
+**Backend (`server.rs`):** `GET /api/settings/ui` and `POST /api/settings/ui` added
 
-### Completed
-
-**Design direction:** `DESIGN.md` added to repo (Stitch/Google reference). Direction: "Ethereal Command Center" — lavender accent, mint glass, Space Grotesk editorial titles, pill buttons, tonal layering, no hard borders. Applied as hybrid (light + dark), not literal.
-
-**Themes (`ui/assets/themes/*.css`)**
-- Dark: accent shifted to lavender `#8b74d4`, `--accent-dim` added, `--shadow-accent` tinted glow token
-- Light: palette aligned to DESIGN.md — base `#f0f2f8`, mint glass `rgba(204,250,245,0.55)`, lavender `#7049b3` primary, lavender-tinted shadows
-- All themes: `--radius-lg` 14→20px, `--radius-xl` 18→28px, `--radius-pill: 9999px` added, `--shadow-accent` added
-
-**Typography (`ui/assets/fonts/`, `ui/assets/base.css`)**
-- Space Grotesk variable font downloaded and bundled offline (`space-grotesk-variable.woff2`)
-- `.panel-title` uses Space Grotesk, `letter-spacing: -0.02em` — editorial authority per DESIGN.md
-
-**Buttons (`base.css`)**
-- Pill shape (`border-radius: var(--radius-pill)`) on all `.btn` variants
-- `.btn-primary`: lavender gradient 135° + `--shadow-accent` glow, Telos Glow inset on `:active`
-- `.btn-secondary`: `accent-subtle` background, no border (mint-style per DESIGN.md), accent color text
-- `.btn-sm/.btn-lg` padding adjusted for pill shape
-
-**Cards (`base.css`)**
-- Padding increased to `16px 18px`
-- Hover: `--shadow-accent` tinted shadow instead of flat shadow
-- `.card-interactive:active`: inset accent glow (Telos Glow)
-
-**Inputs (`base.css`)**
-- `border-radius: var(--radius-lg)` (was `--radius-md`), padding `8px 14px`
-
-**Panel transitions (`base.css`, `ui/index.html`)**
-- `@keyframes panel-enter`: opacity 0→1 + `translateY(6px→0)`, 160ms `cubic-bezier(0.22,1,0.36,1)`
-- Applied via `htmx:afterSwap` on `#tool-panel` — every panel navigation now fades in
-
-**Ideas logged (`IDEAS.md`)**
-- Search: recent searches history below search bar
-- Clipboard: privacy blur mode
-- Clipboard: rich content preview (images/audio)
-- OCR/Translation: auto language detection
-- Resizable panel dividers (Notes, Quick Actions)
-- Keybindings section in Settings
-
-### Next
-Continue UI improvements — open `cargo tauri dev`, review every panel visually, identify what still feels "toy-like" now that the design system base is updated. Priority panels to audit: Notes editor, Clipboard list, Models, Settings form layout.
+**Settings panel rewritten:** theme dropdown, glass toggle, font selector; changes applied instantly + persisted
 
 ---
 
 ## [2026-03-19] — Phase 4.6 Complete
 
 ### Completed
+- Translation backend: argostranslate → ctranslate2 + sentencepiece (D-036)
+- Contextual pipeline CTA: "Create pipeline from this" on OCR + Voice result cards
+- Pipeline templates: 5 built-in templates in Quick Actions right panel
+- Problem-first empty states across all panels
 
-- **Item 1 — Translation backend fix** (`scripts/translate.py`, `install_argos_package.py`, `uninstall_argos_package.py`, `requirements.txt`) — argostranslate replaced with ctranslate2 + sentencepiece. Eliminates Python 3.14 incompatibility and ~3GB dependency footprint. See D-036.
-- **Item 2 — Contextual pipeline CTA** (`src-tauri/src/tools/ocr.rs`, `voice.rs`, `ui/tools/quick-actions/index.html`) — "Create pipeline from this" button on OCR and Voice result cards; navigates to Quick Actions and pre-selects the correct trigger via `window.__qaPreTrigger`.
-- **Item 3 — Pipeline templates** (`src-tauri/src/tools/quick_actions.rs`, `ui/tools/quick-actions/index.html`) — 5 pre-built templates shown in right panel when no pipeline is selected. "Use this" creates pipeline + steps and opens editor in one click via HTMX OOB swap.
-- **Item 4 — Problem-first empty states** (`clipboard.rs`, `notes.rs`, `translate.rs`, `quick_actions.rs`, `ui/tools/notes/index.html`, `ui/tools/search/index.html`) — all generic "nothing here" messages replaced with problem-framing copy.
-- **Item 5 — First community plugin** — deferred to backlog. Plugin system already stress-tested in Phase 4; Obsidian Send and GitHub Issues creator logged in IDEAS.md.
-
-### Also this session
-- Command palette footer: added `Ctrl K` kbd hint (discoverability)
-- Search panel: added "Tip: press Ctrl K to open quick search from anywhere" below search bar
-- IDEAS.md: clipboard blur mode, rich content preview (images/audio), OCR auto language detection, translation auto source detection, keybindings settings section
-
-### Phase 4.6 status
-**COMPLETE.** Moving to Phase 5 — Monetization + Distribution.
-
-### Next
-Phase 5 — starting with **license key system** (Gumroad integration, asymmetric key verification, no server required) or **onboarding flow** (first-run wizard). Recommend onboarding first — it surfaces the "which tools do you want?" question before monetization makes sense.
+**Phase 4.6 COMPLETE.**
 
 ---
 
-## [2026-03-19] — Phase 4.6 Item 1: Translation backend — argostranslate → ctranslate2
+## [2026-03-19] — Phase 4.5 planning + UI_BRIEF.md
 
 ### Completed
-
-**Translation backend rewrite (D-036)**
-- `scripts/translate.py` — rewritten: loads `ctranslate2.Translator` + two `SentencePieceProcessor`s from `~/.local/share/eleutheria-telos/models/translate/{from}-{to}/`; tokenizes with `source.spm`, translates, detokenizes with `target.spm`; zero argostranslate import
-- `scripts/install_argos_package.py` — rewritten: fetches Argos model index JSON from GitHub via `urllib`, finds matching package, downloads `.argosmodel` ZIP (which is a standard ZIP containing CT2 model files), extracts `model.bin`, `source.spm`, `target.spm`, `config.json` to the local models dir; zero argostranslate import
-- `scripts/uninstall_argos_package.py` — rewritten: `shutil.rmtree` on the model directory; ~30 lines down from the argostranslate version
-- `scripts/requirements.txt` — `argostranslate>=1.11.0` replaced with `ctranslate2>=4.7.1` + `sentencepiece>=0.2.1`
-- Axum routes, UI, and Rust subprocess invocation unchanged — same CLI interface, same model storage path
-
-**DECISIONS.md**
-- D-036 updated: marked implemented, documents the three rewritten scripts
-- D-025 updated: no longer references argostranslate's Python API; describes current urllib/zipfile approach
-
-**ROADMAP.md** — Phase 4.6 translation checkbox marked `[x]`
-
-### Next
-Phase 4.6 item 2: **Contextual pipeline CTA** — "Create pipeline from this" button on OCR and Voice result cards, pre-filling the Quick Actions builder with the correct trigger
+- `UI_BRIEF.md` created and approved — full design contract (aesthetic, palette, typography, components, priority order)
+- `ROADMAP.md` — Phase 4.5 workflow added
 
 ---
 
-## [2026-03-19] — Phase 4.5 Complete: Playwright Review + OCR card fix
-
-### Completed
-
-**Playwright visual review infrastructure (`playwright-review/`)**
-- `playwright-review/package.json` + `playwright.config.js` — Playwright 1.58 setup; serves `ui/` via Python HTTP server on port 9191; injects real session token from `~/.local/share/eleutheria-telos/server.json` via `addInitScript` before page scripts run
-- `playwright-review/tests/visual.spec.js` — screenshots all 13 panels + command palette + sidebar states
-- `.gitignore` — added Playwright node_modules, screenshots, test-results, playwright-report exclusions
-
-**Review findings — all panels signed off:**
-- Clipboard, Notes, Voice, Translate, Search, Screen Recorder, Audio Recorder, Photo Editor, Video Processor, Quick Actions, Models, Settings, Command Palette — all pass ✓
-
-**Fix: OCR panel controls wrapped in `.card`**
-- `ui/tools/ocr/index.html` — language select + action buttons now inside a `.card` div (consistent with Voice, Screen Recorder, Audio Recorder which all use `.card` for their control areas)
-- Also moved indicators inside the card for a cleaner layout
-
-### Phase 4.5 status
-**COMPLETE.** Every panel reviewed and signed off. Moving to Phase 4.6 — Cohesion.
-
-### Deferred to Phase 4.6
-- Notes "Select a note to edit" → problem-first empty state
-- Models section heading still says "TRANSLATION (ARGOS)" → update when ctranslate2 lands (D-036)
-
-### Next
-Phase 4.6 — Cohesion, starting with **translation backend fix**: replace argostranslate with ctranslate2 + Opus-MT models (D-036)
-
----
-
-## [2026-03-19] — Phase 4.5 Step 2: Panel Polish, Emoji Removal, Drag-to-Resize
-
-### Completed
-
-**Sidebar improvements:**
-- `ui/assets/base.css` — pinned icon height reduced from 36px to 28px; sidebar-scroll gets `overflow-x: hidden` to prevent horizontal scroll on pinned 3×3 grid
-- `ui/index.html` — drag-to-resize: now shows live width during `mousemove` (disables CSS transition while dragging) then snaps to 56px or 200px on `mouseup` (threshold: finalWidth < 128px = collapse)
-- `src-tauri/src/server.rs` — `GET /api/settings/ui` SQL query fixed to include `pinned` and `sidebar_collapsed` keys (bug: were always returning defaults because query only fetched `theme/glass/font`)
-
-**Emoji removal (all panels):**
-- `ui/tools/translate/index.html` — removed 🌐 from header, replaced with `panel-title/panel-subtitle`
-- `ui/tools/quick-actions/index.html` — removed ⚡ from header, full redesign with design system
-- `src-tauri/src/tools/quick_actions.rs` — removed ⚡/📷/🎙/📋 from `trigger_label()`; removed 🌐/📋/📝/⚙️ from `tool_icon()` (replaced with Lucide HTML icon strings); removed emojis from trigger select options and step select options in `render_editor()`
-- `src-tauri/src/tools/translate.rs` — removed 📦 from empty-state "No language packs installed" (now uses `empty-state` CSS class + Lucide icon)
-
-**Button redesign (Quick Actions):**
-- `src-tauri/src/tools/quick_actions.rs` — all Tailwind `bg-blue-700/bg-gray-700/bg-gray-800` replaced with `btn btn-primary/secondary/ghost/danger btn-sm` design system classes; inputs use `.input` class; pipeline list items and step cards use CSS custom properties for color
-- `ui/tools/quick-actions/index.html` — rewritten: New Pipeline / Create buttons use `btn btn-primary`; select options use `.input`; two-column layout uses inline CSS vars
-
-**Panel redesigns (header + button polish):**
-- `ui/tools/screen-recorder/index.html` — rewritten: `panel-title/panel-subtitle`, `.card` wrapper, Start/Stop use `btn btn-primary/btn-danger`, select uses `.input`, Tailwind color classes replaced with CSS vars
-- `ui/tools/audio-recorder/index.html` — rewritten: same design system treatment
-- `ui/tools/video-processor/index.html` — rewritten: operation tab buttons use Alpine `:class` binding to toggle `btn-primary/btn-secondary`, inputs use `.input`, submit uses `btn btn-primary`
-- `ui/tools/photo-editor/index.html` — rewritten: toolbar integrated into `panel-header`, Brush/Eraser active state via `:class="tool==='brush' ? 'btn-primary' : 'btn-secondary'"`, Remove BG / Export use `.btn-disabled` when not available; layer strip buttons use `btn-primary` for active layer
-
-**base.css additions:**
-- `.btn-disabled` added alongside `.btn:disabled` (same opacity:0.45/pointer-events:none rule)
-
-### Bug fixes
-- Pinned items were never restored on app restart — SQL query was missing `pinned` key
-- Sidebar collapsed state was never restored — SQL query was missing `sidebar_collapsed` key
-- Translate empty-state emoji `📦` was rendered by Rust server-side, not the static HTML
-
-### Next
-- Voice panel polish (still uses old gray Tailwind classes)
-- Notes, Clipboard, OCR, Search, Models panels — design system pass
-- Phase 4.5 full completion: all panels consistent
-
----
-
-## [2026-03-19] — Phase 4.5 Step 1: App Shell — Design System
-
-### Completed
-
-**Assets (bundled locally, offline-first)**
-- `ui/assets/fonts/inter-variable.woff2` + `inter-variable-italic.woff2` — Inter variable font (latin, @fontsource-variable/inter 5.2.8)
-- `ui/assets/lucide.min.js` — Lucide icons UMD bundle v0.577.0 (replaces all emojis)
-- `ui/assets/themes/dark.css` (default) — soft dark: `#0f1117` base, indigo-periwinkle accent `#6d83f2`
-- `ui/assets/themes/light.css`
-- `ui/assets/themes/catppuccin-mocha.css` — Mauve accent `#cba6f7`
-- `ui/assets/themes/catppuccin-latte.css`
-- `ui/assets/themes/tokyo-night.css` — Blue accent `#7aa2f7`
-- `ui/assets/base.css` — full component design system: fonts, scrollbar, sidebar, nav-item, btn-primary/secondary/ghost/danger, input, card, card-glass, badge, empty-state, skeleton, prose, HTMX indicator
-
-**Theme system CSS variables (per-theme):**
-`--bg-base`, `--bg-surface`, `--bg-elevated`, `--bg-overlay`, `--text-primary/secondary/muted`, `--accent`, `--accent-subtle/hover`, `--border`, `--border-focus`, `--shadow/shadow-lg`, `--glass-bg/blur/border`, `--destructive/success/warning` (+ subtle variants), `--radius-sm/md/lg/xl`
-
-**Glassmorphism system:**
-- Default: sidebar + cards use `backdrop-filter: blur(20px)` + semi-transparent fill
-- Disabled: `html.no-glass` class → opaque fills, no blur
-
-**App Shell (`ui/index.html`) — full rewrite:**
-- Loads Inter, Lucide, theme CSS, base.css; Tailwind CDN kept for layout utilities (preflight disabled — base.css owns resets)
-- `applyTheme(name)` + `applyGlass(enabled)` functions exposed on `window`
-- `initApp()` fetches `/api/settings/ui` on startup to apply saved theme/glass before first render
-- Lucide `createIcons()` called on DOMContentLoaded + on every `htmx:afterSwap` into `#tool-panel`
-- Plugin sidebar entries use `<i data-lucide="puzzle">` instead of emojis
-- Sidebar responsive layout owned by `base.css` media queries (no Tailwind responsive classes on `#sidebar`)
-- Three sidebar groups: **Tools** (Clipboard, Notes, Voice, OCR, Translate, Search) / **Media** (Screen Rec, Audio Rec, Photo Edit, Video, Quick Actions) / **Plugins** (dynamic) + bottom: Models, Settings
-- Pill-style active nav item: `--accent-subtle` background + `--accent` text
-- "ELEUTHERIA" → `logo-dot` (8px accent circle) + "Eleutheria" label
-- Command palette: glassmorphism box, Lucide search icon, styled input
-
-**Backend (`src-tauri/src/server.rs`):**
-- `GET /api/settings/ui` — returns `{theme, glass, font}` with defaults; used by `initApp()`
-- `POST /api/settings/ui` — upserts theme/glass/font keys in settings table
-
-**Settings panel (`ui/tools/settings/index.html`) — rewritten:**
-- Theme dropdown (5 themes), glassmorphism toggle switch, font selector (Inter / system)
-- Changes applied instantly to the shell + persisted via `/api/settings/ui`
-- App info section (version, server port, phase)
-
-### Architecture notes
-- `base.css` is the single source of truth for all component visual styles
-- Theme files only define CSS custom properties — zero layout/component rules
-- Responsive sidebar visibility in `base.css` @media queries, not Tailwind
-- `applyTheme()` and `applyGlass()` are global window functions so the Settings panel can call them after a fetch()
-
-### Next: Priority 2 — Clipboard History panel polish
-
----
-
-## [2026-03-19] — Phase 4.5 planning scaffolding
-
-### Completed
-
-- `ROADMAP.md` — added Phase 4.5 (UI Polish) with mandatory workflow: references → questions → execution → Playwright review → user feedback → iteration
-- `UI_BRIEF.md` (new) — template document that must be filled via Q&A before any UI implementation begins; covers aesthetic direction, references, pain points, palette, typography, density, components, sidebar, empty states, priority order
-
-### Next session should start with
-
-Phase 4.5 — UI Polish. User must open the app and take screenshots of current state, plus gather 1-2 reference apps they find visually inspiring. Then Claude asks all questions to complete `UI_BRIEF.md` before touching any code.
-
----
-
-## [2026-03-19] — Phase 4.7: Quick Actions (visual pipeline builder)
-
-### Completed
-
-- `src-tauri/migrations/004_phase4_pipelines.sql` (new) — `pipelines` and `pipeline_steps` tables; `pipeline_steps` has `ON DELETE CASCADE` referencing `pipelines(id)`
-- `src-tauri/src/tools/quick_actions.rs` (new) — full pipeline CRUD + execution engine:
-  - HTML renderers: `render_pipeline_list()`, `render_steps()`, `render_editor()`
-  - Routes: `GET/POST /api/pipelines`, `GET /api/pipelines/:id/editor`, `PUT /api/pipelines/:id`, `DELETE /api/pipelines/:id`, `POST /api/pipelines/:id/steps`, `DELETE /api/pipelines/:id/steps/:step_id`, `POST /api/pipelines/:id/steps/:step_id/move`, `POST /api/pipelines/:id/run`
-  - Step types: `translate` (calls `scripts/translate.py`), `copy_clipboard` (arboard), `save_note` (SQLite insert)
-  - `start_pipeline_engine()` — background task subscribing to Event Bus, executes matching enabled pipelines when `OcrCompleted`, `TranscriptionCompleted`, or `ClipboardChanged` events fire
-- `src-tauri/src/tools/ocr.rs` — emits `Event::OcrCompleted` after successful Tesseract run
-- `src-tauri/src/tools/voice.rs` — emits `Event::TranscriptionCompleted` after successful Whisper transcription
-- `src-tauri/src/tools/mod.rs` — added `pub mod quick_actions;`
-- `src-tauri/src/server.rs` — merged `quick_actions::router()`
-- `src-tauri/src/lib.rs` — spawned `start_pipeline_engine` as background tokio task
-- `ui/tools/quick-actions/index.html` (new) — two-column layout: pipeline list + step editor
-- `ui/index.html` — added ⚡ Quick Actions entry to desktop and tablet sidebars; added `overflow-y-auto` to sidebar `<ul>` elements
-
-### Bug fixes
-
-- **Trigger select not saving** — `<option value='{"type":"OcrCompleted"}'>` inner quotes terminated the HTML attribute early; browser sent only `{` to server. Fixed by applying `html_escape()` in `render_editor()` and `&quot;` entities in the static create form.
-- **Quick Actions not visible in sidebar** — sidebar `<ul class="flex-1">` without `overflow-y-auto` silently clipped items below viewport height. Fixed by adding `overflow-y-auto`.
-
-### Future ideas added to IDEAS.md
-- Keybinds per pipeline (manual trigger via hotkey)
-- Opt-in/opt-out for auto-triggered pipeline execution (toast prompt before running)
-- Full visual canvas editor with drag-and-drop boxes, arrow connectors, cycles, conditions
-
-### Next session should start with
-Phase 5 — Monetization + Distribution (license key, onboarding flow, auto-updater, installers). Or confirm with user whether to address any remaining Phase 4 gaps first.
-
----
-
-## [2026-03-19] — Phase 4.6: Plugin developer documentation
-
-### Completed
-
-- `plugins/README.md` (new) — full plugin developer guide covering:
-  - Manifest schema (all fields, `sidebar` config, `routes` permission declarations)
-  - Runtimes: `python`, `node`, `binary` — command used for each
-  - Environment variables injected by host (`ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT`) with Python + Node.js code examples
-  - Routing: how `/plugins/<id>/subpath` maps to `/subpath` at the plugin server; permission enforcement
-  - Calling the host API: auth pattern, available endpoints table
-  - HTMX UI conventions: fragment structure, absolute paths, Tailwind + Alpine already loaded
-  - HTML escaping: Python `html.escape` and JS helper
-  - Graceful shutdown: `SIGTERM` handling for Python and Node.js
-  - Local development: how to run standalone with env vars set manually, curl test examples
-  - Reference implementations table (hello-python, hello-node)
-  - New plugin checklist
-
-### Next session should start with
-Phase 4.7: Quick Actions (basic) — global keyboard shortcut to trigger a quick paste/note/search action without opening the full window.
-
----
-
-## [2026-03-19] — Phase 4 complete: Plugin system + sidebar + bug fixes
-
-### Completed
-
-**Phase 4.3 – Plugin system bug fixes (this session)**
-
-- `src-tauri/src/plugins.rs` — fixed raw string literals: `r#"..."#` → `r##"..."##` (the `"#` in `hx-target="#tool-panel"` was terminating the raw string causing a parse error); removed `axum::extract::Path` extractor from `plugin_proxy_handler`, now extracts `plugin_id` from `req.uri().path()` directly (fixes "Wrong number of path arguments" 500 on `/plugins/:id/*path`); fixed permission check logic (was checking declared routes against the URL prefix; now checks request path against each declared route)
-- `src-tauri/src/server.rs` — added `find_free_port_from(start: u16) -> u16`; `find_free_port_sync()` now delegates to it; fixed plugin port collision (all plugins were allocated the same port because each call to `find_free_port_sync()` scanned from `DEFAULT_PORT` before the server had bound)
-- `src-tauri/src/plugin_loader.rs` — fixed port allocation: tracks `next_port = app_port + 1`, increments `next_port = plugin_port + 1` after each allocation via `find_free_port_from(next_port)`
-- `src-tauri/Cargo.toml` — added `default-run = "app"` to `[package]` (fixes "could not determine which binary to run" when two `[[bin]]` entries exist)
-- `src-tauri/src/api.rs` — added `list_sidebar_plugins` Tauri command (returns sorted list of plugins with sidebar entries)
-- `src-tauri/src/lib.rs` — `initialization_script` now injects `window.__SIDEBAR_PLUGINS__` (sorted JSON array of plugin sidebar entries) before any page script runs
-
-**Plugin sidebar in UI**
-
-- `ui/index.html` — added plugin sidebar loading to `initApp()` (reads `window.__SIDEBAR_PLUGINS__`, creates `<li>` elements via `document.createElement`, calls `htmx.process()` on each); added `<ul id="plugin-sidebar-desktop">` after the main tool list; added `<ul id="plugin-sidebar-tablet">` in the tablet icon sidebar — both populated at startup from the injected plugin list
-
-**Note:** `ui/shell.html` is NOT loaded by the app (Tauri loads `ui/index.html` via `WebviewUrl::App("index.html")`). Shell.html is kept as a standalone browser-preview artifact only.
-
-### Verified working (end-to-end)
-- 🐍 Hello Python and 🟩 Hello Node appear in the sidebar below the main tools
-- Echo form works: typing a message and clicking "Echo" returns the message (both plugins)
-- "Fetch plugin info" shows `host_reachable: true` and correct plugin metadata (both plugins)
-- Plugins run on separate ports (47854, 47863 in latest run) — no port collision
-- Plugin proxy correctly routes `/plugins/hello-python/api/echo` → Python process → response back to WebView
-
-### Bug fixes summary
-| Bug | Root cause | Fix |
-|-----|-----------|-----|
-| All plugins same port | `find_free_port_sync()` rescans from DEFAULT_PORT each call | `find_free_port_from(next_port)` with counter |
-| Proxy 500 on subpaths | `Path<String>` extractor doesn't work with 2-segment routes | Extract from `req.uri().path()` directly |
-| Permission check never 403 | Logic inverted (routes checked against request prefix) | Check request path against each declared route |
-| `host_reachable: false` | Plugins called `/api/clipboard` (returns HTML, not JSON) | Call `/health` (returns JSON) |
-| Sidebar plugins not visible | All edits were applied to `shell.html`; app loads `index.html` | Apply changes to `index.html` |
-| `cargo tauri dev` binary error | Two `[[bin]]` entries, no `default-run` | Added `default-run = "app"` to `Cargo.toml` |
-
-### Files changed this session
-- `src-tauri/Cargo.toml` — `default-run = "app"`
-- `src-tauri/src/api.rs` — `list_sidebar_plugins` command
-- `src-tauri/src/lib.rs` — `__SIDEBAR_PLUGINS__` injection + `list_sidebar_plugins` in invoke_handler
-- `src-tauri/src/server.rs` — `find_free_port_from(start)`
-- `src-tauri/src/plugin_loader.rs` — port counter fix
-- `src-tauri/src/plugins.rs` — proxy handler fix + permission check fix + raw string fix
-- `ui/index.html` — plugin sidebar loading in `initApp()` + sidebar `<ul>` containers
-- `ui/shell.html` — same changes (for browser-preview parity, but not loaded by app)
-
-### CI status
-- Tests pass locally (all prior tests still green)
-- `cargo fmt --check` ✓ (no new formatting issues)
-
-### Next session should start with
-Phase 4.6: Plugin developer documentation — `plugins/README.md` covering manifest schema, env vars, routing/permissions, HTMX UI conventions, and local dev workflow.
-
----
-
-## [2026-03-18] — Project foundation
-
-### Completed
-- Created project repository: `rodrigoandresperezjamett/eleutheria-telos`
-- Branch structure: `dev` as active development branch, `main` reserved for releases
-- Core documentation created: `ARCHITECTURE.md`, `PRINCIPLES.md`, `ROADMAP.md`, `CLAUDE.md`, `CHANGELOG.md`, `DECISIONS.md`, `IDEAS.md`
-- Tauri 2.x project initialized with `cargo tauri init`
-  - App name: `eleutheria-telos`
-  - Window title: `Eleutheria Telos`
-  - Web assets path: `../ui`
-  - Dev server URL: `http://localhost:47821`
-- GitHub MCP configured and verified connected
-- Notion MCP verified connected
-- Environment verified (see CLAUDE.md → Pinned Environment)
-
-### Environment confirmed working
-- Rust 1.92.0, Cargo 1.92.0
-- Node 22.20.0, npm 10.9.3
-- Tauri CLI 2.10.1
-- ffmpeg 7.1.2 (ffmpeg-free — already installed, do not replace)
-- Tesseract 5.5.2
-- Python 3.14.2 (cutting-edge — verify package support before use)
-
-### Known issues / notes
-- ffmpeg-free conflicts with rpmfusion ffmpeg — do not run `sudo dnf install ffmpeg`
-- Python 3.14 is newer than most AI packages expect — verify compatibility before adding Python deps
-
-### Next session should start with
-Phase 0 — Foundation. Goal: Tauri app running with Axum internal server, HTMX shell navigation, SQLite connected, system tray, and plugin loader skeleton. See ROADMAP.md Phase 0 checklist.
-
----
-
-## [2026-03-18] — Phase 0 implementation
-
-### Completed
-- `src-tauri/Cargo.toml` — fixed `arboard` version (`0.3` → `3`), added `tray-icon` feature to tauri
-- `src-tauri/migrations/001_initial.sql` — full schema: notes, notes_fts (FTS5), clipboard, settings, plugin_data, models
-- `src-tauri/src/server.rs` — AppError, AppState (db + token + port + event_bus), auth middleware (Bearer), build_router, find_free_port_sync, start_server
-- `src-tauri/src/db.rs` — SqlitePool init, WAL mode, foreign keys, sqlx::migrate!
-- `src-tauri/src/event_bus.rs` — broadcast-based pub/sub; Event enum with all architecture events
-- `src-tauri/src/plugin_loader.rs` — PluginManifest serde struct, scan_plugins scans plugins/*/manifest.json
-- `src-tauri/src/i18n.rs` — I18n::load reads ui/locales/en.json, t() lookup
-- `src-tauri/src/mcp.rs` — Phase 0 skeletons for GET /mcp (SSE) and POST /mcp, return 501
-- `src-tauri/src/tools/mod.rs` — placeholder; tool modules registered here in Phase 1+
-- `src-tauri/src/api.rs` — fixed compile bugs: RUST_VERSION → CARGO_PKG_RUST_VERSION, removed broken error_response
-- `src-tauri/src/lib.rs` — full setup: port detection, SQLite init, Axum spawn, i18n, plugin scan, system tray, session token injection via initialization_script, window creation
-- `src-tauri/tauri.conf.json` — removed window config (created in code), removed beforeDevCommand/beforeBuildCommand, removed trayIcon (configured in code)
-- `ui/shell.html` — full 3-breakpoint responsive shell: desktop sidebar, tablet icon-only sidebar, mobile bottom nav; HTMX navigation with auth header injection
-- `ui/locales/en.json` — all UI strings for all tools
-- `ui/tools/clipboard/index.html` — placeholder
-- `ui/tools/notes/index.html` — placeholder
-- `ui/tools/voice/index.html` — placeholder
-- `ui/tools/ocr/index.html` — placeholder
-- `ui/tools/translate/index.html` — placeholder
-- `ui/tools/search/index.html` — placeholder
-- `ui/tools/settings/index.html` — shows version + server port
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (0 tests — Phase 0 has no route handlers worth testing yet)
-
-### Decisions made
-- `event_bus` stored in AppState so it's accessible to all route handlers in Phase 1+
-- `GET /` serves shell.html from Axum but does NOT require auth (WebView initial load has no headers); all other routes require Bearer token
-- MCP routes registered as 501 stubs so the router compiles and the endpoint exists for Phase 4
-- Phase 0 dead-code lints suppressed with `#[allow(dead_code)]` on infrastructure stubs (EventBus, AppError utilities, plugin fields) — to be removed as each is wired up in subsequent phases
-
-### Known issues / notes
-- `cargo tauri dev` requires `beforeDevCommand` to be empty — already set to `""` in tauri.conf.json
-- The `WebviewUrl::App(PathBuf::from("/"))` loads from `devUrl` (http://localhost:47821) in dev — this is the Axum server
-- `Cargo.lock` is currently gitignored but should be tracked for a binary app — remove from .gitignore before first release
-
-### Next session should start with
-Phase 1 — Core Tools. Implement Clipboard History (arboard monitor + SQLite storage + HTMX list), Notes (CRUD + FTS5), and Search (command palette Ctrl+K). Start with clipboard.rs, then notes.rs, then search.rs.
-
----
-
-## [2026-03-18] — Phase 0 dev-mode fix
-
-### Problem
-`cargo tauri dev` polls `devUrl` (http://localhost:47821) **before** the Rust binary is compiled. On first build (600+ crates), compilation takes >180s — exceeding Tauri CLI's hard-coded timeout. The binary never starts in time for Tauri to connect.
-
-### Root cause
-The architecture had `devUrl: http://localhost:47821` in `tauri.conf.json`. Tauri CLI interprets this as "wait for an external dev server before opening the window". But our Axum server **is** embedded inside the Rust binary — it cannot respond until the binary is compiled and running. This creates an unsolvable chicken-and-egg problem on first run.
-
-### Fix
-Removed `devUrl` from `tauri.conf.json`. Tauri now serves the shell as a static file from `frontendDist: ../ui` (loads `ui/index.html` instantly via `tauri://localhost/`). Axum still starts in the background as before. HTMX requests are redirected to Axum via a `htmx:configRequest` event handler that rewrites relative paths (`/tools/...`) to absolute URLs (`http://127.0.0.1:{PORT}/...`). CORS headers added to Axum via `tower-http CorsLayer` so the WebView (origin `tauri://localhost`) can reach the API server.
-
-### Files changed
-- `src-tauri/Cargo.toml` — added `tower-http = { version = "0.5", features = ["cors"] }`
-- `src-tauri/src/server.rs` — added `CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any)` to router
-- `src-tauri/tauri.conf.json` — removed `devUrl`, `beforeDevCommand`, `beforeBuildCommand`
-- `src-tauri/src/lib.rs` — `WebviewUrl::App("index.html")` (explicit, no devUrl dependency)
-- `ui/index.html` — new entry point (same layout as shell.html + `htmx:configRequest` URL rewrite)
-
-### Result
-`cargo tauri dev` compiles in ~28s incremental (first full build ~2min), no polling timeout. App window opens immediately after binary starts.
-
-### Next session should start with
-Phase 1 — Core Tools (unchanged). `cargo tauri dev` now works reliably.
-
----
-
-## [2026-03-19] — Phase 4.5: Example plugin (Node.js)
-
-### Completed
-
-**`plugins/hello-node/` (new directory)**
-
-- `manifest.json` — full plugin manifest:
-  - `id`: `hello-node`, `runtime`: `node`, `entry`: `main.js`
-  - `routes`: `["/plugins/hello-node"]`
-  - `sidebar`: `{ show: true, label: "Hello Node", order: 101, icon: "🟩" }`
-
-- `main.js` — Node.js stdlib-only HTTP server (no npm packages):
-  - Uses `node:http`, `node:url`, `node:querystring`
-  - `GET /` or `GET /plugins/hello-node` → HTMX UI fragment
-  - `GET /api/hello` → HTML `<pre>` with JSON info (id, port, node version, host reachability)
-  - `POST /api/echo` → echoes `message` form field back as HTML
-  - Optional host callback via `http.request` with Bearer auth
-  - Graceful shutdown on `SIGTERM`
-
-**Verified smoke test (standalone):**
-- `GET /` → HTMX fragment ✓
-- `GET /api/hello` → JSON with `host_reachable: false`, `node_version: v22.20.0` ✓
-- `POST /api/echo message=Hola+Node` → `<p>Plugin echoes: Hola Node</p>` ✓
-- `GET /unknown` → `{"error":"not found"}` ✓
-
-### Next session should start with
-Phase 4.6: Plugin developer documentation — `plugins/README.md` covering manifest schema, available env vars, routing, permissions, HTMX UI conventions, and how to run plugins in dev.
-
----
-
-## [2026-03-19] — Phase 4.4: Example plugin (Python)
-
-### Completed
-
-**`plugins/hello-python/` (new directory)**
-
-- `manifest.json` — full plugin manifest:
-  - `id`: `hello-python`, `runtime`: `python`, `entry`: `main.py`
-  - `routes`: `["/plugins/hello-python"]` (permission declaration for proxy)
-  - `sidebar`: `{ show: true, label: "Hello Python", order: 100, icon: "🐍" }`
-
-- `main.py` — pure stdlib HTTP server (no third-party packages):
-  - Reads `ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT` from env
-  - `GET /` or `GET /plugins/hello-python` → HTMX UI fragment (echo form + info panel)
-  - `GET /api/hello` or `GET /plugins/hello-python/api/hello` → JSON plugin info (id, port, python version, host reachability)
-  - `POST /api/echo` or `POST /plugins/hello-python/api/echo` → echoes `message` form field back as HTML
-  - Optional host callback: calls `GET /api/clipboard?limit=1` via Bearer auth to verify host connectivity
-  - Graceful shutdown on `KeyboardInterrupt`
-
-**Verified smoke test (standalone, no host running):**
-- `GET /` → correct HTMX fragment ✓
-- `GET /api/hello` → JSON with `host_reachable: false` (expected — host not running) ✓
-- `POST /api/echo message=Hola+mundo` → `<p>Plugin echoes: Hola mundo</p>` ✓
-- `GET /unknown` → `{"error": "not found"}` ✓
-
-### Next session should start with
-Phase 4.5: Example plugin (Node.js) — same structure as hello-python but Node runtime, using only Node stdlib (`http` module).
-
----
-
-## [2026-03-19] — Phase 4.3: Plugin system — full implementation
-
-### Completed
-
-**Plugin process management (`plugin_loader.rs`)**
-- Added `#[derive(Clone)]` to `PluginManifest` and `SidebarConfig`
-- Added `PluginInfo { manifest: PluginManifest, port: u16 }` struct (Clone)
-- Added `PluginRegistry = Arc<std::sync::Mutex<HashMap<String, PluginInfo>>>` type alias
-- Added `start_plugins(manifests, app_port, token) -> (PluginRegistry, Vec<std::process::Child>)`:
-  - Allocates a free port per plugin via `find_free_port_sync()`
-  - Spawns each plugin as a subprocess via `std::process::Command` (python3/node/binary runtimes)
-  - Injects env vars: `ELEUTHERIA_APP_PORT`, `ELEUTHERIA_TOKEN`, `ELEUTHERIA_PLUGIN_ID`, `ELEUTHERIA_PLUGIN_PORT`
-  - Returns populated registry + child handles (held alive to avoid orphaning)
-
-**Plugin proxy + sidebar (`src-tauri/src/plugins.rs` — new file)**
-- `GET /api/plugins` — JSON list of all running plugins
-- `GET /api/plugins/sidebar[?layout=tablet]` — HTMX `<li>` fragments sorted by `sidebar.order`, icon-only when `layout=tablet`
-- `* /plugins/:plugin_id` and `* /plugins/:plugin_id/*path` — full reverse proxy:
-  1. 404 if plugin not in registry
-  2. 403 if route not declared in `manifest.routes`
-  3. Strips `/plugins/{id}` prefix, builds `http://127.0.0.1:{port}/{subpath}` target
-  4. Forwards all non-hop-by-hop headers + `x-session-token` + `x-plugin-id`
-  5. Returns plugin response (status + headers + body) or 502 if unreachable
-
-**AppState extended (`server.rs`, `lib.rs`)**
-- Added `plugin_registry: PluginRegistry` and `plugin_processes: Arc<std::sync::Mutex<Vec<std::process::Child>>>` to `AppState`
-- `lib.rs`: calls `plugin_loader::start_plugins()` at startup, stores registry and child handles in state
-- `server.rs`: registers `plugins::router()` in `build_router()`
-
-**Test constructors updated**
-- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs` — added `plugin_registry` and `plugin_processes` fields to all `make_test_state()` functions
-
-**Shell HTMX plugin sidebar (`ui/shell.html`)**
-- Desktop sidebar: added `<ul id="plugin-sidebar-desktop">` after the main `<ul>`, loads via `hx-get="/api/plugins/sidebar"` on `load`
-- Tablet sidebar: added `<ul id="plugin-sidebar-tablet">`, loads via `hx-get="/api/plugins/sidebar?layout=tablet"` on `load`
-- Plugin entries appear below built-in tools, sorted by `sidebar.order` from manifest
-
-**Bug fix**
-- `plugins.rs`: raw string literals for HTML with `hx-target="#tool-panel"` changed from `r#"..."#` to `r##"..."##` — the `"#` sequence inside the HTML terminated the raw string early causing a parse error
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Next session should start with
-Phase 4.4: Example plugin (Python) — a reference plugin implementation with `manifest.json`, HTTP server on assigned port, and at least one sidebar entry and one API route.
-
----
-
-## [2026-03-19] — Phase 4.2: MCP SSE transport
-
-### Completed
-
-**MCP SSE transport (`GET /mcp`, `POST /mcp?sessionId=...`)**
-- `src-tauri/src/mcp.rs` — replaced 501 stubs with full SSE implementation:
-  - `mcp_sse_handler` (`GET /mcp`): creates a session ID, allocates a buffered mpsc channel (cap 64), pre-fills the `endpoint` event, stores the sender in `AppState::mcp_sessions`, returns an SSE stream via `ReceiverStream`
-  - `mcp_post_handler` (`POST /mcp?sessionId=...`): looks up the session, spawns a background task that calls `process_sse_message()`, returns `202 Accepted` immediately
-  - `process_sse_message()`: handles `initialize`, `initialized` (notification, no response), `ping`, `tools/list`, `tools/call`, and unknown-method errors
-  - `call_tool_sse()`: dispatches all 11 tools via loopback HTTP (`http://127.0.0.1:{port}/api/mcp/...`) using `SseHttpClient` (mirrors `McpClient` in stdio binary)
-  - `SseHttpClient`: struct wrapping `reqwest::Client` with bearer auth; `get_query`, `post_form`, `put_form`, `delete` methods
-  - `mcp_tools()`: shared tool manifest (11 tools with JSON Schema) — also used by `tools/list` in `process_sse_message`
-- `src-tauri/src/server.rs`:
-  - Added `McpSessions = Arc<Mutex<HashMap<String, mpsc::Sender<String>>>>` type alias
-  - Added `mcp_sessions: McpSessions` field to `AppState`
-- `src-tauri/src/lib.rs`: initializes `mcp_sessions: Arc::new(Mutex::new(HashMap::new()))` at startup
-- `src-tauri/Cargo.toml`: added `tokio-stream = { version = "0.1" }` for `ReceiverStream`
-- 4 test `make_test_state()` constructors updated (`clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs`)
-
-**Protocol:**
-- `GET /mcp` → SSE stream; first event is `event: endpoint\ndata: /mcp?sessionId={uuid}`
-- Client POSTs JSON-RPC to `POST /mcp?sessionId={uuid}` (with Bearer token)
-- Responses arrive as `event: message\ndata: {json-rpc-response}` on the SSE stream
-- Notifications (e.g. `initialized`) → no response event sent
-
-### Architecture
-- Session map keyed by UUID; sender cloned from map and moved into background task — receiver lives in the SSE stream
-- Tool calls make loopback HTTP requests to the same Axum process rather than re-implementing handlers inline (single source of truth, same auth path)
-- `SseHttpClient` is defined locally in `mcp.rs` (not shared with stdio binary) to keep binary free of lib dependencies (D-033)
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Next session should start with
-Phase 4.3: Plugin system — full implementation. Plugins run their own process, routes are proxied through Axum, permissions are enforced, and a sidebar entry is added per plugin. Start with `plugin_loader.rs` (extend with process management) and `server.rs` (dynamic route proxying).
-
----
-
-## [2026-03-19] — Phase 4.1: MCP stdio transport
-
-### Completed
-
-**MCP JSON API (Axum — `/api/mcp/...`)**
-- `src-tauri/src/mcp.rs` — full rewrite (was Phase 0 stubs):
-  - `GET /api/mcp/clipboard` — list/search clipboard history, returns JSON
-  - `POST /api/mcp/clipboard/copy` — write to clipboard (arboard)
-  - `GET /api/mcp/notes` — list notes; FTS5 MATCH search via `?q=`
-  - `POST /api/mcp/notes` — create note (form: title, content, tags)
-  - `PUT /api/mcp/notes/:id` — partial update (dynamic SET, optional fields)
-  - `DELETE /api/mcp/notes/:id` — delete note
-  - `POST /api/mcp/ocr/file` — tesseract OCR from file path
-  - `POST /api/mcp/voice/transcribe` — Whisper transcription from file path
-  - `POST /api/mcp/translate` — translate via scripts/translate.py
-  - `POST /api/mcp/video/process` — ffmpeg (trim/extract_audio/compress/resize)
-  - `POST /api/mcp/photo/rembg` — rembg_remove.py, saves PNG to ~/Pictures/Eleutheria/
-  - SSE stubs `/mcp` (GET/POST) kept as NOT_IMPLEMENTED for Phase 4.2
-  - `pub fn router()` registered in `server.rs`
-- `src-tauri/src/server.rs` — added `.merge(mcp::router())`
-
-**MCP stdio binary**
-- `src-tauri/src/bin/mcp_stdio.rs` — new: implements JSON-RPC 2.0 over stdin/stdout
-  - Reads `~/.local/share/eleutheria-telos/server.json` (port + token written at app startup)
-  - Handles: `initialize`, `initialized`, `tools/list`, `tools/call`, `ping`
-  - 11 tools defined with full JSON Schema `inputSchema`
-  - HTTP client (`McpClient`) proxies all tool calls to Axum via reqwest
-- `src-tauri/src/lib.rs` — writes `server.json` at startup via `write_server_info(port, token)`
-
-**Cargo.toml changes**
-- `[[bin]]` entry for `eleutheria-mcp` (path: `src/bin/mcp_stdio.rs`)
-- `tokio` — added `io-std` feature (async stdin/stdout for MCP binary)
-- `reqwest` — added `json` feature (`Response::json()` for HTTP client in MCP binary)
-
-### Architecture
-- `reqwest` in `[dependencies]` is shared across all targets (lib + both binaries) — no separate deps needed (D-033)
-- MCP binary is standalone: does NOT import `app_lib`. It only needs `serde_json`, `tokio`, `reqwest`
-- JSON API routes are behind the same Bearer auth middleware as all other routes
-- `photo_rembg` MCP route accepts a file path instead of multipart upload — consistent with video_processor (D-030), avoids base64-encoding large files over localhost
-- Tags in MCP routes use comma-separated string input → stored as JSON array in DB
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Usage
-Configure in Claude Desktop / Cursor:
-```json
-{
-  "mcpServers": {
-    "eleutheria": {
-      "command": "/path/to/target/debug/eleutheria-mcp"
-    }
-  }
-}
-```
-
-### Next session should start with
-Phase 4.2: MCP server — SSE transport. Replace the `/mcp` 501 stubs with a real SSE implementation (Server-Sent Events stream for AI agent clients). Then Phase 4.3: Plugin system full implementation.
-
----
-
-## [2026-03-19] — Phase 3 bugfix: Video Processor encoder
-
-### Fixed
-- **compress + resize failing** — `h264_vaapi` unavailable at runtime: AMD GPU open-source mesa driver has no H.264 VAAPI entrypoints (`vainfo` empty; error: `No usable encoding entrypoint found for profile VAProfileH264High`).
-- Switched both operations to `libx264 -crf {value} -preset fast` (confirmed available via `ffmpeg -encoders` on Nobara's build). CRF range 18–40 matches the existing QP slider — no UX change needed beyond relabeling.
-- UI label updated: "QP" → "CRF", description updated from h264_vaapi to libx264.
-- D-032 added to DECISIONS.md documenting the switch and the vaapi failure root cause.
-
-### CI status
-- `cargo fmt --check` ✓ · `cargo clippy -- -D warnings` ✓ · `cargo test` ✓ (19 tests)
-
----
-
-## [2026-03-19] — Phase 3 Step 4: Video Processor (Phase 3 complete)
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/video_processor.rs` — 1 route handler:
-  - `POST /api/video/process` — form-urlencoded body; dispatches to ffmpeg based on `operation` field
-  - **Trim**: `ffmpeg -i input -ss start -to end -c copy output.mp4` (stream copy, lossless, near-instant)
-  - **Extract audio**: `ffmpeg -i input -vn -c:a {libmp3lame|pcm_s16le|flac} output.{mp3|wav|flac}`
-  - **Compress**: `ffmpeg -vaapi_device /dev/dri/renderD128 -i input -vf 'format=nv12,hwupload' -c:v h264_vaapi -qp {18–40} output.mp4` (optional downscale)
-  - **Resize**: same pipeline with `scale=-2:{height},format=nv12,hwupload`; preserves aspect ratio
-- `src-tauri/src/tools/mod.rs` — registered `video_processor` module
-- `src-tauri/src/server.rs` — imported `video_processor`, merged `video_processor::router()`
-
-**Frontend**
-- `ui/tools/video-processor/index.html` — operation tab selector (Trim/Extract Audio/Compress/Resize), conditional field panels per operation, Alpine QP slider with quality label, `hx-indicator` for long-running ffmpeg jobs
-- `ui/index.html` — added Video (🎞️) to desktop sidebar and tablet icon sidebar
-- `ui/locales/en.json` — 12 video processor strings
-
-### Architecture
-- No new AppState fields — stateless handler (ffmpeg runs and completes within the HTTP request)
-- Input: file path text field (avoids uploading GB-sized video files to localhost)
-- Output: `~/Videos/Eleutheria/video-{op}-{timestamp}.mp4` or `~/Music/Eleutheria/audio-{timestamp}.{ext}`
-- Codec choice: h264_vaapi for encode (confirmed available in ffmpeg-free on Nobara); trim uses `-c copy` (codec-agnostic); audio uses libmp3lame/pcm_s16le/flac
-- Duplicate `resolution` field problem avoided by using `compress_resolution` and `resize_resolution` as separate form field names
-- ffmpeg stderr truncated to last 25 lines in error responses (avoids overwhelming the UI)
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Phase 3 complete
-All four media tools implemented: Screen Recorder, Audio Recorder, Photo Editor + Background Removal, Video Processor.
-
-### Next session should start with
-Phase 4 — MCP server (expose tools to AI agents) + Plugin system.
-
----
-
-## [2026-03-19] — Phase 3 Step 3: Photo Editor + Background Removal
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/photo_editor.rs` — 2 route handlers:
-  - `POST /api/photo/export` — JSON body `{data: "data:image/png;base64,..."}`, strips dataURL prefix, base64-decodes, saves to `~/Pictures/Eleutheria/photo-{timestamp}.png`
-  - `POST /api/photo/rembg` — multipart `image` field, writes to `/tmp/eleutheria-photo-rembg-input.{ext}`, spawns `python3 scripts/rembg_remove.py {path}`, returns JSON `{ok, png_b64}`
-- `src-tauri/Cargo.toml` — added `base64 = "0.22"` for canvas PNG dataURL decoding
-- `src-tauri/src/tools/mod.rs` — registered `photo_editor` module
-- `src-tauri/src/server.rs` — imported `photo_editor`, merged `photo_editor::router()`
-
-**Python script**
-- `scripts/rembg_remove.py` — reads input image, runs `rembg.remove()`, outputs base64 PNG on stdout; exit 0 on success, 1 with stderr on error
-
-**Frontend**
-- `ui/tools/photo-editor/index.html` — canvas editor:
-  - Off-screen canvas per layer (`window.__peLayers[]`), "Open image" resets all layers, "+ Layer" adds overlay image (scaled to contain)
-  - Layer chip strip to switch active layer; brush/eraser/Remove BG act on active layer only
-  - Brush interpolation: `moveTo(lastPt) + lineTo(currentPt)` with `lineCap:round` — no more disconnected dots
-  - Canvas CSS-sized to fit container (`flex-1 min-h-0 overflow-hidden` + explicit `style.width/height` after load); internal resolution stays at full image size
-  - Export composites all layers onto a temp canvas, sends dataURL to `/api/photo/export`
-  - Checkerboard background via CSS gradient to visualize transparency
-- `ui/index.html` — added Photo Edit (🖼️) to desktop sidebar and tablet icon sidebar
-- `ui/locales/en.json` — 10 photo editor strings
-
-### Bugs fixed during session
-- **Canvas overflow on large images** — `max-width/max-height: 100%` on a canvas inside a flex container without `min-h-0` has no effect; the container expands to content size. Fix: `flex-1 min-h-0 overflow-hidden` on wrap + compute CSS scale explicitly after image load.
-- **Brush dots instead of strokes** — original code drew an `arc` circle per pointer event; rapid movement left disconnected dots. Fix: track `window.__peLastPt`, draw `moveTo → lineTo` between consecutive events; `lineCap:round` gives smooth strokes and a correct single-click dot.
-- **No layer support** — added multi-layer architecture using off-screen `HTMLCanvasElement` per layer stored outside Alpine (`window.__peLayers`) to avoid proxy issues; compositing on every redraw.
-
-### Architecture
-- No new AppState fields — photo editor is stateless on the server (no recording process to track)
-- Output saved to `~/Pictures/Eleutheria/photo-{timestamp}.png`
-- Layer system: off-screen canvases composited onto display canvas on every stroke; export uses a separate temp canvas at full resolution
-- rembg subprocess: Python 3.14 compatible (rembg 2.0.73 is py3-none-any; pillow, onnxruntime have cp314 wheels)
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Next session should start with
-Phase 3 Step 4: Video Processor (ffmpeg — trim, extract audio, compress, resize).
-
----
-
-## [2026-03-19] — Phase 3 Step 2: Audio Recorder
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/audio_recorder.rs` — 4 route handlers:
-  - `GET /api/audio/state` — JSON `{recording, started_at}` for panel state restore
-  - `GET /api/audio/status` — HTML badge (idle / recording)
-  - `POST /api/audio/record/start` — form field `format` (mp3/wav/ogg/flac); spawns `ffmpeg -f pulse -i default -c:a {codec} output.{ext}`; stores child + path + timestamp in AppState
-  - `POST /api/audio/record/stop` — graceful stop via `q\n` to ffmpeg stdin (same pattern as voice.rs); returns result card with file path
-- `src-tauri/src/tools/mod.rs` — registered `audio_recorder` module
-- `src-tauri/src/server.rs` — imported `AudioRecording`, added `audio_recording` field to `AppState`, merged `audio_recorder::router()`
-- `src-tauri/src/lib.rs` — initialized `audio_recording: Arc<Mutex<None>>`
-- `src-tauri/src/tools/{clipboard,notes,search,translate}.rs` — test constructors updated with `audio_recording` field
-
-**Frontend**
-- `ui/tools/audio-recorder/index.html` — radio selector (mp3/wav/ogg/flac), Start/Stop with Alpine timer, state restored on load via `x-init` fetch to `/api/audio/state`
-- `ui/index.html` — added Audio Rec (🎙) to desktop sidebar and tablet icon sidebar
-- `ui/locales/en.json` — 4 audio recorder strings
-
-### Architecture
-- Output saved to `~/Music/Eleutheria/recording-{timestamp}.{ext}` (permanent, not tmpfs)
-- `AudioRecording = Arc<Mutex<Option<(Child, String, u64)>>>` — same pattern as ScreenRecording
-- Stopped via `q\n` to stdin (ffmpeg graceful), not SIGTERM — ensures proper container finalization for all formats
-- Codec mapping: mp3→libmp3lame, wav→pcm_s16le, ogg→libvorbis, flac→flac
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Next session should start with
-Phase 3 Step 3: Photo Editor + Background Removal.
-
----
-
-## [2026-03-18] — Phase 3 Step 1: Screen Recorder
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/screen_recorder.rs` — 3 route handlers:
-  - `GET /api/screen/status` — returns recording/idle badge HTML
-  - `POST /api/screen/start` — spawns `wf-recorder -f /tmp/eleutheria-screen-{timestamp}.mp4 [-a]`; stores child + path in `AppState.screen_recording`
-  - `POST /api/screen/stop` — sends SIGTERM via `kill -TERM {pid}`, waits for exit, returns result card with file path
-- `src-tauri/src/tools/mod.rs` — registered `screen_recorder` module
-- `src-tauri/src/server.rs` — imported `ScreenRecording`, added `screen_recording` field to `AppState`, merged `screen_recorder::router()`
-- `src-tauri/src/lib.rs` — initialized `screen_recording: Arc<Mutex<None>>`
-- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs`, `translate.rs` — test `AppState` constructors updated with `screen_recording` field
-
-**Frontend**
-- `ui/tools/screen-recorder/index.html` — recording controls with Alpine.js mm:ss timer, audio toggle checkbox, Start/Stop buttons, tip about minimizing window
-- `ui/index.html` — added "Screen Rec" (🎬) entry to desktop sidebar and tablet icon sidebar
-- `ui/locales/en.json` — added 7 screen recorder strings
-
-### Architecture
-- `ScreenRecording = Arc<Mutex<Option<(Child, String)>>>` — holds wf-recorder child + output path
-- Timestamped output paths (`/tmp/eleutheria-screen-{unix_ts}.mp4`) avoid collisions between recordings
-- SIGTERM via `kill -TERM {pid}` subprocess instead of tokio `child.kill()` (SIGKILL) — ensures mp4 container is properly finalized (D-028)
-- Audio toggle: HTML checkbox sends `audio=on` when checked, field absent when unchecked; Rust deserializes as `String` and checks `!params.audio.is_empty()` (D-021 compliant)
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Decisions made
-- **D-028:** `wf-recorder` as screen recording backend — see DECISIONS.md
-
-### Next session should start with
-Phase 3 Step 2: Audio Recorder (`ffmpeg -f pulse` → mp3/wav, no transcription, save to file).
-
----
-
-## [2026-03-18] — Phase 2 Step 5: OCR + Translation pipeline
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/ocr.rs` — modificado `render_result`: el card de resultado OCR ahora incluye una sección "Translate…" que se expande con Alpine.js. Al enviar el mini-form, postea a `/api/translate/text` (ya existente) con el texto extraído, `from_lang` y `to_lang`. No se agregaron rutas nuevas.
-
-**Frontend**
-- El pipeline es puramente de frontend: `render_result` emite el HTML con el mini-form inline
-- Alpine.js `x-data="{ showTranslate: false }"` controla visibilidad con `x-show` + `x-cloak`
-- Selectores from/to con los 5 idiomas disponibles (en/es/fr/de/pt)
-- Resultado de traducción aparece en `#ocr-translate-result` dentro del mismo card
-
-### Architecture
-- Cero rutas nuevas — el pipeline reutiliza `POST /api/translate/text` directamente
-- El texto OCR se pasa como `<textarea name="text" class="hidden">` dentro del mini-form (misma técnica que copy/save-note, D-021 compliant)
-- Nota: la traducción falla en runtime hasta que se resuelva el blocker de argostranslate / Python 3.14 (anotado en IDEAS.md y en memoria para Phase 5)
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures)
-
-### Known issues / blockers
-- **Traducción no funcional en runtime** — argostranslate 1.11.0 es incompatible con Python 3.14+ (`pydantic.v1` en la cadena `confection`). La UI, las rutas y el pipeline OCR→Translate están implementados correctamente; solo falla el subprocess Python. Ver D-027 en DECISIONS.md. Blocker de Phase 5, no de Phase 3.
-
-### Next session should start with
-**Phase 3 — Media Tools.**
-
-Estado de Phase 2 al cierre de sesión:
-- ✅ Models panel (`src-tauri/src/tools/models.rs`)
-- ✅ OCR capture + file upload (`src-tauri/src/tools/ocr.rs`)
-- ✅ Voice-to-text Whisper (`src-tauri/src/tools/voice.rs`)
-- ✅ Translation UI + routes (`src-tauri/src/tools/translate.rs`) — backend Python bloqueado por Python 3.14, ver D-027
-- ✅ OCR + Translation pipeline (botón "Translate…" en el card de resultado OCR)
-
-**Para arrancar Phase 3, leer ROADMAP.md Phase 3 y comenzar con el primer ítem: Screen Recorder.**
-
-Contexto relevante para Phase 3:
-- ffmpeg ya está disponible como subprocess (`scripts_dir()` pattern en `voice.rs` y `ocr.rs`)
-- El sistema usa Wayland + Hyprland — para screen recording usar `wf-recorder` o `ffmpeg -f pipewire` (no `x11grab`)
-- `grim` + `slurp` ya están instalados y funcionando (usados por OCR)
-- El patrón de tool completo está establecido: `src-tauri/src/tools/{tool}.rs` + `ui/tools/{tool}/index.html` + registrar en `mod.rs` + mergear router en `server.rs`
-- AppState no necesita campos nuevos para screen recorder (el child process del recorder seguirá el mismo patrón que `VoiceRecording = Arc<Mutex<Option<Child>>>`)
-- Antes de implementar: verificar con `which wf-recorder` o `ffmpeg -f pipewire -list_devices true` qué capturadores de pantalla están disponibles en Wayland
-
----
-
-## [2026-03-18] — Phase 2 Step 4: Translation tool
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/translate.rs` — 3 route handlers:
-  - `GET /api/translate/langs` — queries DB for installed Argos language packs (downloaded=1, tool='translate'); returns language selector form HTML; if none installed returns "no models" prompt with link to Models panel
-  - `POST /api/translate/text` — accepts `text`, `from_lang`, `to_lang` (form-encoded); spawns `python3 scripts/translate.py` in `tokio::spawn`; returns result card HTML with translated text and Copy button
-  - `POST /api/translate/copy` — copies translated text to clipboard via arboard (`spawn_blocking`)
-- `src-tauri/src/tools/mod.rs` — registered `translate` module
-- `src-tauri/src/server.rs` — imported `translate`, merged `translate::router()`
-
-**Python scripts**
-- `scripts/translate.py` — translates text via `argostranslate.translate`; discovers installed language packs at runtime; exits 1 with stderr message if pack not installed
-
-**Frontend**
-- `ui/tools/translate/index.html` — full translate panel:
-  - `hx-trigger="load"` → `GET /api/translate/langs` loads language pair form dynamically
-  - Alpine.js `x-data` with `pairs` JSON map for reactive from→to filtering
-  - Textarea for input, Translate button, loading indicator
-  - Result card: translated text + Copy to Clipboard
-- `ui/locales/en.json` — added 7 translate strings
-
-### Architecture
-- `parse_lang_pair` helper extracts `(from, to)` from `argos-{from}-{to}` model IDs
-- Handler is `Form<T>` compliant (D-021)
-- `tokio::spawn` wraps subprocess so handler thread is never blocked
-- No new Cargo.toml dependencies
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (19 tests, 0 failures — 5 new translate tests)
-
-### Next session should start with
-Phase 2 Step 5: OCR + Translation pipeline — after OCR, offer one-click "Translate" button that sends the extracted text to the translate tool.
-
----
-
-## [2026-03-18] — Phase 2 Step 3: Voice tool
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/voice.rs` — 6 route handlers:
-  - `GET /api/voice/status` — returns idle/recording badge HTML
-  - `POST /api/voice/record/start` — spawns `ffmpeg -f pulse -i default` with piped stdin; stores child in `AppState.voice_recording`
-  - `POST /api/voice/record/stop` — writes `q\n` to ffmpeg stdin, waits for process exit, runs `python3 scripts/transcribe.py` on the WAV output; returns result card HTML
-  - `POST /api/voice/file` — accepts multipart audio upload (wav/mp3/ogg/flac/m4a), saves to `/tmp/`, runs Whisper transcription
-  - `POST /api/voice/copy` — copies transcript to clipboard via arboard (no suppress — new content, D-014)
-  - `POST /api/voice/save-note` — inserts transcript as a new Note in SQLite
-- `src-tauri/src/tools/mod.rs` — registered `voice` module
-- `src-tauri/src/server.rs` — imported `VoiceRecording`, added `voice_recording` to `AppState`, merged `voice::router()`
-- `src-tauri/src/lib.rs` — initialized `voice_recording: Arc<Mutex<None>>`
-- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs` — test AppState constructors updated with `voice_recording` field
-
-**Python scripts**
-- `scripts/transcribe.py` — Whisper transcription via `pywhispercpp`; auto-discovers ggml model from `~/.local/share/eleutheria-telos/models/whisper/`; `--lang <code|auto>` flag
-- `scripts/requirements.txt` — added `pywhispercpp>=1.4.1`
-
-**Frontend**
-- `ui/tools/voice/index.html` — full voice panel:
-  - Language selector (auto/en/es/fr/de/pt/it/zh/ja)
-  - Start/Stop recording controls with Alpine.js mm:ss timer and pulsing "● Recording" badge
-  - Stop sends `lang` via hidden form (`hx-include="#voice-stop-form"`)
-  - File upload (wav/mp3/ogg/flac/m4a) with `hx-trigger="change"`
-  - Result card: transcript + Copy to Clipboard + Save as Note
-
-### Architecture
-- `VoiceRecording = Arc<Mutex<Option<tokio::process::Child>>>` held in AppState — allows concurrent HTTP handlers to safely check/take the recording child
-- ffmpeg stopped gracefully via stdin `q\n` (not SIGKILL) so WAV file is properly finalized
-- Transcription always runs in an async tokio task — never blocks Axum handler thread
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Next session should start with
-Phase 2 Step 4: Translation tool (Argos Translate via Python subprocess). Routes: `GET /tools/translate`, `POST /api/translate/text`. Then Step 5: OCR → Translate pipeline.
-
----
-
-## [2026-03-18] — Phase 2 Step 2: OCR tool
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/src/tools/ocr.rs` — 4 route handlers:
-  - `POST /api/ocr/capture` — runs `slurp` (interactive Wayland region selector) → `grim` (screenshot) → `tesseract`. Accepts `lang` form field (eng/spa).
-  - `POST /api/ocr/file` — receives multipart image upload, saves to `/tmp/`, runs `tesseract`
-  - `POST /api/ocr/copy` — copies OCR text to clipboard via arboard (with suppress hash D-014)
-  - `POST /api/ocr/save-note` — inserts OCR text as a new Note in SQLite; first non-empty line becomes title
-- `src-tauri/src/tools/mod.rs` — registered `ocr` module
-- `src-tauri/src/server.rs` — imported `ocr`, merged `ocr::router()`
-
-**Cargo.toml changes**
-- Added `multipart` feature to axum — enables `axum::extract::Multipart` for image file upload
-
-**Frontend**
-- `ui/tools/ocr/index.html` — full OCR panel:
-  - Language selector (English / Spanish — only installed Tesseract langpacks)
-  - "Capture Screen Area" button with loading indicator and `hx-disabled-elt`
-  - "Open Image File" label+input with auto-submit on file selection (`hx-trigger="change"`)
-  - Result area: extracted text + "Copy to Clipboard" + "Save as Note" actions
-  - `hx-include` pattern for passing OCR text to copy/save handlers (D-021 compliant)
-- `ui/index.html` — added `.htmx-indicator` / `.htmx-indicator.htmx-request` CSS for loading indicators
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Notes
-- Tesseract languages available: `eng`, `spa` (verified via `tesseract --list-langs`)
-- Screen capture UX: move window aside before clicking "Capture Screen Area" (slurp overlay covers full screen but Tauri window will also be visible in the captured region if not moved)
-- Phase 5: add window hide/show around slurp capture using AppHandle in AppState
-
-### Next session should start with
-Phase 2 Step 3: Voice tool (Whisper subprocess). User has Whisper Base already downloaded.
-
----
-
-## [2026-03-18] — Phase 2 Step 1: Models panel
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/migrations/003_phase2_models.sql` — `ALTER TABLE models ADD COLUMN url TEXT`; seeds full catalog: 4 Whisper models (tiny/base/small/medium) + 8 Argos language pairs (EN↔ES/FR/DE/PT)
-- `src-tauri/src/tools/models.rs` — full models panel backend:
-  - `GET /api/models` — renders full catalog list grouped by tool (Voice / Translation)
-  - `POST /api/models/:id/download` — starts non-blocking download in `tokio::spawn`; returns card HTML immediately
-  - `GET /api/models/:id/progress` — polled every 2s by downloading cards; returns card HTML reflecting current state
-  - `DELETE /api/models/:id` — removes file, resets DB, uninstalls Argos package via Python subprocess
-  - Whisper download via `reqwest` streaming with byte-level progress tracking
-  - Argos download via `python3 scripts/install_argos_package.py {from} {to}` subprocess
-  - `DownloadMap = Arc<Mutex<HashMap<String, DownloadState>>>` stored in `AppState`
-- `src-tauri/src/tools/mod.rs` — registered `models` module
-- `src-tauri/src/server.rs` — imported `DownloadMap`, added `download_states` to `AppState`, merged `models_tool::router()`
-- `src-tauri/src/lib.rs` — initialized `download_states` HashMap, passed to `AppState`
-- `src-tauri/src/tools/clipboard.rs`, `notes.rs`, `search.rs` — test `AppState` constructors updated with `download_states` field
-
-**Cargo.toml changes**
-- Added `reqwest = { version = "0.12", features = ["stream"] }` — streaming model downloads
-- Added `"fs"` and `"process"` to tokio features — `tokio::fs` (file ops) and `tokio::process::Command` (Python subprocess)
-
-**Frontend**
-- `ui/tools/models/index.html` — models panel with `hx-trigger="load"` → `GET /api/models`
-- `ui/index.html` — added "Models" (🧠) entry to desktop sidebar and tablet icon sidebar
-
-**Python scripts**
-- `scripts/install_argos_package.py` — downloads and installs an Argos Translate language pack
-- `scripts/uninstall_argos_package.py` — removes an installed Argos Translate language pack
-- `scripts/requirements.txt` — `argostranslate>=1.11.0`
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Bug fixed during implementation
-- **`r#"..."#` raw strings terminate prematurely at `"#`** — `hx-target="#model-card-{id}"` contains `"#` which Rust's raw string parser (`r#"..."#`) treats as the closing delimiter. Fix: pre-compute `let target = format!("#model-card-{id}")` and use `{target}` in the format string, avoiding `"#` inside the raw literal. (D-023)
-
-### Decisions made
-- **D-023:** Screen capture via `slurp | grim` subprocess on Wayland — both verified installed at `/usr/bin`
-- **D-024:** Whisper download via `reqwest` streaming (direct binary download from HuggingFace ggml format)
-- **D-025:** Argos Translate models managed via Python subprocess (argostranslate's own package manager) — Python 3.14 compatible (ctranslate2 4.7.1 + sentencepiece 0.2.1 both have cp314 manylinux wheels)
-- **D-026:** `scripts/` directory used for Python subprocess scripts; path resolved at compile time via `env!("CARGO_MANIFEST_DIR")` — Phase 5 will replace with Tauri resource path
-
-### Next session should start with
-Phase 2 Step 2: OCR tool (Tesseract subprocess + grim/slurp screen capture). Then Voice (Whisper subprocess), then Translation (Argos subprocess).
-
----
-
-## [2026-03-18] — Phase 1 implementation
-
-### Completed
-
-**Backend (Rust)**
-- `src-tauri/migrations/002_phase1_indexes.sql` — perf indexes on clipboard and notes; FTS5 sync triggers (insert/delete/update) for notes_fts
-- `src-tauri/src/tools/clipboard.rs` — list (with search), recopy, delete-one, clear-all handlers; clipboard monitor with arboard polling + dedup hash + suppress channel; 5 integration tests
-- `src-tauri/src/tools/notes.rs` — list (plain + FTS5 MATCH), create, get (editor HTML), update (dynamic SET), delete, pin-toggle handlers; 6 integration tests
-- `src-tauri/src/tools/search.rs` — merged FTS5 (notes) + LIKE (clipboard) search handler; 3 integration tests
-- `src-tauri/src/tools/mod.rs` — registered clipboard, notes, search modules
-- `src-tauri/src/server.rs` — added `clipboard_suppress_tx: watch::Sender<u64>` to AppState; merged three tool routers into build_router
-- `src-tauri/src/lib.rs` — construct watch channel, pass to AppState, spawn clipboard monitor background task
-- `src-tauri/src/event_bus.rs` — removed Phase 0 dead-code suppression; ClipboardChanged, NoteCreated, NoteUpdated now in active use
-
-**Cargo.toml changes**
-- Added `"sync"` to tokio features (for watch channel)
-- Replaced `axum-test = "15"` (broken path-param routing) with `tower = "0.4"` + `http-body-util = "0.1"` dev deps
-
-**Frontend**
-- `ui/tools/clipboard/index.html` — full clipboard panel with search, list, recopy, delete, clear-all
-- `ui/tools/notes/index.html` — split-view panel: note list (left) + editor area (right); marked.js loaded
-- `ui/tools/search/index.html` — search panel with live HTMX input
-- `ui/index.html` — Ctrl+K command palette overlay (Alpine `paletteOpen` state, HTMX search input, Escape to close)
-- `ui/assets/marked.min.js` — marked.js bundled locally (offline-first, D-015)
-- `ui/locales/en.json` — added ~20 new strings for clipboard, notes, search, palette
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Decisions made
-- **D-012:** FTS5 sync via SQL triggers (not in-Rust handlers) — triggers in migration 002
-- **D-013:** Clipboard dedup via in-memory `DefaultHasher` hash — no DB query per poll cycle
-- **D-014:** Clipboard suppress channel via `tokio::sync::watch` in AppState — recopy handler sends hash before writing to clipboard
-- **D-015:** `marked.js` bundled under `ui/assets/` (not CDN) for offline-first correctness
-- **D-016:** Integration tests use `tower::ServiceExt::oneshot()` + direct handler calls for path-parameterized routes (axum-test v15 has broken path-param routing with `{id}` syntax in axum 0.7)
-
-### Known issues / notes
-- Path-parameterized routes work correctly in the running app (`cargo tauri dev`); the test limitation is only in the test harness (tower oneshot with `from_fn_with_state` + `with_state` doesn't route path params in tests)
-- Notes editor Alpine component uses `fetch()` directly for debounced PUT (exception to HTMX rule per CLAUDE.md — HTMX form-encode limitations)
-
-### Next session should start with
-Phase 2 — Voice (Whisper) or OCR (Tesseract). Start by choosing which tool to implement first based on ROADMAP.md, verify Python package compatibility for Whisper with Python 3.14.2, and check Tesseract 5.5.2 Rust bindings compatibility.
-
----
-
-## [2026-03-18] — Phase 1 WebView fix (tools loading)
-
-### Problem
-All tool panels showed "Loading…" forever in `cargo tauri dev`. No HTMX requests reached the Axum server.
-
-### Root causes (three separate issues, all fixed):
-
-**1. HTMX loaded from CDN (blocked/slow on WebKitGTK)**
-HTMX and Alpine.js were loaded from `unpkg.com`. If the WebView can't reach CDN or is slow, HTMX never initializes and no `hx-*` processing happens.
-
-**2. HTMX 2.0.4 `selfRequestsOnly: true` default**
-HTMX 2.0.4 defaults to `selfRequestsOnly: true`, which blocks all cross-origin requests. Since the shell is served from `tauri://localhost` and Axum runs on `http://127.0.0.1:{PORT}`, every HTMX request was silently blocked (no error, no network activity).
-
-**3. Fragile `hx-trigger="load"` initial panel load**
-The shell had `hx-trigger="load"` on `#tool-panel`, which fired before token/port were guaranteed to be set by `initialization_script`. Also, the invoke fallback in `initApp()` could silently overwrite `window.__SESSION_TOKEN__` and `window.__API_PORT__` with `undefined` if `window.__TAURI__.invoke` wasn't a function.
-
-### Fixes
-- `ui/assets/htmx.min.js` — HTMX 2.0.4 bundled locally (50KB)
-- `ui/assets/alpine.min.js` — Alpine.js 3.14.9 bundled locally (45KB)
-- `ui/index.html` — replaced CDN script tags with local `/assets/` paths
-- `ui/index.html` — added `htmx.config.selfRequestsOnly = false` before any HTMX requests
-- `ui/index.html` — removed `hx-trigger="load"` from `#tool-panel`; added `initApp()` async function on `DOMContentLoaded` that uses Tauri invoke (with proper `typeof` guard) then calls `htmx.ajax()` with full absolute URL and explicit auth headers
-- `src-tauri/src/api.rs` — fixed `get_session_token` to return the real token from `AppState` (not a new UUID); added `get_api_port` command
-- `src-tauri/src/lib.rs` — added `app.manage(state.clone())` to register `AppState` with Tauri's state management so invoke commands can access it
-- `src-tauri/tauri.conf.json` — added `"withGlobalTauri": true` so `window.__TAURI__` is available in the WebView
-- `src-tauri/src/server.rs` — added request logging in `auth_middleware` (INFO + WARN) for diagnostics
-
-### Decisions made
-- **D-017:** `htmx.config.selfRequestsOnly = false` required because app shell and API server are on different origins (tauri:// vs http://)
-- **D-018:** HTMX and Alpine.js bundled locally (same principle as D-015 for marked.js)
-- **D-019:** Initial tool panel load uses `htmx.ajax()` with full absolute URL in `initApp()`, not `hx-trigger="load"`, to ensure token is confirmed before the request fires
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Next session should start with
-Phase 2 — Voice (Whisper) or OCR (Tesseract). (Unchanged from Phase 1 entry.)
-
----
-
-## [2026-03-18] — Route param syntax fix (D-020)
-
-### Problem
-All parameterized routes (`/tools/{tool_name}`, `/api/clipboard/{id}`, `/api/notes/{id}`, etc.) returned 404 at runtime despite compiling without errors.
-
-### Root cause
-Axum 0.7.9 depends on **matchit 0.7.3**, which uses `:param` syntax for named path parameters. The `{param}` brace syntax was introduced in matchit 0.8.x. Axum passes route strings directly to matchit without any transformation — so `{param}` was treated as a literal string segment, never matching any actual request path.
-
-### Fix
-Changed all route definitions from `{param}` to `:param` syntax:
-- `src-tauri/src/server.rs` — `/tools/:tool_name`
-- `src-tauri/src/tools/clipboard.rs` — `/api/clipboard/:id/recopy`, `/api/clipboard/:id`
-- `src-tauri/src/tools/notes.rs` — `/api/notes/:id`, `/api/notes/:id/pin`
-
-### Also cleaned up
-- Removed diagnostic code added during investigation: `debug_log_handler`, `/debug/log` route, `dbgLog()` JS function, extra `htmx:beforeRequest`/`htmx:responseError`/`htmx:sendError` listeners, `tool_panel_handler` log line, `/test/:param` test route
-- Updated D-016 note: root cause of axum-test path param failures is now known (matchit 0.7 syntax)
-- Added D-017 through D-020 to DECISIONS.md (previously only in CHANGELOG)
-
-### CI status
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Next session should start with
-Phase 2 — Voice (Whisper) or OCR (Tesseract). Routing is now fully working — all tool panels load, all API endpoints are reachable. Verify with `cargo tauri dev` then proceed to Phase 2.
-
----
-
-## [2026-03-18] — Post-mortem: Full "Loading…" bug saga + follow-up fixes
-
-This entry documents the complete arc of bugs that caused the app to show "Loading…" forever, in the order they were discovered and fixed. Multiple sessions were needed.
-
----
-
-### Root cause 1: Axum 0.7 route param syntax
-
-**Symptom:** `GET /tools/clipboard` returned 404. Confirmed by adding a fallback handler that fired for every path — including `/tools/clipboard`. The registered route was not matching.
-
-**Root cause:** All route definitions used `{param}` syntax (e.g. `/tools/{tool_name}`, `/api/notes/{id}`). Axum 0.7.9 depends on **matchit 0.7.3**, which uses `:param` syntax. The `{param}` brace syntax was only introduced in matchit 0.8. Axum passes route strings to matchit verbatim — no transformation. So `{param}` was treated as a literal static segment and never matched a real request path. The code compiled without warnings.
-
-**Diagnostic path:** Added test route `/test/{param}` alongside `/tools/{tool_name}`. Both returned 404. Static routes (`/health`) returned 200. Confirmed matchit 0.7.3 source uses `:param`. Verified Axum source does no path conversion before inserting into matchit.
-
-**Fix:** Changed all route definitions from `{param}` to `:param` in `server.rs`, `clipboard.rs`, `notes.rs`. (D-020)
-
----
-
-### Root cause 2: HTMX 2.x `selfRequestsOnly = true` default
-
-**Symptom:** Even after routing was fixed, inner HTMX requests (`hx-trigger="load"` on `#clipboard-list`) produced zero network activity. No errors, no logs.
-
-**Root cause:** HTMX 2.0.4 defaults `selfRequestsOnly: true`, which silently blocks all requests to a different origin. The app shell is served from `tauri://localhost` (via Tauri frontendDist) while Axum runs on `http://127.0.0.1:{PORT}`. These are different origins. HTMX drops every request with no error event, no log, no indication.
-
-**Fix:** `htmx.config.selfRequestsOnly = false` in the inline script of `index.html`, before any `hx-*` attributes are processed. (D-017)
-
----
-
-### Root cause 3: HTMX and Alpine loaded from CDN
-
-**Symptom:** Intermittent — on WebKitGTK (used by Tauri on Linux), CDN requests to `unpkg.com` were slow or blocked. HTMX failed to initialize entirely, making every `hx-*` attribute inert.
-
-**Fix:** Bundle `htmx.min.js` (2.0.4) and `alpine.min.js` (3.14.9) locally under `ui/assets/`. Same offline-first principle as marked.js (D-018).
-
----
-
-### Root cause 4: `hx-trigger="load"` on initial panel before token was confirmed
-
-**Symptom:** On fast startup, the initial `hx-trigger="load"` on `#tool-panel` fired before Tauri's `initialization_script` had set `window.__SESSION_TOKEN__`. The first request went out with an undefined token and got a 401. Panel never retried.
-
-**Fix:** Removed `hx-trigger="load"` from `#tool-panel`. Added `initApp()` async function on `DOMContentLoaded` that calls `window.__TAURI__.core.invoke('get_session_token')` (with proper `typeof` guard) to confirm the real token, then loads the default panel via `htmx.ajax()` with full absolute URL and explicit auth headers. (D-019)
-
----
-
-### Root cause 5: `htmx.ajax()` source-element context breaks child `hx-trigger="load"`
-
-**Symptom:** After the routing fix, the clipboard panel HTML loaded correctly into `#tool-panel`, but `#clipboard-list` (which has `hx-trigger="load"`) never fired its `GET /api/clipboard` request.
-
-**Root cause:** `htmx.ajax()` with no explicit source element uses `document.body` as the source. HTMX's post-swap initialization task (`Ae()`) can miss child elements' load triggers when the source is `document.body` rather than a real ancestor.
-
-**Fix:** Added `htmx:afterSwap` listener that calls `htmx.process(evt.detail.target)` when `#tool-panel` is the swap target. This re-processes all `hx-*` attributes in the newly loaded panel, including `hx-trigger="load"` children. (D-019 addendum)
-
----
-
-### Root cause 6: Notes `+New` — JSON vs Form mismatch
-
-**Symptom:** Clicking `+ New` did nothing. No note was created. No visible error.
-
-**Root cause:** `create_handler` in `notes.rs` used `Json<CreateBody>` extractor, which expects `Content-Type: application/json`. HTMX sends `hx-vals` as `application/x-www-form-urlencoded` (form data). Axum returned 415 Unsupported Media Type, silently. HTMX had no error handler to surface this.
-
-**Fix:** Changed `create_handler` to `Form<CreateBody>`. Updated the test helper from `post_json` to `post_form` to match. (No new decision — follows the principle: HTMX submits form data by default.)
-
----
-
-### Root cause 7: Clipboard monitor capturing nothing on Wayland
-
-**Symptom:** Clipboard history always empty despite copying text from other apps.
-
-**Root cause:** `arboard = "3"` without features compiles with the X11 backend only. On Wayland + Hyprland, `arboard::get_text()` fails on every poll because the X11/XWayland clipboard is not the real system clipboard. The failure is caught by `Err(_) => continue` and produces no log output.
-
-**Root cause detail:** arboard 3 has a `wayland-data-control` feature that enables the `wlr-data-control` Wayland protocol backend (via `wl-clipboard-rs`). Hyprland implements this protocol. Without the feature, arboard never tries Wayland and falls back to X11 silently.
-
-**Fix:** Changed to `arboard = { version = "3", features = ["wayland-data-control"] }` in Cargo.toml.
-
----
-
-### Follow-up fixes (UX)
-
-**Clipboard auto-refresh:** `hx-trigger="load"` loads once. Changed to `hx-trigger="load, every 3s"` so the list polls while the panel is open.
-
-**Notes list title sync:** Alpine `save()` sends a `PUT` via `fetch()` but nothing told `#notes-list` to refresh. Added `htmx.trigger(document.body, 'noteUpdated')` after save. Notes list gained `hx-trigger="load, noteUpdated from:body"` to refresh when triggered.
-
-**Markdown `#` headings invisible:** Tailwind Preflight resets `h1`–`h6` to `font-size: inherit`. Without the Typography plugin (`@tailwindcss/typography`), `prose` classes don't re-apply heading sizes. Added explicit heading styles scoped to `.prose` in `ui/tools/notes/index.html`.
-
----
-
-### Files changed across this entire saga
-
-- `src-tauri/Cargo.toml` — arboard `wayland-data-control` feature
-- `src-tauri/src/server.rs` — `:param` syntax, removed diagnostic code
-- `src-tauri/src/tools/clipboard.rs` — `:param` syntax
-- `src-tauri/src/tools/notes.rs` — `:param` syntax, `Form<CreateBody>`, `htmx.trigger` after save
-- `ui/index.html` — `selfRequestsOnly=false`, local assets, `initApp()`, `htmx:afterSwap`
-- `ui/assets/htmx.min.js` — bundled HTMX 2.0.4
-- `ui/assets/alpine.min.js` — bundled Alpine.js 3.14.9
-- `ui/tools/clipboard/index.html` — `every 3s` polling
-- `ui/tools/notes/index.html` — `noteUpdated from:body`, heading styles
-
-### CI status
-- `cargo fmt --check` ✓
-- `cargo clippy -- -D warnings` ✓
-- `cargo test` ✓ (14 tests, 0 failures)
-
-### Next session should start with
-Phase 2 — Voice (Whisper) or OCR (Tesseract). All Phase 1 functionality is confirmed working end-to-end.
-
+*Entries before 2026-03-19 are in `CHANGELOG_ARCHIVE.md`*
