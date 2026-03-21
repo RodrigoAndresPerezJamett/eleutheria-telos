@@ -26,3 +26,5 @@ playwright-review/node_modules/
 playwright-review/screenshots/
 playwright-review/test-results/
 playwright-review/playwright-report/
+__pycache__/
+*.pyc
