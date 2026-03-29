@@ -338,7 +338,7 @@ mod tests {
             .run(&db)
             .await
             .expect("migrations");
-        let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+        let (clipboard_suppress_tx, _) = watch::channel(String::new());
         let download_states =
             std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
         let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
@@ -420,8 +420,8 @@ mod tests {
         let (status, body) = get_req(app, "/api/translate/langs").await;
         assert_eq!(status, StatusCode::OK);
         assert!(
-            body.contains("No language packs installed"),
-            "Expected no-models message, got: {body}"
+            body.contains("Need to translate something?"),
+            "Expected no-models empty state, got: {body}"
         );
     }
 
