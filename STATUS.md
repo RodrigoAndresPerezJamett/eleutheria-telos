@@ -117,7 +117,7 @@ Pick from here when limit resets (2026-03-25). Ordered by impact.
 - [x] `[CLAUDE]` **Name sanity check** — `validate_name()` in `quick_actions.rs` rejects `/\<>"\0`; applied to create/update/folder handlers. `pattern` attribute added to all 3 name inputs (2 in HTML, 1 server-rendered). `[DONE 2026-03-29]`
 
 **Features**
-- [ ] `[CLAUDE]` **Voice: live recording waveform** — Web Audio API `AnalyserNode` + canvas. Frontend only, no Rust changes.
+- [x] `[CLAUDE]` **Voice: live recording waveform** — Web Audio API `AnalyserNode` + canvas in `voice/index.html`. Fails silently if mic unavailable. `[DONE 2026-03-29]`
 - [ ] `[CLAUDE]` **Clipboard: pin entries** — `is_pinned` column migration, pinned float to top, content-type badge (URL globe, image chip, code `{}` icon).
 - [ ] `[CLAUDE]` **Quick Actions: pipeline tree visualizer** — read-only collapsible tree as alternative to canvas; toggle in toolbar.
 - [ ] `[CLAUDE]` **Command palette learns** — `command_history` table; Ctrl+K surfaces most-used first.

@@ -1,5 +1,49 @@
 <div class="panel" style="display:flex;flex-direction:column;height:100%;"
-     x-data="{ recording: false, elapsed: 0, timer: null }"
+     x-data="{
+       recording: false,
+       elapsed: 0,
+       timer: null,
+       _stream: null, _audioCtx: null, _analyser: null, _waveAnim: null,
+       async startWaveform() {
+         try {
+           this._stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+           this._audioCtx = new AudioContext();
+           const src = this._audioCtx.createMediaStreamSource(this._stream);
+           this._analyser = this._audioCtx.createAnalyser();
+           this._analyser.fftSize = 512;
+           src.connect(this._analyser);
+           const canvas = document.getElementById('voice-waveform');
+           const ctx2d = canvas.getContext('2d');
+           const buf = new Uint8Array(this._analyser.frequencyBinCount);
+           const draw = () => {
+             if (!this.recording) return;
+             this._waveAnim = requestAnimationFrame(draw);
+             this._analyser.getByteTimeDomainData(buf);
+             ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+             ctx2d.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6c8ebf';
+             ctx2d.lineWidth = 2;
+             ctx2d.beginPath();
+             const sw = canvas.width / buf.length;
+             buf.forEach((v, i) => {
+               const y = (v / 128) * (canvas.height / 2);
+               i === 0 ? ctx2d.moveTo(0, y) : ctx2d.lineTo(i * sw, y);
+             });
+             ctx2d.lineTo(canvas.width, canvas.height / 2);
+             ctx2d.stroke();
+           };
+           draw();
+         } catch(e) { /* mic unavailable — waveform is optional */ }
+       },
+       stopWaveform() {
+         if (this._waveAnim) cancelAnimationFrame(this._waveAnim);
+         if (this._analyser) this._analyser.disconnect();
+         if (this._audioCtx) this._audioCtx.close().catch(() => {});
+         if (this._stream) this._stream.getTracks().forEach(t => t.stop());
+         this._waveAnim = this._analyser = this._audioCtx = this._stream = null;
+         const c = document.getElementById('voice-waveform');
+         if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+       }
+     }"
      x-init="$el.addEventListener('htmx:afterRequest', () => {})">
 
   <div class="panel-header">
@@ -38,6 +82,7 @@
                 recording = true;
                 elapsed = 0;
                 timer = setInterval(() => elapsed++, 1000);
+                startWaveform();
               ">
         Start Recording
       </button>
@@ -53,6 +98,7 @@
                 recording = false;
                 clearInterval(timer);
                 timer = null;
+                stopWaveform();
                 document.getElementById('voice-stop-lang').value = document.getElementById('voice-lang').value;
               ">
         Stop &amp; Transcribe
@@ -66,6 +112,13 @@
             class="htmx-indicator"
             style="font-size:12px;color:var(--text-muted);font-style:italic;">Transcribing…</span>
     </div>
+
+    <!-- Live waveform — only visible while recording -->
+    <canvas id="voice-waveform"
+            x-show="recording"
+            x-transition
+            width="800" height="48"
+            style="width:100%;height:48px;margin-top:10px;border-radius:var(--radius-sm);background:var(--bg-base);display:block;"></canvas>
 
     <div id="voice-record-status" style="margin-top:10px;font-size:12px;"></div>
   </div>
