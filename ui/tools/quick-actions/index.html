@@ -36,6 +36,8 @@
               hx-post="/api/pipelines" hx-target="#pipeline-list" hx-swap="outerHTML"
               @htmx:after-request="open=false;name=''">
           <input x-model="name" name="name" type="text" placeholder="Pipeline name" required
+                 pattern="[^/\\&lt;&gt;&quot;]+"
+                 title="Cannot contain / \ &lt; &gt; or &quot;"
                  class="input" style="font-size:12px;padding:5px 8px;" />
           <select name="trigger" x-model="trigger" class="input" style="font-size:12px;padding:5px 8px;">
             <option value="{&quot;type&quot;:&quot;Manual&quot;}">Manual</option>
@@ -51,6 +53,8 @@
               hx-post="/api/pipeline-folders" hx-target="#pipeline-list" hx-swap="outerHTML"
               @htmx:after-request="folderOpen=false;folderName=''">
           <input x-model="folderName" name="name" type="text" placeholder="Folder name" required
+                 pattern="[^/\\&lt;&gt;&quot;]+"
+                 title="Cannot contain / \ &lt; &gt; or &quot;"
                  class="input" style="font-size:12px;padding:5px 8px;flex:1;" />
           <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;">Add</button>
         </form>
