@@ -41,6 +41,37 @@ Copy `hello-python/` or `hello-node/` as your starting point, then edit `manifes
 }
 ```
 
+### Available permissions
+
+| Permission | What it grants |
+|-----------|---------------|
+| `db.read` | Read your own rows in `plugin_data` |
+| `db.write` | Write your own rows in `plugin_data` (50MB quota — see below) |
+| `clipboard.read` | Read clipboard history |
+| `clipboard.write` | Write to the system clipboard |
+| `event_bus.subscribe` | Listen to app events (OCR completed, note created, etc.) |
+| `event_bus.publish` | Publish events to the app event bus |
+| `fs.user_dir` | Read/write inside `~/eleutheria/plugins/{id}/` only. Path traversal (`../`) is rejected. |
+| `ocr.invoke` | Call the OCR tool programmatically |
+| `tts.invoke` | Call Voice-to-text programmatically |
+| `translate.invoke` | Call the translation tool programmatically |
+| `notifications.show` | Show system notifications |
+| `network.outbound` | Make outbound HTTP requests (declare allowed domains in `network_allowlist`) |
+
+Undeclared permissions are enforced at the proxy layer — attempting an operation without the required permission returns:
+```json
+{ "error": "permission_denied", "required": "permission_name" }
+```
+
+#### Storage quota (`db.write`)
+Plugin data is limited to **50MB per plugin**. Attempting to write beyond the limit returns:
+```json
+{ "error": "storage_quota_exceeded", "used_bytes": N, "limit_bytes": 52428800 }
+```
+Check your quota proactively: `GET /api/db/plugin/quota` → `{ "used_bytes": N, "limit_bytes": 52428800 }`. For large binary files, use `fs.user_dir` instead.
+
+---
+
 ### Fields
 
 | Field | Required | Description |

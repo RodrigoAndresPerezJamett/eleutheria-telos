@@ -99,16 +99,16 @@ Ana sells her old tablet. She wants to remove it from sync.
 ### Device identity
 Each installation generates a persistent UUID and a keypair on first launch. The public key is the device's identity. Device name comes from the OS hostname, editable in Settings.
 
-### Trust establishment
-First connection between two devices requires mutual confirmation — both sides tap "Allow." After that, the public key is stored in the trusted devices list. Future connections are automatic (no UI) as long as the public key matches.
+### Trust establishment (TOFU — Trust on First Use, D-048)
+When a new device is discovered, the app shows the device name and the SHA-256 fingerprint of its certificate and asks for confirmation ("Is this your other device?"). The approved fingerprint is stored in `sync_peers.public_key`. Future connections are automatic as long as the fingerprint matches. If it doesn't match, the connection is blocked and the user sees a MITM warning.
 
-### Trust is scoped
-When trusting a device, the user chooses what to share:
+### Trust is scoped (Phase 6 scope: all-or-nothing per data type, D-047)
+When trusting a device, the user chooses which data types to sync:
 - Everything (same-person devices)
 - Selected data types (Notes, Photos, Clipboard — individually toggled)
 - Read-only (the other device can receive but not send changes)
 
-This is how the "partner shared library" use case works without accidentally syncing private notes.
+**Phase 6 limitation:** sync is all-or-nothing per data type. Granular sharing by tag or filter is out of scope. The UI states: "In this version, sync includes all content of the selected type. Filtering by tag will be available in a future update."
 
 ### Revocation
 Removing a device from the trusted list immediately stops sync. The removed device's data is not deleted — it stays on both devices. Only future changes stop propagating.
@@ -153,6 +153,8 @@ Item X last modified on B at sequence 12 (since last sync)
 
 Non-conflicting edits (only one device touched the item since last sync) merge automatically.
 
+**Conflict resolution strategy (D-046):** Logical sequence numbers are the primary ordering mechanism — they are causally correct for P2P without a central clock. `modified_at` wall-clock timestamp is used **only** as a tiebreak when two changes have the same sequence number (true split-brain). Never use wall-clock time as the primary resolution mechanism.
+
 ### Transport
 All sync traffic uses the existing Axum HTTP server on localhost, extended with new routes at `/api/sync/`. Encryption: TLS with the device keypair certificate. No plaintext sync, even on the local network.
 
@@ -185,7 +187,7 @@ Auto-detected via mDNS. Sync starts within 5 seconds of discovery. No user actio
 Progress shown clearly: "Syncing — 3,241 of 8,420 items." Runs fully in background. App is usable during sync. If interrupted (WiFi drops), sync resumes exactly where it left off on next connection — no re-transfer of already-synced items.
 
 ### Two devices edit a note simultaneously (both online, race condition)
-Last-write-wins for the content. A `modified_at` timestamp (microsecond resolution) determines which version wins. The losing version is saved as a conflict copy (never discarded silently).
+Logical sequence numbers determine ordering (D-046). `modified_at` is used only as a tiebreak when sequence numbers are equal. The losing version is saved as a conflict copy (never discarded silently).
 
 ### Network is slow (congested WiFi, lots of devices)
 Sync uses adaptive backoff. If a sync round takes > 30 seconds, the next round waits 60 seconds before trying again. Exponential backoff up to 10 minutes. Status shown: "Sync is taking longer than usual."
@@ -215,7 +217,9 @@ CREATE TABLE sync_identity (
   device_uuid    TEXT PRIMARY KEY,
   device_name    TEXT NOT NULL,
   public_key     TEXT NOT NULL,   -- PEM-encoded
-  private_key    TEXT NOT NULL,   -- PEM-encoded, stored locally only
+  -- private_key is NOT stored here. It lives in the OS keychain
+  -- (secret-service on Linux, Keychain on macOS, Credential Manager on Windows).
+  -- Keyring key: "eleutheria-sync-private-key". See D-045.
   created_at     INTEGER NOT NULL
 );
 

@@ -102,14 +102,19 @@ Pick from here when limit resets (2026-03-25). Ordered by impact.
 
 **Safety / correctness — start here**
 - [ ] `[CLAUDE]` **Loop quality checks** — 60s toast warn + 120s auto-kill in Quick Actions engine. Both thresholds configurable per-pipeline (`timeout_warn_secs`/`timeout_kill_secs`) and globally in Settings. Files: `quick_actions.rs`, `event_bus.rs`, `server.rs`, Quick Actions panel HTML.
-- [ ] `[CLAUDE]` Fix `tools::translate::tests::test_langs_no_models` — pre-existing HTML mismatch
-- [ ] `[CLAUDE]` Fix `clippy::unnecessary_closure` in `quick_actions.rs`
+- [ ] `[CLAUDE]` **Plugin permission enforcement** — Axum middleware that validates plugin requests against declared permissions. Currently manifests are loaded but never enforced. See D-040. Files: `plugin_loader.rs`, `server.rs` (new middleware layer).
+- [x] `[CLAUDE]` **Port selection fix** — replace unbounded loop with try-47821/fallback-to-0. Write port to `app_data_dir()/server.port`. See D-053. Files: `server.rs`. `[DONE 2026-03-29]`
+- [x] `[CLAUDE]` **LIKE wildcard escaping** — escape `%` and `_` in user search input. Affects `mcp.rs`, `clipboard.rs`, `search.rs`, `notes.rs`. Added `like_escape()` in `tools/mod.rs`. See D-052. `[DONE 2026-03-29]`
+- [x] `[CLAUDE]` **Replace DefaultHasher in clipboard dedup** — direct string equality for text, blake3 first-4KB for images. `clipboard_suppress_tx` changed to `watch::Sender<String>`. Fixed in `clipboard.rs`, `quick_actions.rs`, `server.rs`, `lib.rs`. See D-051. `[DONE 2026-03-29]`
+- [x] `[CLAUDE]` **Trash 30-day TTL job** — `start_trash_ttl_worker` in `db.rs`; runs at startup + every hour; registered in `lib.rs`. `[DONE 2026-03-29]`
+- [x] `[CLAUDE]` Fix `tools::translate::tests::test_langs_no_models` — updated assert to match current empty-state HTML. `[DONE 2026-03-29]`
+- [x] `[CLAUDE]` Fix `clippy::unnecessary_lazy_evaluations` in `quick_actions.rs` — `.or_else(|| x)` → `.or(x)` at 2 sites. `[DONE 2026-03-29]`
 
 **Usability**
 - [ ] `[CLAUDE]` **Quick Actions: opt-in/opt-out toast** — non-blocking toast bottom-right when pipeline auto-fires: name + Accept / Dismiss / "Don't ask again" checkbox; auto-dismissed 8s; per-pipeline "Always run" vs "Ask me first" setting. Files: `event_bus.rs`, `quick_actions.rs`, OCR/Voice result card HTML.
-- [ ] `[CLAUDE]` **Clipboard: copy button shows `{okay:true}`** — endpoint must return HTML fragment (button in "copied" state) or `hx-swap="none"` + `htmx:afterRequest` listener. See IDEAS.md Bugs.
-- [ ] `[CLAUDE]` **Clipboard + Notes: full-content DOM bloat** — truncate to 2KB attr / 300 char preview server-side; add `GET /api/clipboard/:id` and `GET /api/notes/:id/content`; modal fetches on demand. Files: `clipboard.rs`, `notes.rs`, both index.html modal handlers.
-- [ ] `[CLAUDE]` **Name sanity check** — strip/reject invalid chars (`/`, `\`, `<`, `>`, `"`, null bytes) from pipeline and folder names, client + server.
+- [x] `[CLAUDE]` **Clipboard: copy button shows `{okay:true}`** — `hx-swap="none"` already present; added `hx-on:htmx:after-request` to show "Copied!" feedback for 1.5s. `[DONE 2026-03-29]`
+- [x] `[CLAUDE]` **Clipboard + Notes: full-content DOM bloat** — already fully implemented: 2KB/300-char truncation, `data-*-truncated` flags, `GET /api/clipboard/:id` and `GET /api/notes/:id/content`, fetch on-demand in both modals. `[DONE — was already implemented]`
+- [x] `[CLAUDE]` **Name sanity check** — `validate_name()` in `quick_actions.rs` rejects `/\<>"\0`; applied to create/update/folder handlers. `pattern` attribute added to all 3 name inputs (2 in HTML, 1 server-rendered). `[DONE 2026-03-29]`
 
 **Features**
 - [ ] `[CLAUDE]` **Voice: live recording waveform** — Web Audio API `AnalyserNode` + canvas. Frontend only, no Rust changes.

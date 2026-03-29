@@ -499,3 +499,294 @@ All nodes use `--glass-bg` + `--glass-border` as base surface.
 **Date:** 2026-03-20
 
 **Revisit if:** User testing shows the diamond shape is confusing at small canvas scales.
+
+---
+
+## D-040 — Plugin permission enforcement via Axum middleware
+
+**Decision:** Axum middleware extracts `plugin_id` from the request path, loads the plugin's declared permissions from a `Arc<RwLock<HashMap<String, Vec<String>>>>` cached at startup, and validates the request against a static mapping of `(path_prefix, HTTP_method) → required_permission`. Example: `POST /api/clipboard/*` requires `clipboard.write`, `GET /api/fs/*` requires `fs.user_dir`. Violations return `403 Forbidden` with a JSON body (see D-041).
+
+**Full permission list (V1):**
+- `db.read` — read own `plugin_data` rows
+- `db.write` — write own `plugin_data` rows
+- `clipboard.read` — read clipboard history
+- `clipboard.write` — write to clipboard
+- `event_bus.subscribe` — listen to Event Bus events
+- `event_bus.publish` — publish events to Event Bus
+- `fs.user_dir` — read/write/create subdirectories inside `~/eleutheria/plugins/{plugin_id}/` only; path traversal (`../`) rejected with 403
+- `ocr.invoke` — call the OCR tool programmatically
+- `tts.invoke` — call Voice-to-text programmatically
+- `translate.invoke` — call the translation tool programmatically
+- `notifications.show` — show system notifications
+- `network.outbound` — make outbound HTTP requests (to declared domains only; undeclared targets rejected)
+
+**Date:** 2026-03-29
+
+**Revisit if:** Plugin API surface grows significantly or a granular `network.outbound.allowlist` is needed (Phase 6+).
+
+---
+
+## D-041 — Plugin permission denied response format
+
+**Decision:** When a plugin request is denied due to missing permissions, return HTTP 403 with a JSON body:
+```json
+{ "error": "permission_denied", "required": "permission_name" }
+```
+
+**Rejected alternatives:**
+- Silent 403 — harder to debug for plugin developers.
+
+**Reason:** Permission names are public API documentation — exposing them does not reveal internal state. Descriptive errors accelerate plugin development. The attack surface in a localhost-only context is minimal.
+
+**Date:** 2026-03-29
+
+---
+
+## D-042 — Plugin storage quota: 50MB per plugin
+
+**Decision:** 50MB quota per plugin in `plugin_data`. On quota exceeded, return:
+```json
+{ "error": "storage_quota_exceeded", "used_bytes": N, "limit_bytes": 52428800 }
+```
+Expose `GET /api/db/plugin/quota` for proactive quota queries. Binary files must use `fs.user_dir`, not `plugin_data`.
+
+**Reason:** Without a limit, a malicious or buggy plugin can exhaust disk space unboundedly. 50MB is generous for structured data and negligible for most use cases.
+
+**Date:** 2026-03-29
+
+---
+
+## D-043 — Quick Actions condition DSL: visual mini-DSL, backend evaluation
+
+**Decision:** Condition nodes use a visual mini-DSL with three fields: `[field] [operator] [value]`. Operators are in natural language: "equal to", "contains", "greater than", "starts with", "is empty". Multiple rules combinable with AND/OR. No JavaScript or expression-language runtime. Evaluation occurs in the backend Rust on the serialized execution context.
+
+**Available contexts (dropdown-driven, not free-text):**
+- `trigger.{field}` — payload of the triggering event
+- `previous_step.result` — output of the immediately preceding node (hidden if node is first after trigger)
+- `clipboard.current` — current clipboard content
+- `variable.{name}` — pipeline-level variables defined by the user
+
+The dropdown shows only variables available at that graph position — unavailable contexts are hidden, not grayed out.
+
+**Rejected alternatives:**
+- JavaScript eval in frontend — security risk, inconsistent behavior, opaque to non-technical users.
+- Rust expression evaluator — requires learning a DSL syntax; visual fields are more accessible.
+
+**Date:** 2026-03-29
+
+---
+
+## D-044 — Pipeline cycle detection: static DFS + runtime step counter
+
+**Decision:** Two layers of cycle protection:
+1. **Static DFS at save time** — if a cycle is detected, the save is rejected: cycle nodes are highlighted in red, a clear message is shown, and the save button is disabled until resolved.
+2. **Runtime step counter** — cap at 1,000 steps per execution. If exceeded, abort the execution and log the event. This catches dynamic cycles that static analysis cannot predict (e.g., a cycle triggered by runtime data).
+
+**Rejected alternatives:**
+- Runtime-only detection with timeout — does not prevent obviously invalid pipeline saves.
+- Static-only detection — cannot catch all dynamic execution cycles.
+
+**Date:** 2026-03-29
+
+---
+
+## D-045 — Sync device private key stored in OS keychain
+
+**Decision:** The sync identity private key is stored in the OS keychain (same mechanism as AI API keys: `secret-service` on Linux, Keychain on macOS, Credential Manager on Windows). If the keychain is unavailable on Linux (no gnome-keyring or kwallet), fall back to SQLite with a visible warning in the sync settings UI.
+
+**Rejected alternatives:**
+- Plaintext in `sync_identity.private_key TEXT` (original spec) — a private key in an SQLite file is readable by any process with filesystem access; inconsistent with how we treat AI API keys.
+
+**Reason:** The private key is the device's cryptographic identity for peer trust. It must be protected with the same care as user credentials.
+
+**Date:** 2026-03-29
+
+---
+
+## D-046 — Sync conflict resolution: logical sequence numbers primary, modified_at as tiebreak
+
+**Decision:** Logical sequence numbers (per-device monotonic counters) are the primary ordering mechanism for sync. `modified_at` wall-clock timestamp is used **only** as a tiebreak when two changes have the same sequence number (true split-brain). Wall-clock time is never the primary conflict resolution mechanism.
+
+**Rejected alternatives:**
+- last-write-wins by `modified_at` as primary — clocks can skew between devices; not causally correct in a P2P system without a central time authority.
+
+**Reason:** Sequence numbers are causally correct — they encode what happened before what, independent of clock drift. Modified_at is stored for display purposes and as a last-resort tiebreak only.
+
+**Date:** 2026-03-29
+
+---
+
+## D-047 — Phase 6 sync scope: all-or-nothing per data type
+
+**Decision:** Phase 6 sync is all-or-nothing per data type (clipboard, notes, captures, photos). Granular sharing by tag or filter is explicitly out of scope. The UI states clearly: "In this version, sync includes all content of the selected type. Filtering by tag will be available in a future update."
+
+**Reason:** Granular sharing requires per-item metadata propagation and a data model (`sync_peers` per-item flags) that significantly increases complexity. The all-or-nothing model covers the most common use cases (personal multi-device and household sharing) without this complexity.
+
+**Date:** 2026-03-29
+
+**Revisit if:** Phase 7 adds conflict resolution UI — at that point, granular sharing metadata is naturally available.
+
+---
+
+## D-048 — Sync peer trust: Trust on First Use (TOFU) with fingerprint display
+
+**Decision:** When a new device is discovered for the first time, the app shows the device name and the SHA-256 fingerprint of its self-signed certificate and asks for confirmation. The approved fingerprint is stored in `sync_peers.public_key`. On all future connections, the fingerprint is verified against the stored value. If it doesn't match, the connection is blocked and the user is alerted with a MITM warning.
+
+**Reason:** TOFU is the same model as SSH (`The authenticity of host X can't be established`) — familiar to technical users, acceptable to non-technical users when explained simply ("confirm this is your other device"). A QR code or code comparison (Signal-style) is Phase 7+ if TOFU proves insufficient.
+
+**Date:** 2026-03-29
+
+---
+
+## D-049 — Production resource paths via app_data_dir; CARGO_MANIFEST_DIR only in tests
+
+**Decision:** `env!("CARGO_MANIFEST_DIR")` is removed from all production code paths. In production, Python scripts are:
+1. Bundled as Tauri resources (read-only at install path)
+2. Copied to `app.path().app_data_dir()/scripts/` on first launch
+3. Referenced from `app_data_dir` at runtime — checked on every launch; if missing (reinstall, update), copied again from the bundle
+
+`env!("CARGO_MANIFEST_DIR")` is kept only in `#[cfg(test)]` blocks.
+
+**Rejected alternatives:**
+- Always read from bundle path — bundle resources are read-only; Python scripts may need to be updated independently of the full app.
+
+**Reason:** Tauri 2.x recommends `app_data_dir` for mutable user-local data. Scripts are logically mutable (they can be updated by the app without reinstalling). The copy-on-launch pattern handles reinstalls and updates cleanly.
+
+**Date:** 2026-03-29
+
+---
+
+## D-050 — Event Bus startup: guaranteed init order + pre-ready buffer
+
+**Decision:** Two layers:
+1. **Guaranteed initialization order** — main.rs initializes in sequence: (1) Event Bus, (2) all tool subscribers, (3) publishers enabled, (4) system marked "ready". This order is documented with explicit comments in main.rs.
+2. **Pre-ready buffer** — during the pre-ready phase, the Event Bus stores up to 50 events in an in-memory `VecDeque`. When a subscriber registers, the buffer is drained toward it. The buffer is discarded N seconds after startup regardless.
+
+**Rejected alternatives:**
+- Inflated broadcast channel capacity — doesn't solve the race, just makes it less likely.
+- Ignore the problem — pipeline auto-triggers miss events that fire before the engine subscribes, silently.
+
+**Date:** 2026-03-29
+
+---
+
+## D-051 — Replace DefaultHasher with direct comparison for clipboard dedup
+
+**Decision:** Remove `std::hash::DefaultHasher` from the clipboard monitor dedup logic. For text: compare the last inserted item's content directly (string equality, O(n) but negligible for typical clipboard entries). For images: hash the first 4KB with `blake3` (already fast and stdlib-deterministic).
+
+**Reason:** `DefaultHasher` is not guaranteed to be consistent across process restarts or Rust compiler versions. This is documented as acceptable for in-session dedup, but the direct comparison approach is correct and trivially implemented — no reason to keep the hash.
+
+**Date:** 2026-03-29
+
+---
+
+## D-052 — SQL LIKE wildcard escaping with ESCAPE clause
+
+**Decision:** User-supplied search strings are escaped before being wrapped in `%...%` for LIKE queries: replace `\` → `\\`, `%` → `\%`, `_` → `\_`. Query uses `LIKE ? ESCAPE '\'`. Applied to all free-text search endpoints.
+
+**Reason:** Unescaped LIKE wildcards in user input cause incorrect search results (a search for `100%` matches any string containing 3+ characters). sqlx does not escape LIKE wildcards automatically.
+
+**Date:** 2026-03-29
+
+**Note:** For V1.1, consider migrating full-text search to FTS5 throughout, which makes this escaping unnecessary.
+
+---
+
+## D-053 — Port selection: try preferred port once, then OS-assigned port 0
+
+**Decision:** Remove the unbounded port increment loop. Strategy:
+1. Try binding `127.0.0.1:47821` once.
+2. If it fails, bind `127.0.0.1:0` — the OS assigns a guaranteed-free port immediately.
+3. Write the assigned port to `app_data_dir()/server.port` so the Tauri WebView frontend can read it.
+
+**Rejected alternatives:**
+- Unbounded loop — can hang indefinitely if the port range is exhausted.
+- Random port — unpredictable, harder to debug, harder for MCP clients to discover.
+
+**Reason:** Port 0 is the OS-correct way to request "any free port". The one-attempt-then-fallback pattern preserves compatibility with MCP clients that may have 47821 configured while eliminating the hang risk.
+
+**Date:** 2026-03-29
+
+---
+
+## D-054 — License key format: Ed25519-signed JWT-like payload, per-user
+
+**Decision:** License key payload (signed with Ed25519):
+```json
+{
+  "license_id": "uuid-v4",
+  "issued_to": "email@example.com",
+  "issued_at": "ISO8601",
+  "version": 1,
+  "type": "lifetime"
+}
+```
+License is **per-user** (portable across machines, not tied to hardware). The user saves the key string and re-enters it on reinstall. The Ed25519 public key is embedded in the app binary at compile time. No server required for verification.
+
+**Reason:** Per-machine binding creates friction for legitimate reinstalls/upgrades — the most common case for a desktop app. The $5 price point does not justify the support burden of hardware-tied licenses. Key embedded in binary is standard practice for this price point.
+
+**Date:** 2026-03-29
+
+---
+
+## D-055 — RNNoise licensing: BSD-3-Clause, legal for commercial use
+
+**Decision:** RNNoise (BSD-3-Clause) is legal to use in the commercial app. Include attribution in README and the About screen. No additional legal action required.
+
+**Reason:** The patent note in RNNoise's README has no documented enforcement history against any project. The risk for an indie app at this price point is effectively zero. BSD-3-Clause explicitly permits commercial use.
+
+**Date:** 2026-03-29
+
+---
+
+## D-056 — In-memory last result per tool (no DB persistence in Phase 4.7)
+
+**Decision:** Each tool (OCR, Voice) holds the last result in `Arc<Mutex<Option<T>>>` in the Axum `AppState`. Updated on each result, cleared on app exit. Not persisted to DB — this is not the `captures` table. The UI reads this via a `GET /api/{tool}/last` endpoint when the user navigates back to a tool.
+
+**Rejected alternatives:**
+- Discard results on navigation (current behavior) — frustrating UX when users accidentally navigate away.
+- Full `captures` table (D-035) — premature until beta feedback confirms the need.
+
+**Reason:** The minimum viable "don't lose my work" solution. Zero DB schema changes, zero migration, reversible. If beta feedback demands persistence, the captures table is the correct next step.
+
+**Date:** 2026-03-29
+
+---
+
+## D-057 — /user-files/ contents and import/restore strategy
+
+**Decision:**
+
+**What goes in `/user-files/`:**
+- Audio recordings (outputs from Screen/Audio Recorder)
+- Processed videos (outputs from Video Processor)
+- Exported photo edits (Photo Editor outputs)
+- Clipboard images (see D-058)
+- NOT: original user files opened for editing (those stay at their original path)
+
+**Import (restore from backup):**
+- Two modes: **Merge** (add what doesn't exist; sequence-number-higher version wins conflicts) and **Replace all** (requires explicit confirmation).
+- Before merging: read `user_version` from the imported DB; apply pending sqlx migrations via `sqlx::migrate!()` on a copy. If the imported DB's version is newer than the app's current schema version, reject with a clear message. All migrations must be idempotent.
+
+**Date:** 2026-03-29
+
+---
+
+## D-058 — Clipboard content types: 5 types, image as file in /user-files/
+
+**Decision:**
+
+**Final `content_type` values:** `text`, `url`, `html`, `image`, `file`
+
+**Detection priority at capture time:** `image` > `html` > `url` > `file` > `text`
+
+**URL detection:** if the full trimmed string matches a URL regex, `content_type = 'url'`. If the text contains URLs mixed with other content, `content_type = 'text'`.
+
+**Image storage:** save as `user-files/clipboard/{uuid}.png` (not as SQLite blob). The `content` column stores the relative path `clipboard/{uuid}.png`. Retention policy: keep the 50 most recent images or 7 days, whichever is less — auto-delete older ones.
+
+**HTML:** rich text copied from web pages (e.g., `text/html` from arboard) is stored as HTML string in `content`, `content_type = 'html'`. Rendered as sanitized HTML in the clipboard panel.
+
+**Rejected alternatives:**
+- Images as SQLite blobs — SQLite is not designed for binary blobs of this size; degrades query performance and backup size.
+
+**Date:** 2026-03-29

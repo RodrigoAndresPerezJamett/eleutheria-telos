@@ -114,6 +114,12 @@ MCP server (stdio + SSE), full plugin system, example plugins (Python + Node), p
 
 **Safety / correctness**
 - [ ] **Loop quality checks** — 60s toast warn + 120s auto-kill in Quick Actions engine. Configurable per-pipeline (`timeout_warn_secs` / `timeout_kill_secs`). Files: `quick_actions.rs`, `event_bus.rs`, `server.rs`, panel HTML.
+- [ ] **Plugin permission enforcement** — implement Axum middleware that validates plugin requests against declared permissions (D-040). Currently permissions are declared in manifests but never enforced at runtime.
+- [ ] **Port selection fix** — replace unbounded increment loop with try-47821-once then `bind(0)`. Write assigned port to `app_data_dir()/server.port` (D-053). Files: `server.rs`.
+- [ ] **LIKE wildcard escaping** — escape `%` and `_` in user search input before building LIKE patterns. Affects: `mcp.rs` clipboard search, any other `LIKE ?` query. Use `ESCAPE '\'` clause (D-052).
+- [ ] **Replace DefaultHasher in clipboard dedup** — swap for direct string equality (text) or blake3 first-4KB (image). Remove `DefaultHasher` entirely (D-051). Files: `clipboard.rs`.
+- [ ] **Model download checksum verification** — implement SHA-256 verification of downloaded model files before marking as downloaded. Source of expected checksums: embed in the models catalog in `models.rs` (D-024 doc says "checksum verified" but code does not implement it).
+- [ ] **Trash 30-day TTL cleanup job** — add a background task (Tauri lifecycle or startup check) that purges rows where `deleted_at < now() - 30 days`. Currently trash fills unbounded. Files: `notes.rs`, `clipboard.rs`.
 - [ ] Fix `tools::translate::tests::test_langs_no_models` — pre-existing HTML mismatch
 - [ ] Fix `clippy::unnecessary_closure` in `quick_actions.rs`
 
@@ -143,7 +149,8 @@ MCP server (stdio + SSE), full plugin system, example plugins (Python + Node), p
 **Gate: Phases 4.5, 4.6, and 4.7 must all be complete.**
 
 ### Distribution
-- [ ] License key system — Gumroad + asymmetric local verification, no server required
+- [ ] License key system — Ed25519-signed payload: `{license_id, issued_to, issued_at, version, type:"lifetime"}`. Per-user (portable). Public key embedded in binary (D-054).
+- [ ] **Production resource paths** — remove all `env!("CARGO_MANIFEST_DIR")` from production paths; use `app.path().app_data_dir()/scripts/` with copy-on-launch from bundle. `CARGO_MANIFEST_DIR` kept in `#[cfg(test)]` only (D-049).
 - [ ] Ad integration — ethical-ads.io or Carbon Ads; one ad per day, auto-dismissed after 5s
 - [ ] Onboarding flow — first-run wizard: choose tools, download models, set global hotkey, configure AI tier
 - [ ] Auto-updater — Tauri built-in, check on startup (respects offline mode)

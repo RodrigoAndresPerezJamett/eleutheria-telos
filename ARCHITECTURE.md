@@ -166,7 +166,7 @@ Tailwind responsive classes handle the switch (`sm:`, `lg:` prefixes). No JavaSc
 
 An HTTP server runs internally on `localhost:{PORT}`. Only localhost connections are accepted. Every request must include a `Authorization: Bearer {SESSION_TOKEN}` header. The token is generated at startup and injected into the WebView as a JS constant.
 
-**Port selection:** The server tries ports starting at `47821`. If occupied, it increments until a free port is found. The selected port is stored in the app's local config for the session.
+**Port selection:** The server tries port `47821` once. If occupied, it binds `127.0.0.1:0` and lets the OS assign a guaranteed-free port. The selected port is written to `app_data_dir()/server.port` so the WebView frontend can read it. No unbounded loop. See D-053.
 
 **Axum router structure:**
 ```
@@ -206,11 +206,13 @@ CREATE VIRTUAL TABLE notes_fts USING fts5(title, content_fts, content='notes');
 -- Clipboard History
 CREATE TABLE clipboard (
   id          TEXT PRIMARY KEY,
-  content     TEXT NOT NULL,
-  content_type TEXT NOT NULL,    -- 'text' | 'image' | 'file'
+  content     TEXT NOT NULL,     -- text/html/url content, or relative path for images
+  content_type TEXT NOT NULL,    -- 'text' | 'url' | 'html' | 'image' | 'file'
   source_app  TEXT,
   created_at  INTEGER NOT NULL
 );
+-- Detection priority: image > html > url > file > text
+-- Images stored as files in user-files/clipboard/{uuid}.png (not as blobs). See D-058.
 
 -- Settings
 CREATE TABLE settings (
@@ -240,6 +242,10 @@ CREATE TABLE models (
 
 **Backup:** The user can export the full `eleutheria.db` and a `/user-files/` directory as a ZIP from the Settings panel. Import restores both.
 
+**`/user-files/` contents:** audio recordings, processed video outputs, photo editor exports, clipboard images. Does NOT include original files opened by the user for editing (those stay at their original path).
+
+**Import modes:** Merge (add what doesn't exist; sequence-number-higher version wins conflicts) or Replace All (requires explicit confirmation). Schema migration: the imported DB's `user_version` is checked; pending migrations are applied via `sqlx::migrate!()` on a copy before merging. If the imported DB is newer than the current schema, import is rejected with a clear message. See D-057.
+
 ---
 
 ### Layer 5 — Plugin System
@@ -263,9 +269,15 @@ A plugin is a folder inside `/plugins/` with a `manifest.json` and an entry poin
     "db.read",
     "db.write",
     "clipboard.read",
+    "clipboard.write",
     "event_bus.subscribe",
     "event_bus.publish",
-    "fs.user_dir"
+    "fs.user_dir",
+    "ocr.invoke",
+    "tts.invoke",
+    "translate.invoke",
+    "notifications.show",
+    "network.outbound"
   ],
   "mcp_tools": [
     {
@@ -302,7 +314,7 @@ App starts
 
 **Plugin HTTP contract:** Plugins receive a `X-Session-Token` header and a `X-Plugin-Id` header on proxied requests. They must respond with valid HTML fragments (for GET) or JSON (for POST actions).
 
-**Permission enforcement:** Rust enforces permissions at the proxy layer. A plugin declaring only `db.read` that attempts a write request receives a `403 Forbidden`. No permission escalation at runtime.
+**Permission enforcement:** Axum middleware extracts `plugin_id` from the request path, loads the plugin's declared permissions from a startup-cached `Arc<RwLock<HashMap>>`, and validates against a static `(path_prefix, HTTP_method) → required_permission` table. A plugin attempting an operation it hasn't declared receives `403 { "error": "permission_denied", "required": "permission_name" }`. `fs.user_dir` grants read/write/create-subdirectory access inside `~/eleutheria/plugins/{plugin_id}/` only — path traversal (`../`) is rejected. No permission escalation at runtime. See D-040, D-041.
 
 ---
 
