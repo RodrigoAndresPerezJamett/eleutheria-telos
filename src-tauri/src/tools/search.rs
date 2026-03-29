@@ -117,10 +117,10 @@ pub async fn search_handler(
     .unwrap_or_default();
 
     // Clipboard: LIKE search
-    let pattern = format!("%{}%", params.q);
+    let pattern = format!("%{}%", crate::tools::like_escape(&params.q));
     let clips: Vec<(String, String)> = sqlx::query_as(
         "SELECT id, content FROM clipboard
-         WHERE content LIKE ?
+         WHERE content LIKE ? ESCAPE '\\'
          ORDER BY created_at DESC
          LIMIT ?",
     )
@@ -161,7 +161,7 @@ mod tests {
             .run(&db)
             .await
             .expect("migrations");
-        let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+        let (clipboard_suppress_tx, _) = watch::channel(String::new());
         let download_states =
             std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
         let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));

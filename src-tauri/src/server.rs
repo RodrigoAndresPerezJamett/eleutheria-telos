@@ -41,7 +41,8 @@ pub struct AppState {
     pub port: u16,
     pub event_bus: EventBus,
     /// Used by the clipboard monitor to skip re-inserting just-recopied content.
-    pub clipboard_suppress_tx: watch::Sender<u64>,
+    /// Sends the full text that was copied so the monitor skips it on the next poll (D-051).
+    pub clipboard_suppress_tx: watch::Sender<String>,
     /// Tracks in-progress model downloads (model_id → DownloadState).
     pub download_states: DownloadMap,
     /// Holds the ffmpeg child process while a voice recording is in progress.
@@ -315,8 +316,15 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 // ── Port detection ───────────────────────────────────────────────────────────
 
 /// Synchronous port detection for use inside Tauri's setup hook.
+/// Try the preferred port once; if it is in use, ask the OS for any free port.
+/// Never loops — guaranteed to return in O(1). See D-053.
 pub fn find_free_port_sync() -> u16 {
-    find_free_port_from(DEFAULT_PORT)
+    if std::net::TcpListener::bind(("127.0.0.1", DEFAULT_PORT)).is_ok() {
+        return DEFAULT_PORT;
+    }
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("OS could not assign a free port");
+    listener.local_addr().unwrap().port()
 }
 
 /// Like `find_free_port_sync` but starts scanning from `start`.

@@ -471,6 +471,8 @@ fn render_editor(pipeline: &PipelineRow, steps: &[StepRow]) -> String {
       <input name="name" value="{name}"
              class="input flex-1"
              style="width:auto;font-size:13px;padding:6px 10px;"
+             pattern="[^/\\&lt;&gt;&quot;]+"
+             title="Cannot contain / \ &lt; &gt; or &quot;"
              required />
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;white-space:nowrap;">
         <input type="checkbox" name="enabled" value="1" {enabled_checked} />
@@ -783,6 +785,27 @@ struct RunParams {
     initial_text: Option<String>,
 }
 
+// ── Name validation ───────────────────────────────────────────────────────────
+
+/// Trims whitespace and rejects names containing filesystem-unsafe or HTML-unsafe
+/// characters: `/  \  <  >  "  \0`. Returns the trimmed name or an HTML error fragment.
+fn validate_name(raw: &str) -> Result<String, Html<String>> {
+    let name = raw.trim();
+    if name.is_empty() {
+        return Err(Html(
+            r#"<p style="font-size:12px;color:var(--destructive);">Name cannot be empty.</p>"#
+                .to_string(),
+        ));
+    }
+    if name.chars().any(|c| matches!(c, '/' | '\\' | '<' | '>' | '"' | '\0')) {
+        return Err(Html(
+            r#"<p style="font-size:12px;color:var(--destructive);">Name cannot contain / \ &lt; &gt; " or null bytes.</p>"#
+                .to_string(),
+        ));
+    }
+    Ok(name.to_string())
+}
+
 // ── CRUD handlers ─────────────────────────────────────────────────────────────
 
 async fn list_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -793,10 +816,10 @@ async fn create_handler(
     State(state): State<Arc<AppState>>,
     Form(params): Form<CreateParams>,
 ) -> impl IntoResponse {
-    let name = params.name.trim().to_string();
-    if name.is_empty() {
-        return Html(r#"<p style="font-size:12px;color:var(--destructive);">Name required.</p>"#.to_string());
-    }
+    let name = match validate_name(&params.name) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     let id = uuid::Uuid::new_v4().to_string();
     let now = now_secs();
     let _ = sqlx::query(
@@ -816,7 +839,10 @@ async fn update_handler(
     Path(id): Path<String>,
     Form(params): Form<UpdateParams>,
 ) -> impl IntoResponse {
-    let name = params.name.trim().to_string();
+    let name = match validate_name(&params.name) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     let enabled: i64 = if params.enabled.as_deref() == Some("1") { 1 } else { 0 };
     let _ = sqlx::query(
         "UPDATE pipelines SET name = ?, trigger = ?, enabled = ? WHERE id = ?",
@@ -847,10 +873,10 @@ async fn create_folder_handler(
     State(state): State<Arc<AppState>>,
     Form(params): Form<CreateFolderParams>,
 ) -> impl IntoResponse {
-    let name = params.name.trim().to_string();
-    if name.is_empty() {
-        return Html(load_and_render_list(&state).await);
-    }
+    let name = match validate_name(&params.name) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     let id = uuid::Uuid::new_v4().to_string();
     let _ = sqlx::query(
         "INSERT INTO pipeline_folders (id, name, sort_order) VALUES (?, ?, (SELECT COALESCE(MAX(sort_order),0)+1 FROM pipeline_folders))",
@@ -1292,14 +1318,8 @@ async fn execute_step(
                 .text
                 .clone()
                 .ok_or_else(|| "copy_clipboard: no text input".to_string())?;
-            // Suppress clipboard monitor from re-recording this copy.
-            let hash = {
-                use std::hash::{Hash, Hasher};
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                text.hash(&mut h);
-                h.finish()
-            };
-            let _ = state.clipboard_suppress_tx.send(hash);
+            // Suppress clipboard monitor from re-recording this copy (D-051: send text directly).
+            let _ = state.clipboard_suppress_tx.send(text.clone());
             tokio::task::spawn_blocking(move || {
                 arboard::Clipboard::new()
                     .and_then(|mut c| c.set_text(text))
@@ -1556,13 +1576,8 @@ async fn execute_action(
                 .text
                 .clone()
                 .ok_or_else(|| "copy_clipboard: no text input".to_string())?;
-            let hash = {
-                use std::hash::{Hash, Hasher};
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                text.hash(&mut h);
-                h.finish()
-            };
-            let _ = state.clipboard_suppress_tx.send(hash);
+            // Suppress clipboard monitor from re-recording this copy (D-051: send text directly).
+            let _ = state.clipboard_suppress_tx.send(text.clone());
             tokio::task::spawn_blocking(move || {
                 arboard::Clipboard::new()
                     .and_then(|mut c| c.set_text(text))
@@ -1611,7 +1626,7 @@ async fn execute_action(
             let path = params["file_path"]
                 .as_str()
                 .filter(|s| !s.is_empty())
-                .or_else(|| input.text.as_deref())
+                .or(input.text.as_deref())
                 .ok_or_else(|| "read_file: no file path".to_string())?
                 .to_string();
             let content = tokio::fs::read_to_string(&path)
@@ -1684,7 +1699,7 @@ async fn execute_action(
             let path = params["file_path"]
                 .as_str()
                 .filter(|s| !s.is_empty())
-                .or_else(|| input.text.as_deref())
+                .or(input.text.as_deref())
                 .ok_or_else(|| "ocr_file: no file path".to_string())?
                 .to_string();
             let lang = params["lang"].as_str().unwrap_or("eng").to_string();

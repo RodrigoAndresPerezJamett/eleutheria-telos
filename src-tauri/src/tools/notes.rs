@@ -678,12 +678,12 @@ pub async fn list_handler(
     let mut rows: Vec<(String, String, String, i64, i64)> = if let Some(tag) = effective_tag {
         // Tag filter: exact match OR any tag whose last segment matches (e.g. #rod → work/rod).
         // GROUP BY deduplicates notes matching multiple tags; MIN(t.tag) orders by tree path.
-        let like_pattern = format!("%/{}", tag);
+        let like_pattern = format!("%/{}", crate::tools::like_escape(tag));
         sqlx::query_as(
             "SELECT n.id, n.title, n.content, n.pinned, n.updated_at
              FROM notes n
              JOIN note_tags t ON t.note_id = n.id
-             WHERE (t.tag = ? OR t.tag LIKE ?) AND n.deleted_at IS NULL
+             WHERE (t.tag = ? OR t.tag LIKE ? ESCAPE '\\') AND n.deleted_at IS NULL
              GROUP BY n.id
              ORDER BY n.pinned DESC, MIN(t.tag), n.updated_at DESC
              LIMIT 200",
@@ -1138,10 +1138,10 @@ pub async fn delete_tag_handler(
     let notes: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT DISTINCT n.id, n.title, n.content FROM notes n \
          JOIN note_tags t ON t.note_id = n.id \
-         WHERE (t.tag = ? OR t.tag LIKE ?) AND n.deleted_at IS NULL",
+         WHERE (t.tag = ? OR t.tag LIKE ? ESCAPE '\\') AND n.deleted_at IS NULL",
     )
     .bind(&tag)
-    .bind(format!("{}/%", tag))
+    .bind(format!("{}/%", crate::tools::like_escape(&tag)))
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -1379,7 +1379,7 @@ mod tests {
             .run(&db)
             .await
             .expect("migrations");
-        let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+        let (clipboard_suppress_tx, _) = watch::channel(String::new());
         let download_states =
             std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
         let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));

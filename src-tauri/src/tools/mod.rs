@@ -4,6 +4,16 @@
 // Phase 3: recorder, photo_editor, video_processor
 
 pub mod audio_recorder;
+
+/// Escape user-supplied search strings for use in SQLite LIKE patterns.
+/// Must be paired with `ESCAPE '\'` in the SQL query. See D-052.
+///
+/// Escapes: `\` → `\\`, `%` → `\%`, `_` → `\_`
+pub fn like_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
 pub mod quick_actions;
 pub mod clipboard;
 pub mod models;

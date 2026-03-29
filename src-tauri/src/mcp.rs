@@ -187,10 +187,10 @@ async fn clipboard_list_handler(
         .await
         .unwrap_or_default()
     } else {
-        let pattern = format!("%{}%", params.q);
+        let pattern = format!("%{}%", crate::tools::like_escape(&params.q));
         sqlx::query_as(
             "SELECT id, content, created_at FROM clipboard
-             WHERE content LIKE ?
+             WHERE content LIKE ? ESCAPE '\\'
              ORDER BY created_at DESC LIMIT ?",
         )
         .bind(&pattern)

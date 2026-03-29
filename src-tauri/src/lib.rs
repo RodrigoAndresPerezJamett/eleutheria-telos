@@ -38,7 +38,7 @@ pub fn run() {
             // ── Database ────────────────────────────────────────────────────
             let db = tauri::async_runtime::block_on(db::init_db())?;
 
-            let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+            let (clipboard_suppress_tx, _) = watch::channel(String::new());
             let download_states = StdArc::new(Mutex::new(HashMap::new()));
             let voice_recording = StdArc::new(Mutex::new(None));
             let screen_recording = StdArc::new(Mutex::new(None));
@@ -86,6 +86,12 @@ pub fn run() {
             let state_for_qa = state.clone();
             tauri::async_runtime::spawn(async move {
                 tools::quick_actions::start_pipeline_engine(state_for_qa).await;
+            });
+
+            // ── Trash TTL worker (purges items older than 30 days, hourly) ────
+            let db_for_ttl = state.db.clone();
+            tauri::async_runtime::spawn(async move {
+                db::start_trash_ttl_worker(db_for_ttl).await;
             });
 
             // ── i18n ────────────────────────────────────────────────────────
@@ -200,4 +206,6 @@ fn write_server_info(port: u16, token: &str) {
     let _ = std::fs::create_dir_all(&dir);
     let json = serde_json::json!({ "port": port, "token": token });
     let _ = std::fs::write(dir.join("server.json"), json.to_string());
+    // Plain port file for tools that only need the port (D-053)
+    let _ = std::fs::write(dir.join("server.port"), port.to_string());
 }

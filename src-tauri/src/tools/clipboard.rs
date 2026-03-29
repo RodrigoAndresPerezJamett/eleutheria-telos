@@ -8,20 +8,12 @@ use axum::{
 use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::json;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::event_bus::Event;
 use crate::server::AppState;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-pub fn content_hash(text: &str) -> u64 {
-    let mut h = DefaultHasher::new();
-    text.hash(&mut h);
-    h.finish()
-}
 
 fn render_entry_card(
     id: &str,
@@ -80,6 +72,7 @@ fn render_entry_card(
               hx-post="/api/clipboard/{id}/recopy"
               hx-swap="none"
               onclick="event.stopPropagation()"
+              hx-on:htmx:after-request="this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
               title="Copy to clipboard">Copy</button>"#;
             (body, attr, trunc_attr, "", copy)
         };
@@ -249,14 +242,11 @@ fn truncate_bytes(s: &str, max: usize) -> &str {
 const THUMB_W: u32 = 640;
 const THUMB_H: u32 = 360;
 
-/// Quick fingerprint for an image: dimensions + first 256 bytes.
-fn image_hash(img: &arboard::ImageData) -> u64 {
-    let mut h = DefaultHasher::new();
-    img.width.hash(&mut h);
-    img.height.hash(&mut h);
-    let n = img.bytes.len().min(256);
-    img.bytes[..n].hash(&mut h);
-    h.finish()
+/// Fingerprint for an image: blake3 over the first 4KB of raw bytes. See D-051.
+fn image_hash(img: &arboard::ImageData) -> [u8; 8] {
+    let n = img.bytes.len().min(4096);
+    let full = blake3::hash(&img.bytes[..n]);
+    full.as_bytes()[..8].try_into().unwrap()
 }
 
 /// Nearest-neighbour downsample + PNG encode → base64 string.
@@ -388,10 +378,10 @@ pub async fn list_handler(
         .unwrap_or_default()
     } else {
         // Search returns all matches — no pagination when filtering
-        let pattern = format!("%{}%", params.q);
+        let pattern = format!("%{}%", crate::tools::like_escape(&params.q));
         sqlx::query_as(
             "SELECT id, content, created_at, image_thumb, content_type, is_pinned FROM clipboard
-             WHERE deleted_at IS NULL AND content LIKE ?
+             WHERE deleted_at IS NULL AND content LIKE ? ESCAPE '\\'
              ORDER BY is_pinned DESC, created_at DESC LIMIT 200 OFFSET 0",
         )
         .bind(&pattern)
@@ -441,9 +431,8 @@ pub async fn recopy_handler(
         return Json(json!({ "ok": false, "error": "not found" }));
     };
 
-    // Suppress the monitor so it won't re-insert this copy
-    let hash = content_hash(&content);
-    let _ = state.clipboard_suppress_tx.send(hash);
+    // Suppress the monitor so it won't re-insert this copy (D-051: send text directly)
+    let _ = state.clipboard_suppress_tx.send(content.clone());
 
     // Write to system clipboard (blocking — must be on a thread, not async executor)
     let result = tokio::task::spawn_blocking(move || {
@@ -594,18 +583,18 @@ pub async fn start_monitor(state: Arc<AppState>) {
     // arboard is not Send; run entirely inside spawn_blocking
     let state_clone = state.clone();
     tokio::task::spawn_blocking(move || {
-        // Seed last_hash from the most recent DB entry to avoid re-inserting on restart
+        // Seed last_text from the most recent DB entry to avoid re-inserting on restart.
+        // Text dedup uses direct equality; image dedup uses blake3 first-4KB (D-051).
         let last_content: Option<(String,)> = tauri::async_runtime::block_on(
             sqlx::query_as("SELECT content FROM clipboard ORDER BY created_at DESC LIMIT 1")
                 .fetch_optional(&state_clone.db),
         )
         .unwrap_or(None);
 
-        let mut last_hash: u64 = last_content
-            .as_ref()
-            .map(|(c,)| content_hash(c))
-            .unwrap_or(0);
-        let mut last_image_hash: u64 = 0;
+        let mut last_text: String = last_content
+            .map(|(c,)| c)
+            .unwrap_or_default();
+        let mut last_image_hash: [u8; 8] = [0u8; 8];
 
         let mut suppress_rx = state_clone.clipboard_suppress_tx.subscribe();
 
@@ -620,9 +609,10 @@ pub async fn start_monitor(state: Arc<AppState>) {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
 
-            // Check suppress channel (non-blocking)
+            // Check suppress channel (non-blocking): user just recopied an entry from history.
+            // Adopt it as last_text so the monitor doesn't re-insert it on the next poll.
             if suppress_rx.has_changed().unwrap_or(false) {
-                last_hash = *suppress_rx.borrow_and_update();
+                last_text = suppress_rx.borrow_and_update().clone();
                 continue;
             }
 
@@ -631,7 +621,7 @@ pub async fn start_monitor(state: Arc<AppState>) {
                 let hash = image_hash(&img);
                 if hash != last_image_hash {
                     last_image_hash = hash;
-                    last_hash = 0; // reset text hash so next text copy registers
+                    last_text = String::new(); // reset text dedup so next text copy registers
 
                     let thumb = make_thumbnail(img.bytes.as_ref(), img.width, img.height);
                     let id = uuid::Uuid::new_v4().to_string();
@@ -671,12 +661,11 @@ pub async fn start_monitor(state: Arc<AppState>) {
                 continue;
             }
 
-            let hash = content_hash(&text);
-            if hash == last_hash {
+            if text == last_text {
                 continue;
             }
-            last_hash = hash;
-            last_image_hash = 0; // reset image hash so next image copy registers
+            last_text = text.clone();
+            last_image_hash = [0u8; 8]; // reset image dedup so next image copy registers
 
             let id = uuid::Uuid::new_v4().to_string();
             let now = std::time::SystemTime::now()
@@ -754,7 +743,7 @@ mod tests {
             .run(&db)
             .await
             .expect("migrations");
-        let (clipboard_suppress_tx, _) = watch::channel::<u64>(0);
+        let (clipboard_suppress_tx, _) = watch::channel(String::new());
         let download_states =
             std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
         let voice_recording = std::sync::Arc::new(tokio::sync::Mutex::new(None));
